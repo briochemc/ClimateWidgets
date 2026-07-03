@@ -14,12 +14,18 @@ mask = (tb .>= YEAR_MIN) .& (tb .<= YEAR_MAX)
 tidx = findall(mask)
 years = round.(Int, tb[tidx])
 
-# temperature dims: (config, scenario, timebounds); take ensemble median.
+# temperature dims: (config, scenario, timebounds).
+# Subtract each (config, scenario)'s own 1850-1900 mean, then take ensemble
+# median across configs — matches cmip7-scenariomip/scripts/plotting.py.
+baseline_mask = (tb .>= 1850) .& (tb .< 1901)
+baseline_idx = findall(baseline_mask)
 tt = ds["temperature"][:, :, tidx]
+tb_base = ds["temperature"][:, :, baseline_idx]
+baseline = mean(tb_base, dims=3)[:, :, 1]  # (config, scenario)
 
 result = Dict{String, Vector{Dict{String, Any}}}()
 for (i, s) in enumerate(scenarios)
-    slice = tt[:, i, :]
+    slice = tt[:, i, :] .- baseline[:, i]  # anomaly vs 1850-1900 per config
     med = [median(skipmissing(slice[:, t])) for t in eachindex(years)]
     result[s] = [Dict("year" => years[t], "T" => med[t]) for t in eachindex(years)]
 end
