@@ -6,7 +6,7 @@ dist/
 **/.observablehq/cache/
 
 # Source data — copied from ../cmip7-scenariomip, regenerable
-data/
+/data/
 
 # macOS
 .DS_Store
