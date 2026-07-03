@@ -1,0 +1,25 @@
+# Node
+node_modules/
+
+# Build output & caches
+dist/
+**/.observablehq/cache/
+
+# Source data — copied from ../cmip7-scenariomip, regenerable
+data/
+
+# macOS
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local env / secrets
+.env
+.env.local
+
+# Claude Code machine-local overrides
+.claude/settings.local.json
