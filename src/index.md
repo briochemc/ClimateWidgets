@@ -163,7 +163,7 @@ const stroke = view((() => {
   let start = [x(data.startPoint.year), yBot(data.startPoint.gt)];
   let currentStroke = [start.slice()];
 
-  function frame(t, h, yScale, yTicks, ylabel, drawXTicks) {
+  function frame(t, h, yScale, yTicks, ylabel, drawXTicks, yFormat = String) {
     context.strokeStyle = "rgba(0,0,0,0.12)"; context.lineWidth = 1;
     for (const v of yTicks) {
       const py = yScale(v);
@@ -186,7 +186,7 @@ const stroke = view((() => {
       const py = yScale(v);
       context.beginPath();
       context.moveTo(marginL - 5, py); context.lineTo(marginL, py); context.stroke();
-      context.fillText(v, marginL - 8, py);
+      context.fillText(yFormat(v), marginL - 8, py);
     }
     if (drawXTicks) {
       context.textAlign = "center"; context.textBaseline = "top";
@@ -203,6 +203,11 @@ const stroke = view((() => {
     context.textAlign = "center"; context.textBaseline = "top";
     context.fillText(ylabel, 0, 0);
     context.restore();
+  }
+
+  function signed(v) {
+    if (v === 0) return "0";
+    return v > 0 ? `+${v}` : `−${-v}`;
   }
 
   function annotate(px, py, text, color) {
@@ -279,7 +284,7 @@ const stroke = view((() => {
     const tempVals = [];
     for (const sc2 of codes) for (const p of temp[sc2]) tempVals.push(p.T);
     const yTemp = d3.scaleLinear().domain(d3.extent(tempVals)).range([tempT + tempH, tempT]).nice();
-    frame(tempT, tempH, yTemp, yTemp.ticks(5), "Temperature anomaly (°C)", false);
+    frame(tempT, tempH, yTemp, yTemp.ticks(5), "Temperature anomaly (°C)", false, signed);
     const tempHistorical = temp[sc].filter(p => p.year <= splitYear);
     const tempFuture = temp[sc].filter(p => p.year >= splitYear);
     drawSeries(tempHistorical, d => d.T, yTemp, HIST_COLOR);
@@ -321,7 +326,7 @@ const stroke = view((() => {
       annotate(x(lastInf.year), yTop(lastInf.ppm), "my pCO₂ trajectory", "red");
     }
 
-    frame(botT, botH, yBot, yBot.ticks(5), "CO₂ flux (Gt/yr)", true);
+    frame(botT, botH, yBot, yBot.ticks(5), "CO₂ flux (Gt/yr)", true, signed);
     context.strokeStyle = "#ddd";
     context.beginPath();
     context.moveTo(marginL, yBot(0)); context.lineTo(marginL + innerW, yBot(0));
