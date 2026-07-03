@@ -5,6 +5,7 @@ Pick a scenario, then draw the CO₂ emissions trajectory you think would produc
 ```js
 const co2 = await FileAttachment("data/co2_all.json").json();
 const pco2 = await FileAttachment("data/pco2_all.json").json();
+const temp = await FileAttachment("data/temp_all.json").json();
 const d3 = await import("https://esm.sh/d3@5");
 
 const colors = {
@@ -48,8 +49,9 @@ const stroke = view((() => {
   })();
 
   const marginL = 80, marginR = 160;
-  const topT = 56, topH = 220;
+  const tempT = 56, tempH = 180;
   const gap = 10;
+  const topT = tempT + tempH + gap, topH = 220;
   const botT = topT + topH + gap;
   const botH = 300;
   const totalH = botT + botH + 56;
@@ -270,6 +272,28 @@ const stroke = view((() => {
       context.moveTo(xb - 2, 24); context.lineTo(xb - 2, 30); context.stroke();
     }
 
+    const otherColor = "rgba(0,0,0,0.10)";
+    const splitYear = SCENARIO_START - 1;
+
+    // Temperature panel (top): true trajectories only, no user recomputation
+    const tempVals = [];
+    for (const sc2 of codes) for (const p of temp[sc2]) tempVals.push(p.T);
+    const yTemp = d3.scaleLinear().domain(d3.extent(tempVals)).range([tempT + tempH, tempT]).nice();
+    frame(tempT, tempH, yTemp, yTemp.ticks(5), "Temperature (°C)", false);
+    const tempHistorical = temp[sc].filter(p => p.year <= splitYear);
+    const tempFuture = temp[sc].filter(p => p.year >= splitYear);
+    drawSeries(tempHistorical, d => d.T, yTemp, HIST_COLOR);
+    for (const sc2 of codes) {
+      if (sc2 === sc) continue;
+      const future = temp[sc2].filter(p => p.year >= splitYear);
+      drawSeries(future, d => d.T, yTemp, otherColor, undefined, 2);
+      const last = future[future.length - 1];
+      annotate(x(last.year), yTemp(last.T), `${names[sc2]} (${sc2})`, otherColor);
+    }
+    drawSeries(tempFuture, d => d.T, yTemp, scColor);
+    const lastTemp = tempFuture[tempFuture.length - 1];
+    annotate(x(lastTemp.year), yTemp(lastTemp.T), `${names[sc]} (${sc})`, scColor);
+
     const inf = drawingFinished ? inferredPCO2() : [];
     const ppmVals = [];
     for (const sc2 of codes) for (const p of pco2[sc2]) ppmVals.push(p.ppm);
@@ -279,8 +303,6 @@ const stroke = view((() => {
 
     drawSeries(data.pco2Historical, d => d.ppm, yTop, HIST_COLOR);
 
-    const otherColor = "rgba(0,0,0,0.15)";
-    const splitYear = SCENARIO_START - 1;
     for (const sc2 of codes) {
       if (sc2 === sc) continue;
       const future = pco2[sc2].filter(p => p.year >= splitYear);
@@ -318,7 +340,7 @@ const stroke = view((() => {
     context.strokeStyle = "rgba(0,0,0,0.3)"; context.lineWidth = 1;
     context.setLineDash([4, 4]);
     context.beginPath();
-    context.moveTo(x(SCENARIO_START), topT);
+    context.moveTo(x(SCENARIO_START), tempT);
     context.lineTo(x(SCENARIO_START), botT + botH);
     context.stroke();
     context.setLineDash([]);
