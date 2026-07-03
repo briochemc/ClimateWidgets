@@ -279,7 +279,7 @@ const stroke = view((() => {
     const tempVals = [];
     for (const sc2 of codes) for (const p of temp[sc2]) tempVals.push(p.T);
     const yTemp = d3.scaleLinear().domain(d3.extent(tempVals)).range([tempT + tempH, tempT]).nice();
-    frame(tempT, tempH, yTemp, yTemp.ticks(5), "Temperature (°C)", false);
+    frame(tempT, tempH, yTemp, yTemp.ticks(5), "Temperature anomaly (°C)", false);
     const tempHistorical = temp[sc].filter(p => p.year <= splitYear);
     const tempFuture = temp[sc].filter(p => p.year >= splitYear);
     drawSeries(tempHistorical, d => d.T, yTemp, HIST_COLOR);
