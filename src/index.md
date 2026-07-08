@@ -343,7 +343,7 @@ const stroke = view((() => {
     context.font = "16px sans-serif";
     context.textAlign = "right";
     context.textBaseline = "bottom";
-    context.fillText("Draw your emissions trajectory from here!", start[0] - 2, start[1] - 8);
+    context.fillText("Draw from here!", start[0] - 2, start[1] - 8);
 
     context.fillStyle = "#333";
     context.textAlign = "center"; context.textBaseline = "bottom";

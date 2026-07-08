@@ -331,7 +331,7 @@ export function createClimateWidget({co2, pco2, temp, d3, width}) {
     context.font = "16px sans-serif";
     context.textAlign = "right";
     context.textBaseline = "bottom";
-    context.fillText("Draw your emissions trajectory from here!", start[0] - 2, start[1] - 8);
+    context.fillText("Draw from here!", start[0] - 2, start[1] - 8);
 
     context.fillStyle = "#333";
     context.textAlign = "center"; context.textBaseline = "bottom";
