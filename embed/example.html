@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Climate widget embed example</title>
+</head>
+<body>
+<h1>Draw the future</h1>
+<p>Pick a scenario, then draw the CO₂ emissions trajectory you think would produce the scenario's pCO₂ curve. Release the mouse to reveal your inferred pCO₂ and the scenario's true emissions.</p>
+
+<div id="climate-widget"></div>
+
+<script type="module">
+  import { createClimateWidget } from "../src/widget.js";
+  import * as d3 from "https://esm.sh/d3@5";
+
+  const dataBase = "../src/data/";
+  const [co2, pco2, temp] = await Promise.all(
+    ["co2_all.json", "pco2_all.json", "temp_all.json"].map(f =>
+      fetch(dataBase + f).then(r => r.json())
+    )
+  );
+
+  const host = document.getElementById("climate-widget");
+  const widget = createClimateWidget({ co2, pco2, temp, d3, width: 960 });
+  host.appendChild(widget);
+</script>
+</body>
+</html>
