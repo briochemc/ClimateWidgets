@@ -1,6 +1,6 @@
 # Draw the future
 
-Pick a scenario, then draw the CO₂ emissions trajectory you think would produce the scenario's pCO₂ curve. Release the mouse to reveal your inferred pCO₂ and the scenario's true emissions.
+Pick a scenario to see its temperature, atmospheric CO₂, and CO₂ fluxes. Then drag in the bottom panel to draw your own future CO₂ emissions from 2024 onward, and release to reveal the atmospheric CO₂ they would produce (in red). Your trajectory is routed through that scenario's natural CO₂ sink — the net uptake by ocean and land, diagnosed directly from the true CO₂ record (it turns into a source when CO₂ falls). The scenario curves stay fixed no matter what you draw; trace a scenario's actual emissions and you'll recover its true CO₂ curve exactly.
 
 ```js
 const co2 = await FileAttachment("data/co2_all.json").json();
@@ -25,28 +25,7 @@ const stroke = view((() => {
   const YEAR_STEP = 25;
   const GT_MIN = -20, GT_MAX = 60;
   const K = 7.82; // Gt CO2 per ppm
-  const PCO2_BASELINE = 280; // pre-industrial ppm
   const HIST_COLOR = "#666";
-
-  // Fit α in S(t) = α · (pCO₂(t) − 280) by pooled OLS across all scenarios,
-  // using the diagnostic residual E(t) − K·Δpco₂(t) as the regression target.
-  const ALPHA = (() => {
-    let num = 0, den = 0;
-    for (const sc of ["VL", "LN", "L", "ML", "M", "H", "HL"]) {
-      const emByYr = new Map(co2[sc].map(p => [p.year, p.gt]));
-      const ppmByYr = new Map(pco2[sc].map(p => [p.year, p.ppm]));
-      for (const p of pco2[sc]) {
-        const nextPpm = ppmByYr.get(p.year + 1);
-        const em = emByYr.get(p.year);
-        if (nextPpm === undefined || em === undefined) continue;
-        const anomaly = p.ppm - PCO2_BASELINE;
-        const diagnostic = em - K * (nextPpm - p.ppm);
-        num += diagnostic * anomaly;
-        den += anomaly * anomaly;
-      }
-    }
-    return num / den;
-  })();
 
   const marginL = 80, marginR = 160;
   const tempT = 56, tempH = 180;
@@ -122,23 +101,21 @@ const stroke = view((() => {
     return yBot.invert(s[s.length - 1][1]);
   }
 
-  function alphaModelFuture(sc) {
+  // Net CO₂ sink diagnosed from the stock change: S(t) = E(t) − K·(pCO₂(t+1) − pCO₂(t)).
+  // Derived from true emissions and true CO₂ stock, so it is fixed per scenario. It can go
+  // negative — net outgassing — when atmospheric CO₂ declines, which is physically expected.
+  function trueSinks(sc) {
     const emByYr = new Map(co2[sc].map(p => [p.year, p.gt]));
     const ppmByYr = new Map(pco2[sc].map(p => [p.year, p.ppm]));
-    const split = SCENARIO_START - 1;
-    const out = [{ year: split, ppm: ppmByYr.get(split) }];
-    let ppm = ppmByYr.get(split);
-    for (let t = split; t < YEAR_END; t++) {
-      const em = emByYr.get(t);
-      if (em === undefined) break;
-      const s = ALPHA * (ppm - PCO2_BASELINE);
-      ppm += (em - s) / K;
-      out.push({ year: t + 1, ppm });
+    const out = [];
+    for (const p of pco2[sc]) {
+      const em = emByYr.get(p.year);
+      const nextPpm = ppmByYr.get(p.year + 1);
+      if (em === undefined || nextPpm === undefined) continue;
+      out.push({ year: p.year, gt: em - K * (nextPpm - p.ppm) });
     }
     return out;
   }
-  const alphaModelCache = {};
-  for (const sc of codes) alphaModelCache[sc] = alphaModelFuture(sc);
 
   function scenarioData(sc) {
     const co2Series = co2[sc];
@@ -146,15 +123,16 @@ const stroke = view((() => {
     const emByYr = new Map(co2Series.map(p => [p.year, p.gt]));
     const ppmByYr = new Map(pco2Series.map(p => [p.year, p.ppm]));
     const split = SCENARIO_START - 1;
-    const pco2Historical = pco2Series.filter(p => p.year <= split);
-    const pco2Future = alphaModelCache[sc];
-    const sinksHistorical = pco2Historical.map(p => ({ year: p.year, gt: ALPHA * (p.ppm - PCO2_BASELINE) }));
-    const sinksFuture = pco2Future.map(p => ({ year: p.year, gt: ALPHA * (p.ppm - PCO2_BASELINE) }));
+    const sinks = trueSinks(sc);
+    const sinkByYr = new Map(sinks.map(s => [s.year, s.gt]));
     return {
-      co2Series, pco2Series, emByYr, ppmByYr,
+      co2Series, pco2Series, emByYr, ppmByYr, sinkByYr,
       historical: co2Series.filter(p => p.year <= split),
       co2Future: co2Series.filter(p => p.year >= split),
-      pco2Historical, pco2Future, sinksHistorical, sinksFuture,
+      pco2Historical: pco2Series.filter(p => p.year <= split),
+      pco2Future: pco2Series.filter(p => p.year >= split),
+      sinksHistorical: sinks.filter(s => s.year <= split),
+      sinksFuture: sinks.filter(s => s.year >= split),
       startPoint: co2Series.find(p => p.year === SCENARIO_START),
     };
   }
@@ -234,8 +212,7 @@ const stroke = view((() => {
 
   function inferredPCO2() {
     if (currentStroke.length < 2) return [];
-    const truePpmByYr = new Map(data.pco2Future.map(p => [p.year, p.ppm]));
-    const startPpm = truePpmByYr.get(SCENARIO_START);
+    const startPpm = data.ppmByYr.get(SCENARIO_START);
     if (startPpm === undefined) return [];
     const out = [{ year: SCENARIO_START, ppm: startPpm }];
     let ppm = startPpm;
@@ -245,9 +222,8 @@ const stroke = view((() => {
     for (let t = SCENARIO_START; t < stopYear; t++) {
       const eUser = sampleStrokeAt(currentStroke, t);
       if (eUser === null) break;
-      const truePpm = truePpmByYr.get(t);
-      if (truePpm === undefined) break;
-      const s = ALPHA * (truePpm - PCO2_BASELINE);
+      const s = data.sinkByYr.get(t);
+      if (s === undefined) break;
       ppm += (eUser - s) / K;
       out.push({ year: t + 1, ppm });
     }
