@@ -17,7 +17,8 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
   const GT_MIN = -20, GT_MAX = 60;
   const K = 7.82; // Gt CO2 per ppm
   const HIST_COLOR = "#666";
-  const CALLOUT_YEAR = 1990; // historical, so both callouts show before anything is drawn
+  const CALLOUT_YEAR = 1960; // historical, so both callouts show before anything is drawn
+  const PANEL_BG = "#f2f5f8"; // gentle tint behind each panel's plotting area
 
   const codes = ["VL", "LN", "L", "ML", "M", "H", "HL"];
   const names = { VL: "Very Low", LN: "Low-to-Negative", L: "Low", ML: "Medium-Low", M: "Medium", H: "High", HL: "High-to-Low" };
@@ -155,6 +156,11 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
   let currentStroke = [start.slice()];
 
   function frame(t, h, yScale, yTicks, ylabel, drawXTicks, yFormat = String) {
+    if (simplified) {
+      // Painted first so gridlines, curves and labels all sit on top of it.
+      context.fillStyle = PANEL_BG;
+      context.fillRect(marginL, t, innerW, h);
+    }
     context.strokeStyle = "rgba(0,0,0,0.12)"; context.lineWidth = 1;
     for (const v of yTicks) {
       const py = yScale(v);
@@ -190,10 +196,10 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
     }
     if (simplified) {
       // Axis title inside the frame, top-left, nudged in off the corner.
-      context.font = "bold 16px sans-serif";
+      context.font = "bold 32px sans-serif";
       context.textAlign = "left"; context.textBaseline = "top";
       context.fillText(ylabel, marginL + 10, t + 10);
-      context.font = "16px sans-serif";
+      context.font = LABEL_FONT;
     } else {
       context.save();
       context.translate(14, t + h / 2);
