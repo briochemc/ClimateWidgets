@@ -8,17 +8,42 @@ const colors = {
   VL: "#16188F",
 };
 
-export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 / 3}) {
+// `simplified` selects the stripped-down teaching variant: no temperature panel, no
+// x-axis spine, units folded into the y-tick labels, axis titles set inside the plot
+// frame, and leader-line callouts on the two bottom-panel curves.
+export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 / 3, simplified = false}) {
   const YEAR_START = 1900, SCENARIO_START = 2024, YEAR_END = 2150;
   const YEAR_STEP = 25;
   const GT_MIN = -20, GT_MAX = 60;
   const K = 7.82; // Gt CO2 per ppm
   const HIST_COLOR = "#666";
+  const CALLOUT_YEAR = 1990; // historical, so both callouts show before anything is drawn
 
-  const marginL = 80, marginR = 160;
-  const tempT = 56, tempH = 180;
+  const codes = ["VL", "LN", "L", "ML", "M", "H", "HL"];
+  const names = { VL: "Very Low", LN: "Low-to-Negative", L: "Low", ML: "Medium-Low", M: "Medium", H: "High", HL: "High-to-Low" };
+
+  const LABEL_FONT = "16px sans-serif";
+  const LABEL_GAP = 6;   // annotate() offset from the end of the curve
+  const LABEL_LEAD = 20; // minimum vertical spacing between stacked right-edge labels
+
+  // Right margin is measured from the widest label actually drawn there rather than
+  // guessed, so "Low-to-Negative (LN)" can't run off the canvas.
+  const measure = document.createElement("canvas").getContext("2d");
+  measure.font = LABEL_FONT;
+  const widestLabel = Math.max(
+    ...codes.map(c => measure.measureText(`${names[c]} (${c})`).width),
+    measure.measureText("my pCO₂ trajectory").width,
+    measure.measureText("Natural CO₂ sink").width,
+  );
+
+  // Simplified ticks carry their units ("900 ppm", "−20 Gt/yr"), so they need more room
+  // than the bare numbers; the axis title no longer sits in the left margin, which is
+  // what previously justified the width.
+  const marginL = simplified ? 100 : 80;
+  const marginR = Math.ceil(widestLabel) + LABEL_GAP + 8;
+  const tempT = 56, tempH = simplified ? 0 : 180;
   const gap = 10;
-  const topT = tempT + tempH + gap, topH = 220;
+  const topT = simplified ? tempT : tempT + tempH + gap, topH = 220;
   const botT = topT + topH + gap;
   const botH = 300;
   const totalH = botT + botH + 56;
@@ -27,9 +52,6 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
   // than a negative-width plot.
   const w = Math.max(marginL + marginR + 160, Math.round(width * widthScale));
   const innerW = w - marginL - marginR;
-
-  const codes = ["VL", "LN", "L", "ML", "M", "H", "HL"];
-  const names = { VL: "Very Low", LN: "Low-to-Negative", L: "Low", ML: "Medium-Low", M: "Medium", H: "High", HL: "High-to-Low" };
 
   const container = document.createElement("div");
   container.style.cssText = "font:16px sans-serif;";
@@ -148,7 +170,7 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
     context.beginPath();
     context.moveTo(marginL, t);
     context.lineTo(marginL, t + h);
-    context.lineTo(marginL + innerW, t + h);
+    if (!simplified) context.lineTo(marginL + innerW, t + h);
     context.stroke();
     context.textAlign = "right"; context.textBaseline = "middle";
     for (const v of yTicks) {
@@ -166,12 +188,20 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
         context.fillText(year, px, t + h + 8);
       }
     }
-    context.save();
-    context.translate(14, t + h / 2);
-    context.rotate(-Math.PI / 2);
-    context.textAlign = "center"; context.textBaseline = "top";
-    context.fillText(ylabel, 0, 0);
-    context.restore();
+    if (simplified) {
+      // Axis title inside the frame, top-left, nudged in off the corner.
+      context.font = "bold 16px sans-serif";
+      context.textAlign = "left"; context.textBaseline = "top";
+      context.fillText(ylabel, marginL + 10, t + 10);
+      context.font = "16px sans-serif";
+    } else {
+      context.save();
+      context.translate(14, t + h / 2);
+      context.rotate(-Math.PI / 2);
+      context.textAlign = "center"; context.textBaseline = "top";
+      context.fillText(ylabel, 0, 0);
+      context.restore();
+    }
   }
 
   function signed(v) {
@@ -181,10 +211,50 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
 
   function annotate(px, py, text, color) {
     context.fillStyle = color;
-    context.font = "16px sans-serif";
+    context.font = LABEL_FONT;
     context.textAlign = "left";
     context.textBaseline = "middle";
-    context.fillText(text, px + 6, py);
+    context.fillText(text, px + LABEL_GAP, py);
+  }
+
+  // Right-edge labels sit at their curve's final value, so curves that converge (VL and L,
+  // typically) print on top of each other. Spread them apart in y while preserving their
+  // vertical order, then shift the whole stack back inside the panel if spreading overflowed.
+  function spreadLabels(labels, top, bottom) {
+    const s = [...labels].sort((a, b) => a.y - b.y);
+    for (let i = 1; i < s.length; i++) {
+      if (s[i].y - s[i - 1].y < LABEL_LEAD) s[i].y = s[i - 1].y + LABEL_LEAD;
+    }
+    if (s.length) {
+      const over = s[s.length - 1].y - bottom;
+      if (over > 0) for (const l of s) l.y -= over;
+      const under = top - s[0].y;
+      if (under > 0) for (const l of s) l.y += under;
+    }
+    return s;
+  }
+
+  function drawLabels(labels, top, bottom) {
+    for (const l of spreadLabels(labels, top, bottom)) annotate(l.x, l.y, l.text, l.color);
+  }
+
+  // Label offset from a point on a curve, joined to it by a short leader line.
+  // side = -1 puts the label above the curve, +1 below.
+  function callout(px, py, text, color, side) {
+    const leader = 26;
+    const tipY = py + side * 5;
+    const endY = py + side * leader;
+    context.strokeStyle = color; context.lineWidth = 1.5;
+    context.beginPath();
+    context.moveTo(px, tipY); context.lineTo(px, endY);
+    context.stroke();
+    context.lineWidth = 1;
+    context.fillStyle = color;
+    context.font = "bold 16px sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = side < 0 ? "bottom" : "top";
+    context.fillText(text, px, endY + side * 3);
+    context.font = "16px sans-serif";
   }
 
   function drawSeries(series, yValue, yScale, color, dash, thickness = 4) {
@@ -248,65 +318,88 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
     const splitYear = SCENARIO_START - 1;
 
     // Temperature panel (top): true trajectories only, no user recomputation
-    const tempVals = [];
-    for (const sc2 of codes) for (const p of temp[sc2]) tempVals.push(p.T);
-    const yTemp = d3.scaleLinear().domain(d3.extent(tempVals)).range([tempT + tempH, tempT]).nice();
-    frame(tempT, tempH, yTemp, yTemp.ticks(5), "Temperature anomaly (°C)", false, signed);
-    const tempHistorical = temp[sc].filter(p => p.year <= splitYear);
-    const tempFuture = temp[sc].filter(p => p.year >= splitYear);
-    drawSeries(tempHistorical, d => d.T, yTemp, HIST_COLOR);
-    for (const sc2 of codes) {
-      if (sc2 === sc) continue;
-      const future = temp[sc2].filter(p => p.year >= splitYear);
-      drawSeries(future, d => d.T, yTemp, otherColor, undefined, 2);
-      const last = future[future.length - 1];
-      annotate(x(last.year), yTemp(last.T), `${names[sc2]} (${sc2})`, otherColor);
+    if (!simplified) {
+      const tempVals = [];
+      for (const sc2 of codes) for (const p of temp[sc2]) tempVals.push(p.T);
+      const yTemp = d3.scaleLinear().domain(d3.extent(tempVals)).range([tempT + tempH, tempT]).nice();
+      frame(tempT, tempH, yTemp, yTemp.ticks(5), "Temperature anomaly (°C)", false, signed);
+      const tempHistorical = temp[sc].filter(p => p.year <= splitYear);
+      const tempFuture = temp[sc].filter(p => p.year >= splitYear);
+      drawSeries(tempHistorical, d => d.T, yTemp, HIST_COLOR);
+      const tempLabels = [];
+      for (const sc2 of codes) {
+        if (sc2 === sc) continue;
+        const future = temp[sc2].filter(p => p.year >= splitYear);
+        drawSeries(future, d => d.T, yTemp, otherColor, undefined, 2);
+        const last = future[future.length - 1];
+        tempLabels.push({x: x(last.year), y: yTemp(last.T), text: `${names[sc2]} (${sc2})`, color: otherColor});
+      }
+      drawSeries(tempFuture, d => d.T, yTemp, scColor);
+      const lastTemp = tempFuture[tempFuture.length - 1];
+      tempLabels.push({x: x(lastTemp.year), y: yTemp(lastTemp.T), text: `${names[sc]} (${sc})`, color: scColor});
+      drawLabels(tempLabels, tempT, tempT + tempH);
     }
-    drawSeries(tempFuture, d => d.T, yTemp, scColor);
-    const lastTemp = tempFuture[tempFuture.length - 1];
-    annotate(x(lastTemp.year), yTemp(lastTemp.T), `${names[sc]} (${sc})`, scColor);
 
     const inf = drawingFinished ? inferredPCO2() : [];
     const ppmVals = [];
     for (const sc2 of codes) for (const p of pco2[sc2]) ppmVals.push(p.ppm);
     if (inf.length >= 2) for (const p of inf) ppmVals.push(p.ppm);
     const yTop = d3.scaleLinear().domain(d3.extent(ppmVals)).range([topT + topH, topT]).nice();
-    frame(topT, topH, yTop, yTop.ticks(5), "Atmospheric CO₂ (ppm)", false);
+    frame(topT, topH, yTop, yTop.ticks(5),
+      simplified ? "Atmospheric CO₂" : "Atmospheric CO₂ (ppm)", false,
+      simplified ? (v => `${v} ppm`) : String);
 
     drawSeries(data.pco2Historical, d => d.ppm, yTop, HIST_COLOR);
 
+    const ppmLabels = [];
     for (const sc2 of codes) {
       if (sc2 === sc) continue;
       const future = pco2[sc2].filter(p => p.year >= splitYear);
       drawSeries(future, d => d.ppm, yTop, otherColor, undefined, 2);
       const last = future[future.length - 1];
-      annotate(x(last.year), yTop(last.ppm), `${names[sc2]} (${sc2})`, otherColor);
+      ppmLabels.push({x: x(last.year), y: yTop(last.ppm), text: `${names[sc2]} (${sc2})`, color: otherColor});
     }
 
     drawSeries(data.pco2Future, d => d.ppm, yTop, scColor);
     const lastPco2 = data.pco2Future[data.pco2Future.length - 1];
-    annotate(x(lastPco2.year), yTop(lastPco2.ppm), `${names[sc]} (${sc})`, scColor);
+    ppmLabels.push({x: x(lastPco2.year), y: yTop(lastPco2.ppm), text: `${names[sc]} (${sc})`, color: scColor});
 
     if (inf.length >= 2) {
       drawSeries(inf, d => d.ppm, yTop, "red");
       const lastInf = inf[inf.length - 1];
-      annotate(x(lastInf.year), yTop(lastInf.ppm), "my pCO₂ trajectory", "red");
+      ppmLabels.push({x: x(lastInf.year), y: yTop(lastInf.ppm), text: "my pCO₂ trajectory", color: "red"});
     }
+    drawLabels(ppmLabels, topT, topT + topH);
 
-    frame(botT, botH, yBot, yBot.ticks(5), "CO₂ flux (Gt/yr)", true, signed);
+    frame(botT, botH, yBot, yBot.ticks(5),
+      simplified ? "CO₂ flux" : "CO₂ flux (Gt/yr)", true,
+      simplified ? (v => `${signed(v)} Gt/yr`) : signed);
     context.strokeStyle = "#ddd";
     context.beginPath();
     context.moveTo(marginL, yBot(0)); context.lineTo(marginL + innerW, yBot(0));
     context.stroke();
     drawSeries(data.sinksHistorical, d => d.gt, yBot, HIST_COLOR, [5, 4]);
     drawSeries(data.sinksFuture, d => d.gt, yBot, scColor, [5, 4]);
-    const lastSink = data.sinksFuture[data.sinksFuture.length - 1];
-    annotate(x(lastSink.year), yBot(lastSink.gt), "Natural CO₂ sink", scColor);
     drawSeries(data.historical, d => d.gt, yBot, HIST_COLOR);
     if (drawingFinished) {
       drawSeries(data.co2Future, d => d.gt, yBot, scColor);
-      const lastFut = data.co2Future[data.co2Future.length - 1];
-      annotate(x(lastFut.year), yBot(lastFut.gt), "CO₂ emissions", scColor);
+    }
+    if (simplified) {
+      // Anchored in the historical period, so both labels are present from the start —
+      // the future emissions curve only appears once the user has drawn something.
+      const em = data.emByYr.get(CALLOUT_YEAR);
+      const sk = data.sinkByYr.get(CALLOUT_YEAR);
+      if (em !== undefined) callout(x(CALLOUT_YEAR), yBot(em), "CO₂ emissions", HIST_COLOR, -1);
+      if (sk !== undefined) callout(x(CALLOUT_YEAR), yBot(sk), "Natural CO₂ sink", HIST_COLOR, +1);
+    } else {
+      const fluxLabels = [];
+      const lastSink = data.sinksFuture[data.sinksFuture.length - 1];
+      fluxLabels.push({x: x(lastSink.year), y: yBot(lastSink.gt), text: "Natural CO₂ sink", color: scColor});
+      if (drawingFinished) {
+        const lastFut = data.co2Future[data.co2Future.length - 1];
+        fluxLabels.push({x: x(lastFut.year), y: yBot(lastFut.gt), text: "CO₂ emissions", color: scColor});
+      }
+      drawLabels(fluxLabels, botT, botT + botH);
     }
 
     context.strokeStyle = "rgba(0,0,0,0.3)"; context.lineWidth = 1;
