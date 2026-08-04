@@ -8,7 +8,7 @@ const colors = {
   VL: "#16188F",
 };
 
-export function createClimateWidget({co2, pco2, temp, d3, width}) {
+export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 / 3}) {
   const YEAR_START = 1900, SCENARIO_START = 2024, YEAR_END = 2150;
   const YEAR_STEP = 25;
   const GT_MIN = -20, GT_MAX = 60;
@@ -22,7 +22,10 @@ export function createClimateWidget({co2, pco2, temp, d3, width}) {
   const botT = topT + topH + gap;
   const botH = 300;
   const totalH = botT + botH + 56;
-  const w = Math.round(width * 2 / 3);
+  // Keep enough room for the axis margins plus a usable plotting area, so a narrow
+  // embed container (a phone, a cramped Moodle column) degrades to scrolling rather
+  // than a negative-width plot.
+  const w = Math.max(marginL + marginR + 160, Math.round(width * widthScale));
   const innerW = w - marginL - marginR;
 
   const codes = ["VL", "LN", "L", "ML", "M", "H", "HL"];
