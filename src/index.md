@@ -1,20 +1,15 @@
-# Draw the future
+# Climate Widgets
 
-Pick a scenario to see its temperature, atmospheric CO₂, and CO₂ fluxes. Then drag in the bottom panel to draw your own future CO₂ emissions from 2024 onward, and release to reveal the atmospheric CO₂ they would produce (in red). Your trajectory is routed through that scenario's natural CO₂ sink — the net uptake by ocean and land, diagnosed directly from the true CO₂ record (it turns into a source when CO₂ falls). The scenario curves stay fixed no matter what you draw; trace a scenario's actual emissions and you'll recover its true CO₂ curve exactly.
+Small, self-contained interactive figures for teaching climate science. Each widget is one page, and each page ends with a copy-pastable snippet so you can drop the widget into your own site or LMS — as an iframe, or as a script tag that renders it inline.
 
-```js
-import {createClimateWidget} from "./widget.js";
+## Draw the future
 
-const co2 = await FileAttachment("data/co2_all.json").json();
-const pco2 = await FileAttachment("data/pco2_all.json").json();
-const temp = await FileAttachment("data/temp_all.json").json();
-const d3 = await import("https://esm.sh/d3@5");
-```
+Pick an emissions scenario, then draw your own future CO₂ emissions from 2024 onward and see the atmospheric CO₂ they would produce. Your trajectory is routed through the natural CO₂ sink diagnosed from the real record, so tracing a scenario's emissions recovers its CO₂ curve exactly. Inspired by the Sterman (2008) stock–flow experiment.
 
-```js
-const stroke = view(createClimateWidget({co2, pco2, temp, d3, width}));
-```
+[Open](./draw-the-future/) · [embed page](./draw-the-future/embed) · [simplified embed page](./draw-the-future/embed-simple)
 
----
+## Temperature trends
 
-Inspired by [Sterman (2008), _Science_](https://www.science.org/doi/10.1126/science.1162574), whose experiment showed how poorly people intuit the stock–flux relationship between CO₂ emissions and atmospheric concentration.
+The GISTEMP global mean temperature record with a draggable year range. Fit a trend to any period you like, or use the presets to see how a well-chosen 16-year window can make the same warming record look flat — or make it cool.
+
+[Open](./temperature-trend/) · [embed page](./temperature-trend/embed)

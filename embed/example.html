@@ -17,10 +17,10 @@ trace a scenario's actual emissions and you'll recover its true CO₂ curve exac
 <div id="climate-widget"></div>
 
 <script type="module">
-  import { createClimateWidget } from "../src/widget.js";
+  import { createClimateWidget } from "../src/draw-the-future/widget.js";
   import * as d3 from "https://esm.sh/d3@5";
 
-  const dataBase = "../src/data/";
+  const dataBase = "../src/draw-the-future/data/";
   const [co2, pco2, temp] = await Promise.all(
     ["co2_all.json", "pco2_all.json", "temp_all.json"].map(f =>
       fetch(dataBase + f).then(r => r.json())

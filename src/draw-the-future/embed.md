@@ -7,9 +7,6 @@ toc: false
 pager: false
 ---
 
-<!-- Legacy route. The canonical page is /draw-the-future/embed; this alias exists
-     because a live Moodle iframe points at /embed. Keep it in sync with that page. -->
-
 <style>
 /* Full-bleed: this page is only ever seen inside an iframe, so drop the
    centred-column max-width and page padding that the Air theme applies. */
@@ -30,11 +27,11 @@ body {
 </style>
 
 ```js
-import {createClimateWidget} from "./draw-the-future/widget.js";
+import {createClimateWidget} from "./widget.js";
 
-const co2 = await FileAttachment("draw-the-future/data/co2_all.json").json();
-const pco2 = await FileAttachment("draw-the-future/data/pco2_all.json").json();
-const temp = await FileAttachment("draw-the-future/data/temp_all.json").json();
+const co2 = await FileAttachment("data/co2_all.json").json();
+const pco2 = await FileAttachment("data/pco2_all.json").json();
+const temp = await FileAttachment("data/temp_all.json").json();
 const d3 = await import("https://esm.sh/d3@5");
 ```
 

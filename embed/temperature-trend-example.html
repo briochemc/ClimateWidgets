@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Temperature trends embed example</title>
+</head>
+<body>
+<h1>Temperature trends</h1>
+<p>Global mean surface temperature, one point per year, as an anomaly relative to the
+1951&ndash;1980 average. Drag the two handles below the chart to pick a period; the blue
+segment is the least-squares trend fitted to the years inside it. The presets show how a
+well-chosen 16-year window can make the same warming record look flat.</p>
+
+<div id="temperature-trend"></div>
+
+<script type="module">
+  import { createTemperatureTrendWidget, parseGistemp } from "../src/temperature-trend/widget.js";
+
+  const csv = await fetch("../src/temperature-trend/data/GLB.Ts+dSST.csv").then(r => r.text());
+
+  const host = document.getElementById("temperature-trend");
+  host.appendChild(createTemperatureTrendWidget({
+    data: parseGistemp(csv),
+    width: 960,
+    widthScale: 1
+  }));
+</script>
+</body>
+</html>
