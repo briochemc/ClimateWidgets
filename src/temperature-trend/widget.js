@@ -315,10 +315,15 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
     const midYear = (from + to) / 2;
     const cx = clamp((xFrom + xTo) / 2, marginL + tw / 2 + 6, marginL + innerW - tw / 2 - 6);
     const yMid = y(trend.intercept + trend.slope * midYear);
-    const above = yMid - 16 - 20 > plotT;
-    const cy = above ? yMid - 16 : yMid + 16;
+    // LIFT is measured to the label's centre, so the visible gap to the trend line is
+    // LIFT − HALF_H − half the line width. Sitting it below is the fallback for a trend
+    // running along the top of the panel, where there is no room above it.
+    const LIFT = 30, HALF_H = 12;
+    const above = yMid - LIFT - HALF_H > plotT;
+    const cy = clamp(above ? yMid - LIFT : yMid + LIFT,
+                     plotT + HALF_H + 2, plotB - HALF_H - 2);
     context.fillStyle = "rgba(255,255,255,0.85)";
-    context.fillRect(cx - tw / 2 - 5, cy - 12, tw + 10, 24);
+    context.fillRect(cx - tw / 2 - 5, cy - HALF_H, tw + 10, HALF_H * 2);
     context.fillStyle = ACCENT;
     context.textAlign = "center"; context.textBaseline = "middle";
     context.fillText(text, cx, cy);
