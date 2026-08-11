@@ -168,7 +168,7 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
     sub.textContent = `${p.from}–${p.to}`;
     sub.style.cssText = "font-size:13px;color:#777;";
     b.appendChild(sub);
-    b.addEventListener("click", () => { from = p.from; to = p.to; render(); emit(); });
+    b.addEventListener("click", () => { stopTour(); from = p.from; to = p.to; render(); emit(); });
     buttons.appendChild(b);
     return {el: b, sub, preset: p};
   });
@@ -178,11 +178,14 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
   status.style.cssText = "padding:8px 0 0;color:#555;min-height:1.4em;";
   container.appendChild(status);
 
-  const hint = document.createElement("div");
-  hint.style.cssText = "padding:2px 0 0;color:#888;font-size:14px;";
-  hint.textContent =
+  const HINT_IDLE =
     "Drag the two handles below the chart to choose a period, or pick one above. " +
     "With the chart focused, ← and → move a handle and ↑/↓ switch between them.";
+  const HINT_TOUR = "Cycling through the presets — click a button or drag a handle to take over.";
+
+  const hint = document.createElement("div");
+  hint.style.cssText = "padding:2px 0 0;color:#888;font-size:14px;";
+  hint.textContent = HINT_IDLE;
   container.appendChild(hint);
 
   function fmtSlope(v) {
@@ -385,6 +388,7 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
   }
 
   canvas.addEventListener("pointerdown", e => {
+    stopTour();
     const {px, py} = pointerAt(e);
     if (!onSlider(py)) return;
     dragging = keyHandle = nearestHandle(px);
@@ -416,6 +420,7 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
   }
 
   canvas.addEventListener("keydown", e => {
+    stopTour();
     const step = e.shiftKey ? 10 : 1;
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       const delta = e.key === "ArrowLeft" ? -step : step;
@@ -432,6 +437,66 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
 
   canvas.addEventListener("focus", () => { focused = true; render(); });
   canvas.addEventListener("blur", () => { focused = false; render(); });
+
+  // Tour: glide through the presets on load so the point of the widget — that the same
+  // record can be made to look flat or steep depending on the window — lands without anyone
+  // having to click. The first sign of the reader taking over ends it for good; it never
+  // restarts, because a control that moves on its own under your cursor is maddening.
+  const TOUR_HOLD = 2000;    // ms resting on each preset
+  const TOUR_GLIDE = 900;    // ms gliding between two presets
+  let touring = false, tourTimer = null, tourFrame = null, tourWatcher = null;
+
+  function stopTour() {
+    tourWatcher?.disconnect();
+    tourWatcher = null;
+    if (!touring) return;
+    touring = false;
+    clearTimeout(tourTimer);
+    cancelAnimationFrame(tourFrame);
+    tourTimer = tourFrame = null;
+    hint.textContent = HINT_IDLE;
+    render();
+  }
+
+  function glideTo(target, done) {
+    const from0 = from, to0 = to, t0 = performance.now();
+    const frame = now => {
+      const k = Math.min(1, (now - t0) / TOUR_GLIDE);
+      const e = k < 0.5 ? 2 * k * k : 1 - 2 * (1 - k) * (1 - k); // ease in and out
+      // Both ends are clamped rather than trusted: rounding each independently can shave a
+      // year off the span even though every preset itself respects MIN_SPAN.
+      from = clamp(Math.round(from0 + (target.from - from0) * e), firstYear, lastYear - MIN_SPAN);
+      to = clamp(Math.round(to0 + (target.to - to0) * e), from + MIN_SPAN, lastYear);
+      render();
+      // Kept truthful every frame, but no "input" event until the glide settles — one
+      // event per preset rather than one per frame.
+      container.value = value();
+      if (k < 1) tourFrame = requestAnimationFrame(frame);
+      else done();
+    };
+    tourFrame = requestAnimationFrame(frame);
+  }
+
+  function tourStep(i) {
+    if (!touring) return;
+    // A cell that re-runs leaves the previous widget detached but still holding a timer;
+    // without this it would animate into an orphaned canvas for the life of the page.
+    // Compared against false so a host without isConnected (a test stub) still runs.
+    if (container.isConnected === false) return stopTour();
+    glideTo(presets[i], () => {
+      if (!touring) return;
+      emit();
+      tourTimer = setTimeout(() => tourStep((i + 1) % presets.length), TOUR_HOLD);
+    });
+  }
+
+  function startTour() {
+    if (touring) return;
+    touring = true;
+    hint.textContent = HINT_TOUR;
+    render();
+    tourTimer = setTimeout(() => tourStep(0), TOUR_HOLD);
+  }
 
   function value() {
     const trend = fit(from, to);
@@ -451,6 +516,27 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
 
   render();
   container.value = value();
+
+  // Two reasons not to start: a reader who has asked the system for reduced motion should
+  // not get an animation they never requested, and starting while the widget is off-screen
+  // would run the whole tour before it is ever looked at. (Inside an iframe the observer
+  // only sees the iframe's own viewport, so an embed below the fold can still start early.)
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  const canAnimate = typeof requestAnimationFrame === "function" && typeof performance === "object";
+  if (presets.length > 1 && !reduceMotion && canAnimate) {
+    if (typeof IntersectionObserver === "function") {
+      tourWatcher = new IntersectionObserver(entries => {
+        if (!entries.some(entry => entry.isIntersecting)) return;
+        tourWatcher.disconnect();
+        tourWatcher = null;
+        startTour();
+      }, {threshold: 0.3});
+      tourWatcher.observe(container);
+    } else {
+      startTour();
+    }
+  }
+
   return container;
 }
 
