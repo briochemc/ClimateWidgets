@@ -14,6 +14,11 @@ const BAND_ALPHA = 0.05;    // selection band; deliberately faint so the data re
 const WINDOW_YEARS = 16;    // span of both cited cherry-picks, counted inclusively
 const MIN_SPAN = 2;         // shortest selectable range in years, i.e. three data points
 
+// Figures are a fixed size on every screen. Tick labels and the slider's year labels are
+// placed in pixels, so letting the width follow the container made them collide once it
+// got narrow. A container narrower than this scrolls the figure instead of reflowing it.
+const FIGURE_WIDTH = 640;
+
 // The GISTEMP table is a CSV with a one-line title above the header, and marks values that
 // do not exist yet (the current, incomplete year) with `***`. `J-D` is the annual mean over
 // January–December; `Year` and `J-D` are the only columns this widget needs.
@@ -39,7 +44,7 @@ export function parseGistemp(text) {
   return out.sort((a, b) => a.year - b.year);
 }
 
-export function createTemperatureTrendWidget({data, width, widthScale = 2 / 3}) {
+export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
   const series = [...data].sort((a, b) => a.year - b.year);
   if (series.length < MIN_SPAN + 1) throw new Error("GISTEMP series is too short to fit a trend");
   const firstYear = series[0].year;
@@ -52,9 +57,9 @@ export function createTemperatureTrendWidget({data, width, widthScale = 2 / 3}) 
   const handleR = 9;
   const totalH = trackY + 44;
 
-  // A narrow embed container (a phone, a cramped Moodle column) degrades to a scrollbar
-  // rather than to a plot with no room left for the slider.
-  const w = Math.max(marginL + marginR + 260, Math.round(width * widthScale));
+  // Floor keeps room for the axis margins plus a usable slider, in case a caller passes
+  // an override too small to draw in.
+  const w = Math.max(marginL + marginR + 260, Math.round(width));
   const innerW = w - marginL - marginR;
 
   // Anomalies are tenths of a degree, so snap the axis to 0.2 °C and count in integer
@@ -143,7 +148,12 @@ export function createTemperatureTrendWidget({data, width, widthScale = 2 / 3}) 
     return ctx;
   })();
   const canvas = context.canvas;
-  container.appendChild(canvas);
+  // The figure keeps its fixed pixel size; when the page is narrower it scrolls inside
+  // this wrapper rather than pushing a horizontal scrollbar onto the whole page.
+  const scroller = document.createElement("div");
+  scroller.style.cssText = "max-width:100%;overflow-x:auto;";
+  scroller.appendChild(canvas);
+  container.appendChild(scroller);
 
   const buttons = document.createElement("div");
   buttons.style.cssText = "padding:10px 0 2px;display:flex;gap:8px;flex-wrap:wrap;";

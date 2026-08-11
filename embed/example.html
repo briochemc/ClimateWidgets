@@ -7,7 +7,9 @@
 </head>
 <body>
 <h1>Draw the future</h1>
-<p>Pick a scenario to see its temperature, atmospheric CO₂, and CO₂ fluxes. Then drag in the
+<p>Pick one of the
+<a href="https://gmd.copernicus.org/articles/19/2627/2026/">CMIP7 ScenarioMIP scenarios</a>
+to see its atmospheric CO₂ and CO₂ fluxes. Then drag in the
 bottom panel to draw your own future CO₂ emissions from 2024 onward, and release to reveal the
 atmospheric CO₂ they would produce (in red). Your trajectory is routed through that scenario's
 natural CO₂ sink — the net uptake by ocean and land, diagnosed directly from the true CO₂ record
@@ -21,14 +23,14 @@ trace a scenario's actual emissions and you'll recover its true CO₂ curve exac
   import * as d3 from "https://esm.sh/d3@5";
 
   const dataBase = "../src/draw-the-future/data/";
-  const [co2, pco2, temp] = await Promise.all(
-    ["co2_all.json", "pco2_all.json", "temp_all.json"].map(f =>
+  const [co2, pco2] = await Promise.all(
+    ["co2_all.json", "pco2_all.json"].map(f =>
       fetch(dataBase + f).then(r => r.json())
     )
   );
 
   const host = document.getElementById("climate-widget");
-  const widget = createClimateWidget({ co2, pco2, temp, d3, width: 960 });
+  const widget = createClimateWidget({ co2, pco2, d3 });
   host.appendChild(widget);
 </script>
 </body>

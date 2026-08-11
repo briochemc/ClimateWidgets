@@ -9,7 +9,7 @@ const gistemp = parseGistemp(await FileAttachment("data/GLB.Ts+dSST.csv").text()
 ```
 
 ```js
-const trend = view(createTemperatureTrendWidget({data: gistemp, width}));
+const trend = view(createTemperatureTrendWidget({data: gistemp}));
 ```
 
 ## Why the presets
@@ -27,10 +27,11 @@ import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
 ```js
 display(embedSnippets({
   embedPath: "temperature-trend/embed",
-  height: 620,
+  height: 660,
   title: "Global mean temperature trends",
-  note: "620 fits a desktop-width page. In a narrow column the preset buttons and text " +
-    "wrap onto more lines, so allow about 760 of height there.",
+  note: "The figure itself is a fixed 640&nbsp;px wide, so it never reflows. In a column " +
+    "narrower than that it scrolls sideways inside the frame and the preset buttons wrap " +
+    "onto extra rows, so allow about 780 of height there.",
   script: `<div id="temperature-trend"></div>
 
 <script type="module">
@@ -41,11 +42,7 @@ display(embedSnippets({
     .then(r => r.text());
 
   const host = document.getElementById("temperature-trend");
-  host.appendChild(createTemperatureTrendWidget({
-    data: parseGistemp(csv),
-    width: host.clientWidth || 960,
-    widthScale: 1
-  }));
+  host.appendChild(createTemperatureTrendWidget({data: parseGistemp(csv)}));
 <\/script>`
 }));
 ```

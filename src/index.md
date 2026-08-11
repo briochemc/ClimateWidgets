@@ -4,9 +4,9 @@ Small, self-contained interactive figures for teaching climate science. Each wid
 
 ## Draw the future
 
-Pick an emissions scenario, then draw your own future CO₂ emissions from 2024 onward and see the atmospheric CO₂ they would produce. Your trajectory is routed through the natural CO₂ sink diagnosed from the real record, so tracing a scenario's emissions recovers its CO₂ curve exactly. Inspired by the Sterman (2008) stock–flow experiment.
+Pick one of the [CMIP7 ScenarioMIP scenarios](https://gmd.copernicus.org/articles/19/2627/2026/), then draw your own future CO₂ emissions from 2024 onward and see the atmospheric CO₂ they would produce. Your trajectory is routed through the natural CO₂ sink diagnosed from the real record, so tracing a scenario's emissions recovers its CO₂ curve exactly. Inspired by the Sterman (2008) stock–flow experiment.
 
-[Open](./draw-the-future/) · [embed page](./draw-the-future/embed) · [simplified embed page](./draw-the-future/embed-simple)
+[Open](./draw-the-future/) · [embed page](./draw-the-future/embed)
 
 ## Temperature trends
 

@@ -33,5 +33,5 @@ const gistemp = parseGistemp(await FileAttachment("data/GLB.Ts+dSST.csv").text()
 ```
 
 ```js
-const trend = view(createTemperatureTrendWidget({data: gistemp, width, widthScale: 1}));
+const trend = view(createTemperatureTrendWidget({data: gistemp}));
 ```

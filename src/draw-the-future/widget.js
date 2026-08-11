@@ -8,13 +8,25 @@ const colors = {
   VL: "#16188F",
 };
 
-// `simplified` selects the stripped-down teaching variant: no temperature panel, no
-// x-axis spine, units folded into the y-tick labels, axis titles set inside the plot
-// frame, and leader-line callouts on the two bottom-panel curves.
-export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 / 3, simplified = false}) {
+// Two stacked panels: atmospheric CO₂ on top, CO₂ fluxes below. Units are folded into the
+// y-tick labels and the axis titles sit inside the plot frame, so the chart stays legible
+// projected on a lecture screen, and the two bottom-panel curves are named by leader-line
+// callouts anchored in the historical period rather than by labels at the right edge.
+
+// Figures are a fixed size on every screen. Tick labels, callouts and the right-edge
+// scenario labels are all placed in pixels, so letting the width follow the container made
+// them collide and overlap once it got narrow. A container narrower than this scrolls the
+// figure sideways instead of reflowing it.
+const FIGURE_WIDTH = 640;
+
+export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
   const YEAR_START = 1900, SCENARIO_START = 2024, YEAR_END = 2150;
   const YEAR_STEP = 25;
-  const GT_MIN = -20, GT_MAX = 60;
+  // Gridlines every YEAR_STEP, but a year label only every other one: at FIGURE_WIDTH the
+  // plotting area leaves ~37px per gridline and "1900" is ~36px wide, so labelling all of
+  // them puts adjacent labels in contact.
+  const YEAR_LABEL_STEP = 50;
+  const GT_MIN = -20, GT_MAX = 70;
   const K = 7.82; // Gt CO2 per ppm
   const HIST_COLOR = "#666";
   const CALLOUT_YEAR = 1960; // historical, so both callouts show before anything is drawn
@@ -34,24 +46,21 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
   const widestLabel = Math.max(
     ...codes.map(c => measure.measureText(`${names[c]} (${c})`).width),
     measure.measureText("my pCO₂ trajectory").width,
-    measure.measureText("Natural CO₂ sink").width,
   );
 
-  // Simplified ticks carry their units ("900 ppm", "−20 Gt/yr"), so they need more room
-  // than the bare numbers; the axis title no longer sits in the left margin, which is
-  // what previously justified the width.
-  const marginL = simplified ? 100 : 80;
+  // The y-tick labels carry their units ("900 ppm", "−20 Gt/yr"), so the left margin has
+  // to fit those rather than a bare number. The axis titles do not live there — they are
+  // set inside the plot frame.
+  const marginL = 100;
   const marginR = Math.ceil(widestLabel) + LABEL_GAP + 8;
-  const tempT = 56, tempH = simplified ? 0 : 180;
-  const gap = 10;
-  const topT = simplified ? tempT : tempT + tempH + gap, topH = 220;
+  const gap = 40; // vertical breathing room between the two panels
+  const topT = 56, topH = 220;
   const botT = topT + topH + gap;
   const botH = 300;
   const totalH = botT + botH + 56;
-  // Keep enough room for the axis margins plus a usable plotting area, so a narrow
-  // embed container (a phone, a cramped Moodle column) degrades to scrolling rather
-  // than a negative-width plot.
-  const w = Math.max(marginL + marginR + 160, Math.round(width * widthScale));
+  // Floor keeps room for the axis margins plus a usable plotting area, in case a caller
+  // passes an override too small to draw in.
+  const w = Math.max(marginL + marginR + 160, Math.round(width));
   const innerW = w - marginL - marginR;
 
   const container = document.createElement("div");
@@ -89,7 +98,12 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
     return ctx;
   })();
   context.canvas.style.display = "block";
-  container.appendChild(context.canvas);
+  // The figure keeps its fixed pixel size; when the page is narrower it scrolls inside
+  // this wrapper rather than pushing a horizontal scrollbar onto the whole page.
+  const scroller = document.createElement("div");
+  scroller.style.cssText = "max-width:100%;overflow-x:auto;";
+  scroller.appendChild(context.canvas);
+  container.appendChild(scroller);
 
   const status = document.createElement("div");
   status.style.cssText = "padding:6px 0;color:#555;min-height:1.4em;";
@@ -156,11 +170,9 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
   let currentStroke = [start.slice()];
 
   function frame(t, h, yScale, yTicks, ylabel, drawXTicks, yFormat = String) {
-    if (simplified) {
-      // Painted first so gridlines, curves and labels all sit on top of it.
-      context.fillStyle = PANEL_BG;
-      context.fillRect(marginL, t, innerW, h);
-    }
+    // Painted first so gridlines, curves and labels all sit on top of it.
+    context.fillStyle = PANEL_BG;
+    context.fillRect(marginL, t, innerW, h);
     context.strokeStyle = "rgba(0,0,0,0.12)"; context.lineWidth = 1;
     for (const v of yTicks) {
       const py = yScale(v);
@@ -176,7 +188,6 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
     context.beginPath();
     context.moveTo(marginL, t);
     context.lineTo(marginL, t + h);
-    if (!simplified) context.lineTo(marginL + innerW, t + h);
     context.stroke();
     context.textAlign = "right"; context.textBaseline = "middle";
     for (const v of yTicks) {
@@ -191,23 +202,14 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
         const px = x(year);
         context.beginPath();
         context.moveTo(px, t + h); context.lineTo(px, t + h + 5); context.stroke();
-        context.fillText(year, px, t + h + 8);
+        if ((year - YEAR_START) % YEAR_LABEL_STEP === 0) context.fillText(year, px, t + h + 8);
       }
     }
-    if (simplified) {
-      // Axis title inside the frame, top-left, nudged in off the corner.
-      context.font = "bold 32px sans-serif";
-      context.textAlign = "left"; context.textBaseline = "top";
-      context.fillText(ylabel, marginL + 10, t + 10);
-      context.font = LABEL_FONT;
-    } else {
-      context.save();
-      context.translate(14, t + h / 2);
-      context.rotate(-Math.PI / 2);
-      context.textAlign = "center"; context.textBaseline = "top";
-      context.fillText(ylabel, 0, 0);
-      context.restore();
-    }
+    // Axis title inside the frame, top-left, nudged in off the corner.
+    context.font = "bold 32px sans-serif";
+    context.textAlign = "left"; context.textBaseline = "top";
+    context.fillText(ylabel, marginL + 10, t + 10);
+    context.font = LABEL_FONT;
   }
 
   function signed(v) {
@@ -244,22 +246,26 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
     for (const l of spreadLabels(labels, top, bottom)) annotate(l.x, l.y, l.text, l.color);
   }
 
-  // Label offset from a point on a curve, joined to it by a short leader line.
-  // side = -1 puts the label above the curve, +1 below.
-  function callout(px, py, text, color, side) {
+  // Label offset from a point on a curve, joined to it by a leader line that slants across
+  // to wherever the label ends up. side = -1 puts the label above the curve, +1 below; dx
+  // shifts it sideways. The label is clamped inside the plotting area, so asking for more
+  // offset than there is room for slides it up against the axis instead of past it.
+  function callout(px, py, text, color, side, dx = 0) {
+    context.font = "bold 16px sans-serif";
+    const half = context.measureText(text).width / 2;
+    const cx = Math.max(marginL + 4 + half, Math.min(marginL + innerW - 4 - half, px + dx));
     const leader = 26;
     const tipY = py + side * 5;
     const endY = py + side * leader;
     context.strokeStyle = color; context.lineWidth = 1.5;
     context.beginPath();
-    context.moveTo(px, tipY); context.lineTo(px, endY);
+    context.moveTo(px, tipY); context.lineTo(cx, endY);
     context.stroke();
     context.lineWidth = 1;
     context.fillStyle = color;
-    context.font = "bold 16px sans-serif";
     context.textAlign = "center";
     context.textBaseline = side < 0 ? "bottom" : "top";
-    context.fillText(text, px, endY + side * 3);
+    context.fillText(text, cx, endY + side * 3);
     context.font = "16px sans-serif";
   }
 
@@ -323,37 +329,12 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
     const otherColor = "rgba(0,0,0,0.10)";
     const splitYear = SCENARIO_START - 1;
 
-    // Temperature panel (top): true trajectories only, no user recomputation
-    if (!simplified) {
-      const tempVals = [];
-      for (const sc2 of codes) for (const p of temp[sc2]) tempVals.push(p.T);
-      const yTemp = d3.scaleLinear().domain(d3.extent(tempVals)).range([tempT + tempH, tempT]).nice();
-      frame(tempT, tempH, yTemp, yTemp.ticks(5), "Temperature anomaly (°C)", false, signed);
-      const tempHistorical = temp[sc].filter(p => p.year <= splitYear);
-      const tempFuture = temp[sc].filter(p => p.year >= splitYear);
-      drawSeries(tempHistorical, d => d.T, yTemp, HIST_COLOR);
-      const tempLabels = [];
-      for (const sc2 of codes) {
-        if (sc2 === sc) continue;
-        const future = temp[sc2].filter(p => p.year >= splitYear);
-        drawSeries(future, d => d.T, yTemp, otherColor, undefined, 2);
-        const last = future[future.length - 1];
-        tempLabels.push({x: x(last.year), y: yTemp(last.T), text: `${names[sc2]} (${sc2})`, color: otherColor});
-      }
-      drawSeries(tempFuture, d => d.T, yTemp, scColor);
-      const lastTemp = tempFuture[tempFuture.length - 1];
-      tempLabels.push({x: x(lastTemp.year), y: yTemp(lastTemp.T), text: `${names[sc]} (${sc})`, color: scColor});
-      drawLabels(tempLabels, tempT, tempT + tempH);
-    }
-
     const inf = drawingFinished ? inferredPCO2() : [];
     const ppmVals = [];
     for (const sc2 of codes) for (const p of pco2[sc2]) ppmVals.push(p.ppm);
     if (inf.length >= 2) for (const p of inf) ppmVals.push(p.ppm);
     const yTop = d3.scaleLinear().domain(d3.extent(ppmVals)).range([topT + topH, topT]).nice();
-    frame(topT, topH, yTop, yTop.ticks(5),
-      simplified ? "Atmospheric CO₂" : "Atmospheric CO₂ (ppm)", false,
-      simplified ? (v => `${v} ppm`) : String);
+    frame(topT, topH, yTop, yTop.ticks(5), "Atmospheric CO₂", false, v => `${v} ppm`);
 
     drawSeries(data.pco2Historical, d => d.ppm, yTop, HIST_COLOR);
 
@@ -377,9 +358,7 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
     }
     drawLabels(ppmLabels, topT, topT + topH);
 
-    frame(botT, botH, yBot, yBot.ticks(5),
-      simplified ? "CO₂ flux" : "CO₂ flux (Gt/yr)", true,
-      simplified ? (v => `${signed(v)} Gt/yr`) : signed);
+    frame(botT, botH, yBot, yBot.ticks(5), "CO₂ fluxes", true, v => `${signed(v)} Gt/yr`);
     context.strokeStyle = "#ddd";
     context.beginPath();
     context.moveTo(marginL, yBot(0)); context.lineTo(marginL + innerW, yBot(0));
@@ -390,28 +369,17 @@ export function createClimateWidget({co2, pco2, temp, d3, width, widthScale = 2 
     if (drawingFinished) {
       drawSeries(data.co2Future, d => d.gt, yBot, scColor);
     }
-    if (simplified) {
-      // Anchored in the historical period, so both labels are present from the start —
-      // the future emissions curve only appears once the user has drawn something.
-      const em = data.emByYr.get(CALLOUT_YEAR);
-      const sk = data.sinkByYr.get(CALLOUT_YEAR);
-      if (em !== undefined) callout(x(CALLOUT_YEAR), yBot(em), "CO₂ emissions", HIST_COLOR, -1);
-      if (sk !== undefined) callout(x(CALLOUT_YEAR), yBot(sk), "Natural CO₂ sink", HIST_COLOR, +1);
-    } else {
-      const fluxLabels = [];
-      const lastSink = data.sinksFuture[data.sinksFuture.length - 1];
-      fluxLabels.push({x: x(lastSink.year), y: yBot(lastSink.gt), text: "Natural CO₂ sink", color: scColor});
-      if (drawingFinished) {
-        const lastFut = data.co2Future[data.co2Future.length - 1];
-        fluxLabels.push({x: x(lastFut.year), y: yBot(lastFut.gt), text: "CO₂ emissions", color: scColor});
-      }
-      drawLabels(fluxLabels, botT, botT + botH);
-    }
+    // Anchored in the historical period, so both labels are present from the start —
+    // the future emissions curve only appears once the user has drawn something.
+    const em = data.emByYr.get(CALLOUT_YEAR);
+    const sk = data.sinkByYr.get(CALLOUT_YEAR);
+    if (em !== undefined) callout(x(CALLOUT_YEAR), yBot(em), "emissions", HIST_COLOR, -1, -30);
+    if (sk !== undefined) callout(x(CALLOUT_YEAR), yBot(sk), "natural sink", HIST_COLOR, +1);
 
     context.strokeStyle = "rgba(0,0,0,0.3)"; context.lineWidth = 1;
     context.setLineDash([4, 4]);
     context.beginPath();
-    context.moveTo(x(SCENARIO_START), tempT);
+    context.moveTo(x(SCENARIO_START), topT);
     context.lineTo(x(SCENARIO_START), botT + botH);
     context.stroke();
     context.setLineDash([]);

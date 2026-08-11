@@ -20,11 +20,7 @@ well-chosen 16-year window can make the same warming record look flat.</p>
   const csv = await fetch("../src/temperature-trend/data/GLB.Ts+dSST.csv").then(r => r.text());
 
   const host = document.getElementById("temperature-trend");
-  host.appendChild(createTemperatureTrendWidget({
-    data: parseGistemp(csv),
-    width: 960,
-    widthScale: 1
-  }));
+  host.appendChild(createTemperatureTrendWidget({ data: parseGistemp(csv) }));
 </script>
 </body>
 </html>
