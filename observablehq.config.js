@@ -7,6 +7,7 @@ export default {
   pages: [
     {name: "Draw the future", path: "/draw-the-future/"},
     {name: "Temperature trends", path: "/temperature-trend/"},
+    {name: "Daily sea surface temperature", path: "/sst-daily/"},
   ],
   head: "",
   theme: "air",
