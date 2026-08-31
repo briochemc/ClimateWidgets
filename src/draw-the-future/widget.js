@@ -113,20 +113,20 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
   const yBot = d3.scaleLinear().domain([GT_MIN, GT_MAX]).range([botT + botH, botT]);
   const curve = d3.curveCatmullRom(context);
 
+  // Linear interpolation along the stroke, in year space: the stroke is monotone in year
+  // by construction, so the first point at or past the asked-for year closes the bracket.
   function sampleStrokeAt(s, year) {
     if (s.length < 2) return null;
-    const x0 = s[0][0], xN = s[s.length - 1][0];
-    const px = x(year);
-    if (px < x0 || px > xN) return null;
+    if (year < s[0].year || year > s[s.length - 1].year) return null;
     for (let i = 1; i < s.length; i++) {
-      if (s[i][0] >= px) {
+      if (s[i].year >= year) {
         const p0 = s[i - 1], p1 = s[i];
-        if (p1[0] === p0[0]) return yBot.invert(p1[1]);
-        const t = (px - p0[0]) / (p1[0] - p0[0]);
-        return yBot.invert(p0[1] * (1 - t) + p1[1] * t);
+        if (p1.year === p0.year) return p1.gt;
+        const t = (year - p0.year) / (p1.year - p0.year);
+        return p0.gt * (1 - t) + p1.gt * t;
       }
     }
-    return yBot.invert(s[s.length - 1][1]);
+    return s[s.length - 1].gt;
   }
 
   // Net CO₂ sink diagnosed from the stock change: S(t) = E(t) − K·(pCO₂(t+1) − pCO₂(t)).
@@ -165,9 +165,12 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
     };
   }
 
+  // The stroke lives in data coordinates ({year, gt}), not canvas pixels, so a re-layout
+  // can re-project it through the new scales and the emitted value never depends on the
+  // figure's size.
   let data = scenarioData("ML");
-  let start = [x(data.startPoint.year), yBot(data.startPoint.gt)];
-  let currentStroke = [start.slice()];
+  let start = data.startPoint;
+  let currentStroke = [{year: start.year, gt: start.gt}];
 
   function frame(t, h, yScale, yTicks, ylabel, drawXTicks, yFormat = String) {
     // Painted first so gridlines, curves and labels all sit on top of it.
@@ -289,8 +292,7 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
     if (startPpm === undefined) return [];
     const out = [{ year: SCENARIO_START, ppm: startPpm }];
     let ppm = startPpm;
-    const lastX = currentStroke[currentStroke.length - 1][0];
-    const lastYear = Math.floor(x.invert(lastX));
+    const lastYear = Math.floor(currentStroke[currentStroke.length - 1].year);
     const stopYear = Math.min(YEAR_END, lastYear);
     for (let t = SCENARIO_START; t < stopYear; t++) {
       const eUser = sampleStrokeAt(currentStroke, t);
@@ -387,13 +389,14 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
     context.strokeStyle = "red"; context.lineWidth = 4;
     context.beginPath();
     curve.lineStart();
-    for (let i = 0; i < currentStroke.length; ++i) curve.point(...currentStroke[i]);
+    for (const p of currentStroke) curve.point(x(p.year), yBot(p.gt));
     curve.lineEnd();
     context.stroke();
     context.lineWidth = 1;
 
+    const startX = x(start.year), startY = yBot(start.gt);
     context.beginPath();
-    context.arc(start[0], start[1], 5, 0, 2 * Math.PI);
+    context.arc(startX, startY, 5, 0, 2 * Math.PI);
     context.fillStyle = "red";
     context.fill();
 
@@ -401,7 +404,7 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
     context.font = "16px sans-serif";
     context.textAlign = "right";
     context.textBaseline = "bottom";
-    context.fillText("Draw from here!", start[0] - 2, start[1] - 8);
+    context.fillText("Draw from here!", startX - 2, startY - 8);
 
     context.fillStyle = "#333";
     context.textAlign = "center"; context.textBaseline = "bottom";
@@ -411,32 +414,33 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
       status.textContent = "Drag on the bottom panel to draw a future emissions trajectory.";
     } else {
       const last = currentStroke[currentStroke.length - 1];
-      status.textContent = `Drew ${currentStroke.length} points, reached year ${Math.round(x.invert(last[0]))} at ${yBot.invert(last[1]).toFixed(1)} Gt CO₂/yr.`;
+      status.textContent = `Drew ${currentStroke.length} points, reached year ${Math.round(last.year)} at ${last.gt.toFixed(1)} Gt CO₂/yr.`;
     }
   }
 
   function updateValue() {
-    container.value = currentStroke.map(([px, py]) => ({ year: x.invert(px), gt: yBot.invert(py) }));
+    container.value = currentStroke.map(p => ({ year: p.year, gt: p.gt }));
     container.dispatchEvent(new CustomEvent("input", { bubbles: true }));
   }
 
   sel.addEventListener("change", () => {
     data = scenarioData(sel.value);
-    start = [x(data.startPoint.year), yBot(data.startPoint.gt)];
-    currentStroke = [start.slice()];
+    start = data.startPoint;
+    currentStroke = [{year: start.year, gt: start.gt}];
     drawingFinished = false;
     render();
     updateValue();
   });
 
-  function dragsubject() { return [start.slice()]; }
+  function dragsubject() { return [{year: start.year, gt: start.gt}]; }
   function dragged() {
     const s = d3.event.subject;
-    const lastX = s[s.length - 1][0];
-    if (d3.event.x > lastX) {
-      const px = Math.min(d3.event.x, x(YEAR_END));
-      const py = Math.max(botT, Math.min(botT + botH, d3.event.y));
-      s.push([px, py]);
+    // Points are converted to data space as they are captured, and only ever extend the
+    // stroke rightwards in time, so the stroke stays monotone in year.
+    const year = Math.min(x.invert(d3.event.x), YEAR_END);
+    if (year > s[s.length - 1].year) {
+      const gt = Math.max(GT_MIN, Math.min(GT_MAX, yBot.invert(d3.event.y)));
+      s.push({year, gt});
     }
     currentStroke = s;
     render();
@@ -450,6 +454,6 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
       .on("end", () => { drawingFinished = true; render(); }));
 
   render();
-  container.value = currentStroke.map(([px, py]) => ({ year: x.invert(px), gt: yBot.invert(py) }));
+  container.value = currentStroke.map(p => ({ year: p.year, gt: p.gt }));
   return container;
 }
