@@ -57,10 +57,10 @@ shoot() {
   local url="http://127.0.0.1:$PORT/$path"
   local dom
   dom=$("$CHROME" "${CHROME_FLAGS[@]}" --dump-dom "$url" 2>/dev/null)
-  # The belief map is the one SVG widget; the rest render a canvas. Its class marker is
-  # set by the widget itself, so a page whose module failed to load has neither.
+  # The two maps are SVG widgets; the rest render a canvas. The class marker is set by
+  # the widget itself, so a page whose module failed to load has neither.
   local must_have="<canvas"
-  [ "$name" = belief-map ] && must_have='class="belief-map"'
+  case $name in belief-map|policy-support-map) must_have="class=\"$name\"" ;; esac
   if ! grep -q "$must_have" <<<"$dom"; then
     echo "WARN: $name rendered no figure — keeping the existing thumbnail" >&2
     return
@@ -85,7 +85,7 @@ shoot() {
 # Do not ask for a narrower window: Chrome clamps --window-size to a minimum window width
 # (about 500 px on macOS), so a smaller number silently yields a wider viewport than
 # requested and a figure that overflows the capture.
-for name in draw-the-future temperature-trend sst-daily belief-map; do
+for name in draw-the-future temperature-trend sst-daily belief-map policy-support-map; do
   case $name in
     sst-daily) guard="Could not load the daily sea surface temperature" ;;
     *) guard="" ;;
@@ -94,7 +94,7 @@ for name in draw-the-future temperature-trend sst-daily belief-map; do
 done
 
 status=0
-for name in draw-the-future temperature-trend sst-daily belief-map; do
+for name in draw-the-future temperature-trend sst-daily belief-map policy-support-map; do
   if [ ! -f "$OUT/$name.png" ]; then
     echo "ERROR: $OUT/$name.png does not exist and could not be generated" >&2
     status=1

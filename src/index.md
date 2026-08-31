@@ -19,6 +19,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Belief in climate change</h2>
     <img class="thumb" src="./assets/thumbnails/belief-map.png" alt="A world map in the Equal Earth projection with countries shaded from brown to blue-green by mean belief in climate change">
   </a>
+  <a class="card" href="./policy-support-map/">
+    <h2>Support for climate policy</h2>
+    <img class="thumb" src="./assets/thumbnails/policy-support-map.png" alt="A world map in the Equal Earth projection with countries shaded from brown to blue-green by mean support for climate policy">
+  </a>
 </div>
 
 <style>
