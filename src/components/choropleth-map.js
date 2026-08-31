@@ -5,10 +5,14 @@
 //
 // The two widget modules (belief-map, policy-support-map) are thin wrappers around this file that
 // fix the wording; everything the panels share — the Equal Earth map, the 0–100 BrBG
-// scale, hover/click behavior — lives here so it cannot drift between them.
+// scale, click behavior — lives here so it cannot drift between them.
 //
-// Rendered as SVG: one <path> per country makes hover and tap hit-testing free, which is
-// the whole point of these widgets.
+// Rendered as SVG: one <path> per country makes click and tap hit-testing free, which is
+// the whole point of these widgets. Interaction is click/tap-only, no hover — deliberate,
+// so a phone and a laptop get exactly the same behavior (and because highlighting on
+// hover proved buggy: raising the hovered path with appendChild re-inserts the element
+// under the pointer, which can swallow the pointerleave event and leave every country the
+// pointer ever crossed stuck highlighted).
 //
 // Unlike the canvas widgets this one imports d3, but by absolute jsDelivr URL, so the
 // same file works both on the Framework site and as a raw script-tag embed. That adds no
@@ -129,7 +133,7 @@ export function createChoroplethWidget({data, world, width = FIGURE_WIDTH, name,
   status.style.cssText = "padding:8px 0 0;color:#555;min-height:2.8em;";
   container.appendChild(status);
 
-  const HINT = `Hover over a country to see its ${noun} score, or click one to pin it here.`;
+  const HINT = `Click a country to see its ${noun} score.`;
 
   const gradId = `${name}-gradient-${gradSeq++}`;
 
@@ -172,6 +176,9 @@ export function createChoroplethWidget({data, world, width = FIGURE_WIDTH, name,
     svg.setAttribute("width", w);
     svg.setAttribute("height", totalH);
     svg.replaceChildren();
+    // The tooltip is anchored to the coordinates of a past click, which a reflow makes
+    // stale; the selection itself is width-independent and survives in the status line.
+    tooltip.hidden = true;
 
     const defs = svgEl("defs", {});
     const grad = svgEl("linearGradient", {id: gradId, x1: 0, y1: 0, x2: 1, y2: 0});
@@ -194,12 +201,11 @@ export function createChoroplethWidget({data, world, width = FIGURE_WIDTH, name,
       const polygonName = f.properties.name;
       const row = rowFor(polygonName);
       const p = svgEl("path", {d, fill: row ? color(row) : NO_DATA, cursor: "pointer"});
-      p.addEventListener("pointerenter", () => highlight(polygonName, true));
-      p.addEventListener("pointerleave", () => { highlight(polygonName, false); tooltip.hidden = true; });
-      p.addEventListener("pointermove", e => moveTooltip(e, polygonName, row));
       p.addEventListener("click", e => {
         selected = selected === polygonName ? null : polygonName;
         refreshStrokes();
+        if (selected === null) tooltip.hidden = true;
+        else showTooltip(e, polygonName, row);
         emit();
         e.stopPropagation();
       });
@@ -234,17 +240,10 @@ export function createChoroplethWidget({data, world, width = FIGURE_WIDTH, name,
   svg.addEventListener("click", () => {
     if (selected === null) return;
     selected = null;
+    tooltip.hidden = true;
     refreshStrokes();
     emit();
   });
-
-  function highlight(polygonName, on) {
-    const p = pathByName.get(polygonName);
-    if (!p) return;
-    p.setAttribute("stroke-width", on || selected === polygonName ? 1.25 : 0.25);
-    // Raised on top so the thickened outline is not overpainted by its neighbors.
-    if (on || selected === polygonName) p.parentNode.appendChild(p);
-  }
 
   function refreshStrokes() {
     for (const [polygonName, p] of pathByName) {
@@ -257,7 +256,7 @@ export function createChoroplethWidget({data, world, width = FIGURE_WIDTH, name,
     renderStatus();
   }
 
-  function moveTooltip(e, polygonName, row) {
+  function showTooltip(e, polygonName, row) {
     tooltip.replaceChildren();
     const strong = document.createElement("strong");
     strong.textContent = polygonName;
@@ -267,8 +266,8 @@ export function createChoroplethWidget({data, world, width = FIGURE_WIDTH, name,
       row ? `${capitalize(noun)} ${fmt(row.mean)} / 100` : "Not in the study"));
     tooltip.hidden = false;
 
-    // Offset to the lower right of the pointer, flipped left when it would overrun the
-    // container — measured after the content is set, so the flip uses the real width.
+    // Offset to the lower right of the click point, flipped left when it would overrun
+    // the container — measured after the content is set, so the flip uses the real width.
     const r = container.getBoundingClientRect();
     let tx = e.clientX - r.left + 12;
     const ty = e.clientY - r.top + 14;
