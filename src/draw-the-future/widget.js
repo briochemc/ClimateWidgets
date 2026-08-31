@@ -542,23 +542,20 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
   }, {passive: false});
 
   // Reflow with the container. The observer watches the widget's own container div so the
-  // script-tag embed, which has no Observable runtime, is responsive too. Callbacks are
-  // rAF-coalesced and layout only re-runs when the fitted width actually changes, so this
-  // cannot loop. Resizing never emits "input": the stroke lives in data coordinates and
-  // simply re-projects through the new scales.
-  function fitWidth() {
-    const avail = container.clientWidth;
-    return avail > 0 ? Math.max(MIN_WIDTH, Math.min(maxW, avail)) : maxW;
-  }
+  // script-tag embed, which has no Observable runtime, is responsive too. Laying out
+  // synchronously in the callback is deliberate: the observer already fires at most once
+  // per frame, after layout and before paint, and the canvas sits in a max-width:100%
+  // wrapper so re-laying it out can never change the container's own width and loop.
+  // Resizing never emits "input": the stroke lives in data coordinates and simply
+  // re-projects through the new scales.
   if (typeof ResizeObserver === "function") {
-    let raf = 0;
-    const ro = new ResizeObserver(() => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        const fitted = fitWidth();
-        if (fitted !== w) { applyLayout(fitted); render(); }
-      });
+    const ro = new ResizeObserver(entries => {
+      // A container that is detached, hidden, or not yet inserted measures zero. Keep the
+      // current layout rather than reading that as "no room" and snapping to the cap.
+      const avail = entries[0]?.contentRect?.width || container.clientWidth;
+      if (!(avail > 0)) return;
+      const fitted = Math.max(MIN_WIDTH, Math.min(maxW, Math.floor(avail)));
+      if (fitted !== w) { applyLayout(fitted); render(); }
     });
     ro.observe(container);
   }
