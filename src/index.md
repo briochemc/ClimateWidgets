@@ -13,3 +13,9 @@ Pick one of the [CMIP7 ScenarioMIP scenarios](https://gmd.copernicus.org/article
 The GISTEMP global mean temperature record with a draggable year range. Fit a trend to any period you like, or use the presets to see how a well-chosen 16-year window can make the same warming record look flat — or make it cool.
 
 [Open](./temperature-trend/) · [embed page](./temperature-trend/embed)
+
+## Daily sea surface temperature
+
+Daily global-mean sea surface temperature since 1981, drawn as a spiral where the day of the year is the angle and the temperature is the radius — so every year joins into one continuous line, and the years working their way outwards are the warming. Tours the five warmest days ever recorded, then lets you hover or click to compare any years yourself.
+
+[Open](./sst-daily/) · [embed page](./sst-daily/embed)
