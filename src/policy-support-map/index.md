@@ -29,9 +29,6 @@ const country = view(createPolicySupportMapWidget({data: support, world}));
 
 The values come straight from Table S6 of the [supplementary materials](https://www.science.org/doi/10.1126/sciadv.adj5778#supplementary-materials); the figure recreates the paper's Fig. 4B ("Policy support").
 
-- The color scale spans the full 0–100 range so this map is directly comparable with the [belief map](../belief-map/). Support runs lower than belief everywhere — from about 59 (Japan) to 80 (Turkey) — which is one of the paper's headline observations: believing in climate change is more widespread than supporting the policies that address it. Countries in gray were not part of the study.
-- Singapore is one of the 63 study countries but is too small to have an outline in the 1:110m-scale map geometry, so it cannot be drawn or clicked here.
-
 ## Embed this widget
 
 ```js

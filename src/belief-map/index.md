@@ -24,9 +24,6 @@ const country = view(createBeliefMapWidget({data: belief, world}));
 
 The values come straight from Table S5 of the [supplementary materials](https://www.science.org/doi/10.1126/sciadv.adj5778#supplementary-materials); the figure recreates the paper's Fig. 4A ("Belief").
 
-- The color scale spans the full 0–100 range, but every country in the study sits between about 73 (Israel) and 97 (Philippines) — belief in climate change is high nearly everywhere it was measured. Countries in gray were not part of the study. A companion widget maps the same study's [support for climate policy](../policy-support-map/), which runs notably lower on the same scale.
-- Singapore is one of the 63 study countries (mean belief 83.9) but is too small to have an outline in the 1:110m-scale map geometry, so it cannot be drawn or clicked here.
-
 ## Embed this widget
 
 ```js
