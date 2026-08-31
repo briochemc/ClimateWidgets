@@ -93,6 +93,7 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
     canvas.height = totalH * dpr;
     canvas.style.width = w + "px";
     canvas.style.height = totalH + "px";
+    canvas.style.touchAction = "pan-y";
     const ctx = canvas.getContext("2d");
     ctx.scale(dpr, dpr);
     return ctx;
@@ -432,26 +433,76 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
     updateValue();
   });
 
-  function dragsubject() { return [{year: start.year, gt: start.gt}]; }
-  function dragged() {
-    const s = d3.event.subject;
-    // Points are converted to data space as they are captured, and only ever extend the
-    // stroke rightwards in time, so the stroke stays monotone in year.
-    const year = Math.min(x.invert(d3.event.x), YEAR_END);
-    if (year > s[s.length - 1].year) {
-      const gt = Math.max(GT_MIN, Math.min(GT_MAX, yBot.invert(d3.event.y)));
-      s.push({year, gt});
+  // Drawing is a plain pointer capture rather than d3-drag: the mapping below corrects for
+  // a canvas whose CSS size differs from its logical size (host CSS, or mid-resize), which
+  // d3's own event coordinates do not, and pointer capture keeps the stroke going when a
+  // finger wanders off the canvas.
+  const canvas = context.canvas;
+  let drawing = false;
+
+  function pointerAt(e) {
+    const r = canvas.getBoundingClientRect();
+    return {
+      px: (e.clientX - r.left) * (w / r.width),
+      py: (e.clientY - r.top) * (totalH / r.height),
+    };
+  }
+
+  function inDrawPanel(py) {
+    return py >= botT && py <= botT + botH;
+  }
+
+  // Points are converted to data space as they are captured, and only ever extend the
+  // stroke rightwards in time, so the stroke stays monotone in year.
+  function extendStroke(px, py) {
+    const year = Math.min(x.invert(px), YEAR_END);
+    if (year > currentStroke[currentStroke.length - 1].year) {
+      const gt = Math.max(GT_MIN, Math.min(GT_MAX, yBot.invert(py)));
+      currentStroke.push({year, gt});
     }
-    currentStroke = s;
     render();
     updateValue();
   }
-  d3.select(context.canvas).call(d3.drag()
-      .container(context.canvas)
-      .subject(dragsubject)
-      .on("start", () => { drawingFinished = false; dragged(); })
-      .on("drag", dragged)
-      .on("end", () => { drawingFinished = true; render(); }));
+
+  canvas.addEventListener("pointerdown", e => {
+    const {px, py} = pointerAt(e);
+    if (!inDrawPanel(py)) return;
+    drawing = true;
+    drawingFinished = false;
+    // Every press starts the stroke over from the scenario's start point, which is what
+    // d3-drag's subject callback used to do.
+    currentStroke = [{year: start.year, gt: start.gt}];
+    canvas.setPointerCapture(e.pointerId);
+    extendStroke(px, py);
+    e.preventDefault();
+  });
+
+  canvas.addEventListener("pointermove", e => {
+    if (!drawing) return;
+    const {px, py} = pointerAt(e);
+    extendStroke(px, py);
+  });
+
+  for (const type of ["pointerup", "pointercancel"]) {
+    canvas.addEventListener(type, e => {
+      if (!drawing) return;
+      drawing = false;
+      drawingFinished = true;
+      canvas.releasePointerCapture(e.pointerId);
+      render();
+      updateValue();
+    });
+  }
+
+  // touch-action pan-y keeps vertical swipes over the top panel scrolling the host page,
+  // and preventDefault on touchstart — pointerdown's would not do it — stops the pan only
+  // when the touch begins inside the drawing panel, so drawing does not fight scrolling.
+  canvas.addEventListener("touchstart", e => {
+    const t = e.touches[0];
+    if (!t) return;
+    const r = canvas.getBoundingClientRect();
+    if (inDrawPanel((t.clientY - r.top) * (totalH / r.height))) e.preventDefault();
+  }, {passive: false});
 
   render();
   container.value = currentStroke.map(p => ({ year: p.year, gt: p.gt }));
