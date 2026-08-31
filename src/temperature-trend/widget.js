@@ -14,10 +14,12 @@ const BAND_ALPHA = 0.05;    // selection band; deliberately faint so the data re
 const WINDOW_YEARS = 16;    // span of both cited cherry-picks, counted inclusively
 const MIN_SPAN = 2;         // shortest selectable range in years, i.e. three data points
 
-// Figures are a fixed size on every screen. Tick labels and the slider's year labels are
-// placed in pixels, so letting the width follow the container made them collide once it
-// got narrow. A container narrower than this scrolls the figure instead of reflowing it.
+// The figure fills its container up to FIGURE_WIDTH and reflows below it: margins, font
+// sizes and tick density are recomputed from the width, so the labels that used to collide
+// at narrow widths shrink or thin out instead. Below MIN_WIDTH the figure stops shrinking
+// and scrolls sideways inside its own wrapper, as the fixed-size version always did.
 const FIGURE_WIDTH = 640;
+const MIN_WIDTH = 320;
 
 // The GISTEMP table is a CSV with a one-line title above the header, and marks values that
 // do not exist yet (the current, incomplete year) with `***`. `J-D` is the annual mean over
@@ -50,17 +52,21 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
   const firstYear = series[0].year;
   const lastYear = series[series.length - 1].year;
 
-  const marginL = 84, marginR = 28;
   const plotT = 26, plotH = 320;
   const plotB = plotT + plotH;
   const trackY = plotB + 52;      // slider centre line, clear of the x-axis tick labels
   const handleR = 9;
   const totalH = trackY + 44;
 
-  // Floor keeps room for the axis margins plus a usable slider, in case a caller passes
-  // an override too small to draw in.
-  const w = Math.max(marginL + marginR + 260, Math.round(width));
-  const innerW = w - marginL - marginR;
+  // The width param is a cap, not a fixed size: the figure fills its container up to it.
+  const maxW = Math.max(MIN_WIDTH, Math.round(width));
+
+  // Everything horizontal is recomputed by applyLayout whenever the container width
+  // changes; the vertical layout above is constant so embed iframe heights stay put.
+  let w, innerW, marginL, marginR, x;
+  let X_TICK_STEP, xTickStart;
+  let tickFont, noteFont, slopeFont, sliderFont;
+  let LIFT, HALF_H, labelClearance;
 
   // Anomalies are tenths of a degree, so snap the axis to 0.2 °C and count in integer
   // steps — accumulating 0.2 in a float walks off the tick positions.
@@ -70,11 +76,7 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
   const yTicks = [];
   for (let k = kLo; k <= kHi; k++) yTicks.push(k * Y_STEP);
 
-  const x = linear(firstYear - 1, lastYear + 1, marginL, marginL + innerW);
   const y = linear(kLo * Y_STEP, kHi * Y_STEP, plotB, plotT);
-
-  const X_TICK_STEP = 20;
-  const xTickStart = Math.ceil(firstYear / X_TICK_STEP) * X_TICK_STEP;
 
   function linear(d0, d1, r0, r1) {
     const f = v => r0 + ((v - d0) / (d1 - d0)) * (r1 - r0);
@@ -130,12 +132,7 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
   container.style.cssText = "font:16px sans-serif;color:#333;";
 
   const context = (() => {
-    const dpr = window.devicePixelRatio || 1;
     const canvas = document.createElement("canvas");
-    canvas.width = w * dpr;
-    canvas.height = totalH * dpr;
-    canvas.style.width = w + "px";
-    canvas.style.height = totalH + "px";
     canvas.style.display = "block";
     // pan-y, not none: vertical swipes over the chart must still scroll the host page
     // (this widget can fill a phone's viewport inside a Moodle iframe), while horizontal
@@ -143,13 +140,46 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
     canvas.style.touchAction = "pan-y";
     canvas.tabIndex = 0;
     canvas.style.outline = "none";
-    const ctx = canvas.getContext("2d");
-    ctx.scale(dpr, dpr);
-    return ctx;
+    return canvas.getContext("2d");
   })();
   const canvas = context.canvas;
-  // The figure keeps its fixed pixel size; when the page is narrower it scrolls inside
-  // this wrapper rather than pushing a horizontal scrollbar onto the whole page.
+
+  function applyLayout(newW) {
+    w = newW;
+    const t = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
+    const lerp = (a, b) => Math.round(a + (b - a) * t);
+
+    marginL = lerp(64, 84);
+    marginR = lerp(12, 28);
+    innerW = w - marginL - marginR;
+    x = linear(firstYear - 1, lastYear + 1, marginL, marginL + innerW);
+
+    // Year labels need ~55px at the full-size font and ~46px at the smallest, so once the
+    // plotting area is too narrow every other 20-year tick is dropped rather than squeezed.
+    // Stepwise, not continuous, so labels do not shimmer while the container is resized.
+    X_TICK_STEP = innerW >= 340 ? 20 : 40;
+    xTickStart = Math.ceil(firstYear / X_TICK_STEP) * X_TICK_STEP;
+
+    tickFont = `${lerp(13, 16)}px sans-serif`;
+    noteFont = `${lerp(11, 13)}px sans-serif`;
+    slopeFont = `bold ${lerp(13, 16)}px sans-serif`;
+    sliderFont = `bold ${lerp(13, 15)}px sans-serif`;
+    LIFT = lerp(24, 30);
+    HALF_H = lerp(10, 12);
+    labelClearance = lerp(46, 56);
+
+    // Re-read dpr each time: the window may have moved to a screen with a different one.
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = w * dpr;       // also resets the context transform
+    canvas.height = totalH * dpr;
+    canvas.style.width = w + "px";
+    canvas.style.height = totalH + "px";
+    context.scale(dpr, dpr);
+  }
+  applyLayout(maxW);
+
+  // Narrower than MIN_WIDTH the figure stops reflowing and scrolls inside this wrapper
+  // rather than pushing a horizontal scrollbar onto the whole page.
   const scroller = document.createElement("div");
   scroller.style.cssText = "max-width:100%;overflow-x:auto;";
   scroller.appendChild(canvas);
@@ -229,7 +259,7 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
     context.beginPath();
     context.moveTo(marginL, y(0)); context.lineTo(marginL + innerW, y(0)); context.stroke();
     context.fillStyle = "#999";
-    context.font = "13px sans-serif";
+    context.font = noteFont;
     context.textAlign = "right"; context.textBaseline = "bottom";
     context.fillText("1951–1980 average", marginL + innerW - 4, y(0) - 4);
 
@@ -251,7 +281,7 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
     drawSlopeLabel(trend, xFrom, xTo);
 
     context.strokeStyle = "#666"; context.fillStyle = "#333";
-    context.font = "16px sans-serif";
+    context.font = tickFont;
     context.beginPath();
     context.moveTo(marginL, plotT);
     context.lineTo(marginL, plotB);
@@ -310,7 +340,7 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
   // above, on a translucent white plate so it stays legible over the data.
   function drawSlopeLabel(trend, xFrom, xTo) {
     const text = `${fmtSlope(trend.slope * 10)} °C/decade`;
-    context.font = "bold 16px sans-serif";
+    context.font = slopeFont;
     const tw = context.measureText(text).width;
     const midYear = (from + to) / 2;
     const cx = clamp((xFrom + xTo) / 2, marginL + tw / 2 + 6, marginL + innerW - tw / 2 - 6);
@@ -318,7 +348,6 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
     // LIFT is measured to the label's centre, so the visible gap to the trend line is
     // LIFT − HALF_H − half the line width. Sitting it below is the fallback for a trend
     // running along the top of the panel, where there is no room above it.
-    const LIFT = 30, HALF_H = 12;
     const above = yMid - LIFT - HALF_H > plotT;
     const cy = clamp(above ? yMid - LIFT : yMid + LIFT,
                      plotT + HALF_H + 2, plotB - HALF_H - 2);
@@ -327,7 +356,7 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
     context.fillStyle = ACCENT;
     context.textAlign = "center"; context.textBaseline = "middle";
     context.fillText(text, cx, cy);
-    context.font = "16px sans-serif";
+    context.font = tickFont;
   }
 
   function drawSlider(xFrom, xTo) {
@@ -361,13 +390,13 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
 
     // Nudge the two year labels apart when the handles are close enough to overlap them.
     const gap = xTo - xFrom;
-    const spread = gap < 56 ? (56 - gap) / 2 : 0;
-    context.font = "bold 15px sans-serif";
+    const spread = gap < labelClearance ? (labelClearance - gap) / 2 : 0;
+    context.font = sliderFont;
     context.fillStyle = ACCENT;
     context.textAlign = "center"; context.textBaseline = "top";
     context.fillText(from, clamp(xFrom - spread, marginL, marginL + innerW), trackY + handleR + 6);
     context.fillText(to, clamp(xTo + spread, marginL, marginL + innerW), trackY + handleR + 6);
-    context.font = "16px sans-serif";
+    context.font = tickFont;
   }
 
   function setHandle(name, year) {
@@ -521,6 +550,28 @@ export function createTemperatureTrendWidget({data, width = FIGURE_WIDTH}) {
 
   render();
   container.value = value();
+
+  // Reflow with the container. The observer watches the widget's own container div so the
+  // script-tag embed, which has no Observable runtime, is responsive too. Callbacks are
+  // rAF-coalesced and layout only re-runs when the fitted width actually changes, so this
+  // cannot loop. Resizing never emits "input" and never stops the tour: the selected years
+  // are data-space state, unchanged by re-layout.
+  function fitWidth() {
+    const avail = container.clientWidth;
+    return avail > 0 ? Math.max(MIN_WIDTH, Math.min(maxW, avail)) : maxW;
+  }
+  if (typeof ResizeObserver === "function") {
+    let frame = 0;
+    const ro = new ResizeObserver(() => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const fitted = fitWidth();
+        if (fitted !== w) { applyLayout(fitted); render(); }
+      });
+    });
+    ro.observe(container);
+  }
 
   // Two reasons not to start: a reader who has asked the system for reduced motion should
   // not get an animation they never requested, and starting while the widget is off-screen
