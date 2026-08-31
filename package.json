@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "observable preview",
-    "build": "observable build"
+    "build": "observable build",
+    "thumbnails": "bash scripts/take-thumbnails.sh"
   },
   "keywords": [],
   "author": "",
