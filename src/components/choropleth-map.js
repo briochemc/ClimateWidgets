@@ -263,7 +263,7 @@ export function createChoroplethWidget({data, world, width = FIGURE_WIDTH, name,
     tooltip.appendChild(strong);
     tooltip.appendChild(document.createElement("br"));
     tooltip.appendChild(document.createTextNode(
-      row ? `${capitalize(noun)} ${fmt(row.mean)} / 100` : "Not in the study"));
+      row ? `${capitalize(noun)} ${fmt(row.mean)} %` : "Not in the study"));
     tooltip.hidden = false;
 
     // Offset to the lower right of the click point, flipped left when it would overrun
