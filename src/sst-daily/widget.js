@@ -15,7 +15,11 @@
 // Self-contained on purpose — no d3, no other imports — so the script-tag embed on the
 // widget's page is a single ES module import that works from any page.
 
+// The figure fills its container up to FIGURE_WIDTH and reflows below it — the polar
+// geometry already scales with the width, and the fonts and ring padding shrink with it.
+// Below MIN_WIDTH it stops shrinking and scrolls sideways inside its own wrapper.
 const FIGURE_WIDTH = 640;
+const MIN_WIDTH = 320;
 
 // Every series in the source JSON is 366 entries long, and the index is simply the day of
 // the year counted from zero: index 243 of 1981 is 1 September 1981, the first day OISST
@@ -162,14 +166,16 @@ export function createSstDailyWidget({data, width = FIGURE_WIDTH}) {
   // Polar layout: the day of the year is the angle and the temperature is the radius, so
   // 31 December of one year meets 1 January of the next at the same angle and the whole
   // record reads as one continuous spiral rather than 46 separate curves.
-  const w = Math.max(360, Math.round(width));
+  //
+  // The width param is a cap, not a fixed size: the figure fills its container up to it,
+  // and everything below is recomputed by applyLayout whenever the container width changes.
+  // The height tracks the width — the figure is square-ish — so a narrow embed simply
+  // leaves blank space under the chart rather than scrolling.
+  const maxW = Math.max(MIN_WIDTH, Math.round(width));
   const titleH = 44;
-  const ringPad = 34;                      // room outside the plot circle for the month ring
-  const totalH = w + 20;
-  const cx = w / 2;
-  const cy = titleH + (totalH - titleH) / 2;
-  const R = Math.min(cx, (totalH - titleH) / 2) - ringPad;
-  const R_INNER = Math.round(R * 0.3);     // hole in the middle, so the coldest days stay legible
+  let w, totalH, cx, cy, R, R_INNER, ringPad, monthRingLift;
+  let tickFont, monthFont, climFont, titleFont, anomFont;
+  let centreYearFont, centreDateFont, centreTempFont, centreYearDy, centreDateDy, centreTempDy;
 
   const allValues = [];
   for (const d of years) for (const v of d.values) if (v != null) allValues.push(v);
@@ -254,51 +260,89 @@ export function createSstDailyWidget({data, width = FIGURE_WIDTH}) {
   const container = document.createElement("div");
   container.style.cssText = "font:16px sans-serif;color:#333;";
 
-  const dpr = window.devicePixelRatio || 1;
-
   // `context` is a variable rather than a constant because the static layer below is
   // painted by the same drawing functions, with this pointed at it for the duration.
   let context = (() => {
     const canvas = document.createElement("canvas");
-    canvas.width = w * dpr;
-    canvas.height = totalH * dpr;
-    canvas.style.width = w + "px";
-    canvas.style.height = totalH + "px";
     canvas.style.display = "block";
     // pan-y, not none: vertical swipes over the chart must still scroll the host page
     // (this widget can fill a phone's viewport inside a Moodle iframe).
     canvas.style.touchAction = "pan-y";
     canvas.tabIndex = 0;
     canvas.style.outline = "none";
-    const ctx = canvas.getContext("2d");
-    ctx.scale(dpr, dpr);
-    return ctx;
+    return canvas.getContext("2d");
   })();
   const canvas = context.canvas;
 
   // The spiral is ~17,000 line segments and none of it changes: only the highlighted year
-  // and the read-out do. So the fixed part is painted once here and blitted each frame,
-  // which is what keeps the tour smooth while it animates at 60fps.
-  const baseCanvas = (() => {
-    const c = document.createElement("canvas");
-    c.width = w * dpr;
-    c.height = totalH * dpr;
-    const ctx = c.getContext("2d");
-    ctx.scale(dpr, dpr);
-    return c;
-  })();
+  // and the read-out do. So the fixed part is painted once into this off-screen layer and
+  // blitted each frame, which is what keeps the tour smooth while it animates at 60fps.
+  const baseCanvas = document.createElement("canvas");
 
-  // The figure keeps its fixed pixel size; when the page is narrower it scrolls inside
-  // this wrapper rather than pushing a horizontal scrollbar onto the whole page.
+  function applyLayout(newW) {
+    w = newW;
+    const t = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
+    const lerp = (a, b) => Math.round(a + (b - a) * t);
+    // One multiplier for every fixed pixel size: the geometry is already proportional to
+    // the width, so the type and the read-out offsets just scale along with it.
+    const fs = 0.8 + 0.2 * t;
+    const px = n => Math.round(n * fs);
+
+    ringPad = lerp(26, 34);          // room outside the plot circle for the month ring
+    monthRingLift = lerp(15, 20);    // how far beyond R the month names sit
+    totalH = w + 20;
+    cx = w / 2;
+    cy = titleH + (totalH - titleH) / 2;
+    R = Math.min(cx, (totalH - titleH) / 2) - ringPad;
+    R_INNER = Math.round(R * 0.3);   // hole in the middle, so the coldest days stay legible
+
+    tickFont = `${px(12)}px sans-serif`;
+    monthFont = `${px(13)}px sans-serif`;
+    climFont = `${px(13)}px sans-serif`;
+    titleFont = `bold ${px(17)}px sans-serif`;
+    anomFont = `bold ${px(15)}px sans-serif`;
+    centreYearFont = `bold ${px(26)}px sans-serif`;
+    centreDateFont = `${px(15)}px sans-serif`;
+    centreTempFont = `bold ${px(18)}px sans-serif`;
+    centreYearDy = -px(22);
+    centreDateDy = px(2);
+    centreTempDy = px(26);
+
+    // Re-read dpr each time: the window may have moved to a screen with a different one.
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = w * dpr;          // also resets the context transform
+    canvas.height = totalH * dpr;
+    canvas.style.width = w + "px";
+    canvas.style.height = totalH + "px";
+    context.scale(dpr, dpr);
+
+    // Follow the figure width, so the prose keeps wrapping in step with the chart.
+    controls.style.maxWidth = `${w}px`;
+    hint.style.maxWidth = `${w}px`;
+  }
+
+  // The base layer is sized separately from the live canvas: resizing a canvas clears it,
+  // so during a continuous resize the stale base keeps being blitted, stretched — soft but
+  // correct — and is only repainted at the new size once the resizing settles.
+  function resizeBase() {
+    const dpr = window.devicePixelRatio || 1;
+    baseCanvas.width = w * dpr;
+    baseCanvas.height = totalH * dpr;
+    baseCanvas.getContext("2d").scale(dpr, dpr);
+  }
+
+  // Narrower than MIN_WIDTH the figure stops reflowing and scrolls inside this wrapper
+  // rather than pushing a horizontal scrollbar onto the whole page.
   const scroller = document.createElement("div");
   scroller.style.cssText = "max-width:100%;overflow-x:auto;";
   scroller.appendChild(canvas);
   container.appendChild(scroller);
 
-  // Everything below the figure is capped at the figure's own width, so the prose wraps
-  // in step with the chart instead of running out to the full page width beside it.
+  // Everything below the figure is capped at the figure's own width (set by applyLayout),
+  // so the prose wraps in step with the chart instead of running out to the full page
+  // width beside it.
   const controls = document.createElement("div");
-  controls.style.cssText = `max-width:${w}px;padding:10px 0 0;`;
+  controls.style.cssText = "padding:10px 0 0;";
   container.appendChild(controls);
 
   const controlsLabel = document.createElement("div");
@@ -372,7 +416,7 @@ export function createSstDailyWidget({data, width = FIGURE_WIDTH}) {
     "Click a kept loop to drop it, or press Esc to clear.";
 
   const hint = document.createElement("div");
-  hint.style.cssText = `max-width:${w}px;padding:8px 0 0;color:#888;font-size:14px;`;
+  hint.style.cssText = "padding:8px 0 0;color:#888;font-size:14px;";
   hint.textContent = HINT_IDLE;
   container.appendChild(hint);
 
@@ -545,7 +589,7 @@ export function createSstDailyWidget({data, width = FIGURE_WIDTH}) {
     }
     for (const v of tTicks) {
       const label = v === tTicks[tTicks.length - 1] ? `${v.toFixed(1)} °C` : v.toFixed(1);
-      outlinedText(label, cx, cy - radiusOf(v), "12px sans-serif", "#666");
+      outlinedText(label, cx, cy - radiusOf(v), tickFont, "#666");
     }
   }
 
@@ -553,13 +597,13 @@ export function createSstDailyWidget({data, width = FIGURE_WIDTH}) {
     for (let m = 0; m < 12; m++) {
       const next = m === 11 ? DAYS : MONTH_START[m + 1];
       drawCurvedText(MONTH_NAMES[m], angleAt((MONTH_START[m] + next) / 2 / DAYS),
-                     () => R + 20, "13px sans-serif", "#555");
+                     () => R + monthRingLift, monthFont, "#555");
     }
   }
 
   function drawTitle() {
     context.fillStyle = "#333";
-    context.font = "bold 17px sans-serif";
+    context.font = titleFont;
     context.textAlign = "center"; context.textBaseline = "alphabetic";
     context.fillText("Global mean sea surface temperature", cx, 26);
   }
@@ -597,7 +641,7 @@ export function createSstDailyWidget({data, width = FIGURE_WIDTH}) {
   function drawClimLabel() {
     drawCurvedText("1991–2020 average", angleFor(CLIM_LABEL_DAY, DAYS),
                    a => radiusOf(valueAt(clim, dayFromAngle(a))?.v ?? tLo),
-                   "13px sans-serif", "#333");
+                   climFont, "#333");
   }
 
   // Keeps a label on the canvas: the caller asks for a spot, this nudges it back inside.
@@ -658,7 +702,7 @@ export function createSstDailyWidget({data, width = FIGURE_WIDTH}) {
         const topHalf = Math.sin(a) < 0;
         outlinedTextClamped(fmtSigned(selHit.v - climHit.v) + " °C",
                             px, py + (topHalf ? -18 : 18),
-                            "bold 15px sans-serif", color);
+                            anomFont, color);
       }
     }
 
@@ -688,10 +732,10 @@ export function createSstDailyWidget({data, width = FIGURE_WIDTH}) {
   // could never settle anywhere that stayed legible.
   function drawCentre(hit) {
     const date = dateAt(selYear, hit.i);
-    outlinedText(String(selYear), cx, cy - 22, "bold 26px sans-serif", colorOf(selYear));
-    outlinedText(`${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}`, cx, cy + 2,
-                 "15px sans-serif", "#555");
-    outlinedText(`${hit.v.toFixed(2)} °C`, cx, cy + 26, "bold 18px sans-serif", "#333");
+    outlinedText(String(selYear), cx, cy + centreYearDy, centreYearFont, colorOf(selYear));
+    outlinedText(`${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}`, cx, cy + centreDateDy,
+                 centreDateFont, "#555");
+    outlinedText(`${hit.v.toFixed(2)} °C`, cx, cy + centreTempDy, centreTempFont, "#333");
   }
 
   function pointerAt(e) {
@@ -911,9 +955,38 @@ export function createSstDailyWidget({data, width = FIGURE_WIDTH}) {
     tourTimer = setTimeout(() => tourStep(0), TOUR_HOLD);
   }
 
+  applyLayout(maxW);
+  resizeBase();
   paintBase();
   render();
   container.value = value();
+
+  // Reflow with the container. The observer watches the widget's own container div so the
+  // script-tag embed, which has no Observable runtime, is responsive too. Callbacks are
+  // rAF-coalesced and layout only re-runs when the fitted width actually changes, so this
+  // cannot loop. The expensive base layer is only repainted once the size settles; until
+  // then render() blits the stale one, stretched. Resizing never emits "input" and never
+  // stops the tour: the selection is data-space state, unchanged by re-layout.
+  function fitWidth() {
+    const avail = container.clientWidth;
+    return avail > 0 ? Math.max(MIN_WIDTH, Math.min(maxW, avail)) : maxW;
+  }
+  if (typeof ResizeObserver === "function") {
+    let frame = 0, settle = null;
+    const ro = new ResizeObserver(() => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const fitted = fitWidth();
+        if (fitted === w) return;
+        applyLayout(fitted);
+        render();
+        clearTimeout(settle);
+        settle = setTimeout(() => { resizeBase(); paintBase(); render(); }, 150);
+      });
+    });
+    ro.observe(container);
+  }
 
   // Two reasons not to start: a reader who has asked the system for reduced motion should
   // not get an animation they never requested, and starting while the widget is off-screen
