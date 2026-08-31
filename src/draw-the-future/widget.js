@@ -13,19 +13,17 @@ const colors = {
 // projected on a lecture screen, and the two bottom-panel curves are named by leader-line
 // callouts anchored in the historical period rather than by labels at the right edge.
 
-// Figures are a fixed size on every screen. Tick labels, callouts and the right-edge
-// scenario labels are all placed in pixels, so letting the width follow the container made
-// them collide and overlap once it got narrow. A container narrower than this scrolls the
-// figure sideways instead of reflowing it.
+// The figure fills its container up to FIGURE_WIDTH and reflows below it: margins, fonts
+// and tick density are recomputed from the width, and at narrow widths the right-edge
+// scenario labels shrink to their bare codes (the select is the legend) and the y-tick
+// units move into the axis titles. Below MIN_WIDTH the figure stops shrinking and scrolls
+// sideways inside its own wrapper, as the fixed-size version always did.
 const FIGURE_WIDTH = 640;
+const MIN_WIDTH = 320;
 
 export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
   const YEAR_START = 1900, SCENARIO_START = 2024, YEAR_END = 2150;
   const YEAR_STEP = 25;
-  // Gridlines every YEAR_STEP, but a year label only every other one: at FIGURE_WIDTH the
-  // plotting area leaves ~37px per gridline and "1900" is ~36px wide, so labelling all of
-  // them puts adjacent labels in contact.
-  const YEAR_LABEL_STEP = 50;
   const GT_MIN = -20, GT_MAX = 70;
   const K = 7.82; // Gt CO2 per ppm
   const HIST_COLOR = "#666";
@@ -35,33 +33,24 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
   const codes = ["VL", "LN", "L", "ML", "M", "H", "HL"];
   const names = { VL: "Very Low", LN: "Low-to-Negative", L: "Low", ML: "Medium-Low", M: "Medium", H: "High", HL: "High-to-Low" };
 
-  const LABEL_FONT = "16px sans-serif";
-  const LABEL_GAP = 6;   // annotate() offset from the end of the curve
-  const LABEL_LEAD = 20; // minimum vertical spacing between stacked right-edge labels
-
-  // Right margin is measured from the widest label actually drawn there rather than
-  // guessed, so "Low-to-Negative (LN)" can't run off the canvas.
   const measure = document.createElement("canvas").getContext("2d");
-  measure.font = LABEL_FONT;
-  const widestLabel = Math.max(
-    ...codes.map(c => measure.measureText(`${names[c]} (${c})`).width),
-    measure.measureText("my pCO₂ trajectory").width,
-  );
 
-  // The y-tick labels carry their units ("900 ppm", "−20 Gt/yr"), so the left margin has
-  // to fit those rather than a bare number. The axis titles do not live there — they are
-  // set inside the plot frame.
-  const marginL = 100;
-  const marginR = Math.ceil(widestLabel) + LABEL_GAP + 8;
+  // Vertical layout is constant — applyLayout recomputes only the horizontal metrics,
+  // fonts and label tiers when the container width changes — so embed heights stay put.
   const gap = 40; // vertical breathing room between the two panels
   const topT = 56, topH = 220;
   const botT = topT + topH + gap;
   const botH = 300;
   const totalH = botT + botH + 56;
-  // Floor keeps room for the axis margins plus a usable plotting area, in case a caller
-  // passes an override too small to draw in.
-  const w = Math.max(marginL + marginR + 160, Math.round(width));
-  const innerW = w - marginL - marginR;
+
+  // The width param is a cap, not a fixed size: the figure fills its container up to it.
+  const maxW = Math.max(MIN_WIDTH, Math.round(width));
+  let w, innerW, marginL, marginR, x;
+  let LABEL_FONT, CALLOUT_FONT, TITLE_FONT;
+  let LABEL_GAP;   // annotate() offset from the end of the curve
+  let LABEL_LEAD;  // minimum vertical spacing between stacked right-edge labels
+  let LEADER, CALLOUT_DX, YEAR_LABEL_STEP;
+  let compact, scenarioLabel, userLabel, histHeader, futHeader;
 
   const container = document.createElement("div");
   container.style.cssText = "font:16px sans-serif;";
@@ -87,30 +76,78 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
   let drawingFinished = false;
 
   const context = (() => {
-    const dpr = window.devicePixelRatio || 1;
     const canvas = document.createElement("canvas");
-    canvas.width = w * dpr;
+    canvas.style.display = "block";
+    canvas.style.touchAction = "pan-y";
+    return canvas.getContext("2d");
+  })();
+  const canvas = context.canvas;
+
+  function applyLayout(newW) {
+    w = newW;
+    const t = Math.max(0, Math.min(1, (w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH)));
+    const lerp = (a, b) => Math.round(a + (b - a) * t);
+
+    // Two discrete tiers on top of the continuous scaling — discrete so labels do not
+    // shimmer while the container is resized: below 600px the right-edge labels shrink to
+    // the bare scenario codes (the select above already spells each one out), and below
+    // 480px the panel headers shorten and the y-tick units move into the axis titles.
+    const bareLabels = w < 600;
+    compact = w < 480;
+    scenarioLabel = bareLabels ? (c => c) : (c => `${names[c]} (${c})`);
+    userLabel = bareLabels ? "my pCO₂" : "my pCO₂ trajectory";
+    histHeader = compact ? "Historical" : "Historical trajectory";
+    futHeader = compact ? "Future" : "Future trajectory";
+
+    LABEL_FONT = `${lerp(13, 16)}px sans-serif`;
+    CALLOUT_FONT = `bold ${lerp(13, 16)}px sans-serif`;
+    TITLE_FONT = `bold ${lerp(20, 32)}px sans-serif`;
+    LABEL_GAP = lerp(4, 6);
+    LABEL_LEAD = lerp(16, 20);
+    LEADER = lerp(18, 26);
+    CALLOUT_DX = lerp(-15, -30);
+
+    // Both margins are measured rather than guessed, at this tier's own strings and font:
+    // the widest right-edge label, and the widest y-tick label either panel can produce —
+    // templates rather than live tick values, so the margin cannot shift when a drawn
+    // trajectory changes the top panel's tick range.
+    measure.font = LABEL_FONT;
+    const widestLabel = Math.max(
+      ...codes.map(c => measure.measureText(scenarioLabel(c)).width),
+      measure.measureText(userLabel).width,
+    );
+    marginR = Math.ceil(widestLabel) + LABEL_GAP + 8;
+    const tickTemplates = compact ? ["1000", "−20"] : ["1000 ppm", "−20 Gt/yr"];
+    marginL = Math.ceil(Math.max(...tickTemplates.map(s => measure.measureText(s).width))) + 13;
+
+    innerW = w - marginL - marginR;
+    x = d3.scaleLinear().domain([YEAR_START, YEAR_END]).range([marginL, marginL + innerW]);
+
+    // Gridlines every YEAR_STEP, but a year label only every other one — and only every
+    // fourth once the plotting area is too narrow for "1900" and "1950" to stay apart.
+    YEAR_LABEL_STEP = innerW >= 240 ? 50 : 100;
+
+    // Re-read dpr each time: the window may have moved to a screen with a different one.
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = w * dpr;       // also resets the context transform
     canvas.height = totalH * dpr;
     canvas.style.width = w + "px";
     canvas.style.height = totalH + "px";
-    canvas.style.touchAction = "pan-y";
-    const ctx = canvas.getContext("2d");
-    ctx.scale(dpr, dpr);
-    return ctx;
-  })();
-  context.canvas.style.display = "block";
-  // The figure keeps its fixed pixel size; when the page is narrower it scrolls inside
-  // this wrapper rather than pushing a horizontal scrollbar onto the whole page.
+    context.scale(dpr, dpr);
+  }
+  applyLayout(maxW);
+
+  // Narrower than MIN_WIDTH the figure stops reflowing and scrolls inside this wrapper
+  // rather than pushing a horizontal scrollbar onto the whole page.
   const scroller = document.createElement("div");
   scroller.style.cssText = "max-width:100%;overflow-x:auto;";
-  scroller.appendChild(context.canvas);
+  scroller.appendChild(canvas);
   container.appendChild(scroller);
 
   const status = document.createElement("div");
   status.style.cssText = "padding:6px 0;color:#555;min-height:1.4em;";
   container.appendChild(status);
 
-  const x    = d3.scaleLinear().domain([YEAR_START, YEAR_END]).range([marginL, marginL + innerW]);
   const yBot = d3.scaleLinear().domain([GT_MIN, GT_MAX]).range([botT + botH, botT]);
   const curve = d3.curveCatmullRom(context);
 
@@ -188,7 +225,7 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
       context.beginPath();
       context.moveTo(px, t); context.lineTo(px, t + h); context.stroke();
     }
-    context.strokeStyle = "#666"; context.fillStyle = "#333"; context.font = "16px sans-serif";
+    context.strokeStyle = "#666"; context.fillStyle = "#333"; context.font = LABEL_FONT;
     context.beginPath();
     context.moveTo(marginL, t);
     context.lineTo(marginL, t + h);
@@ -210,7 +247,7 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
       }
     }
     // Axis title inside the frame, top-left, nudged in off the corner.
-    context.font = "bold 32px sans-serif";
+    context.font = TITLE_FONT;
     context.textAlign = "left"; context.textBaseline = "top";
     context.fillText(ylabel, marginL + 10, t + 10);
     context.font = LABEL_FONT;
@@ -255,12 +292,11 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
   // shifts it sideways. The label is clamped inside the plotting area, so asking for more
   // offset than there is room for slides it up against the axis instead of past it.
   function callout(px, py, text, color, side, dx = 0) {
-    context.font = "bold 16px sans-serif";
+    context.font = CALLOUT_FONT;
     const half = context.measureText(text).width / 2;
     const cx = Math.max(marginL + 4 + half, Math.min(marginL + innerW - 4 - half, px + dx));
-    const leader = 26;
     const tipY = py + side * 5;
-    const endY = py + side * leader;
+    const endY = py + side * LEADER;
     context.strokeStyle = color; context.lineWidth = 1.5;
     context.beginPath();
     context.moveTo(px, tipY); context.lineTo(cx, endY);
@@ -270,7 +306,7 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
     context.textAlign = "center";
     context.textBaseline = side < 0 ? "bottom" : "top";
     context.fillText(text, cx, endY + side * 3);
-    context.font = "16px sans-serif";
+    context.font = LABEL_FONT;
   }
 
   function drawSeries(series, yValue, yScale, color, dash, thickness = 4) {
@@ -313,12 +349,12 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
     const sc = sel.value;
     const scColor = scenarioColor();
 
-    context.fillStyle = "#333"; context.font = "16px sans-serif";
+    context.fillStyle = "#333"; context.font = LABEL_FONT;
     context.textAlign = "center"; context.textBaseline = "middle";
     const histMidX = (x(YEAR_START) + x(SCENARIO_START)) / 2;
     const futMidX  = (x(SCENARIO_START) + x(YEAR_END)) / 2;
-    context.fillText("Historical trajectory", histMidX, 14);
-    context.fillText("Future trajectory", futMidX, 14);
+    context.fillText(histHeader, histMidX, 14);
+    context.fillText(futHeader, futMidX, 14);
     context.strokeStyle = "#666"; context.lineWidth = 1;
     for (const [xa, xb] of [[x(YEAR_START), x(SCENARIO_START)], [x(SCENARIO_START), x(YEAR_END)]]) {
       context.beginPath();
@@ -337,7 +373,8 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
     for (const sc2 of codes) for (const p of pco2[sc2]) ppmVals.push(p.ppm);
     if (inf.length >= 2) for (const p of inf) ppmVals.push(p.ppm);
     const yTop = d3.scaleLinear().domain(d3.extent(ppmVals)).range([topT + topH, topT]).nice();
-    frame(topT, topH, yTop, yTop.ticks(5), "Atmospheric CO₂", false, v => `${v} ppm`);
+    frame(topT, topH, yTop, yTop.ticks(5), compact ? "CO₂ (ppm)" : "Atmospheric CO₂", false,
+          v => compact ? String(v) : `${v} ppm`);
 
     drawSeries(data.pco2Historical, d => d.ppm, yTop, HIST_COLOR);
 
@@ -347,21 +384,22 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
       const future = pco2[sc2].filter(p => p.year >= splitYear);
       drawSeries(future, d => d.ppm, yTop, otherColor, undefined, 2);
       const last = future[future.length - 1];
-      ppmLabels.push({x: x(last.year), y: yTop(last.ppm), text: `${names[sc2]} (${sc2})`, color: otherColor});
+      ppmLabels.push({x: x(last.year), y: yTop(last.ppm), text: scenarioLabel(sc2), color: otherColor});
     }
 
     drawSeries(data.pco2Future, d => d.ppm, yTop, scColor);
     const lastPco2 = data.pco2Future[data.pco2Future.length - 1];
-    ppmLabels.push({x: x(lastPco2.year), y: yTop(lastPco2.ppm), text: `${names[sc]} (${sc})`, color: scColor});
+    ppmLabels.push({x: x(lastPco2.year), y: yTop(lastPco2.ppm), text: scenarioLabel(sc), color: scColor});
 
     if (inf.length >= 2) {
       drawSeries(inf, d => d.ppm, yTop, "red");
       const lastInf = inf[inf.length - 1];
-      ppmLabels.push({x: x(lastInf.year), y: yTop(lastInf.ppm), text: "my pCO₂ trajectory", color: "red"});
+      ppmLabels.push({x: x(lastInf.year), y: yTop(lastInf.ppm), text: userLabel, color: "red"});
     }
     drawLabels(ppmLabels, topT, topT + topH);
 
-    frame(botT, botH, yBot, yBot.ticks(5), "CO₂ fluxes", true, v => `${signed(v)} Gt/yr`);
+    frame(botT, botH, yBot, yBot.ticks(5), compact ? "CO₂ fluxes (Gt/yr)" : "CO₂ fluxes", true,
+          v => compact ? signed(v) : `${signed(v)} Gt/yr`);
     context.strokeStyle = "#ddd";
     context.beginPath();
     context.moveTo(marginL, yBot(0)); context.lineTo(marginL + innerW, yBot(0));
@@ -376,7 +414,7 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
     // the future emissions curve only appears once the user has drawn something.
     const em = data.emByYr.get(CALLOUT_YEAR);
     const sk = data.sinkByYr.get(CALLOUT_YEAR);
-    if (em !== undefined) callout(x(CALLOUT_YEAR), yBot(em), "emissions", HIST_COLOR, -1, -30);
+    if (em !== undefined) callout(x(CALLOUT_YEAR), yBot(em), "emissions", HIST_COLOR, -1, CALLOUT_DX);
     if (sk !== undefined) callout(x(CALLOUT_YEAR), yBot(sk), "natural sink", HIST_COLOR, +1);
 
     context.strokeStyle = "rgba(0,0,0,0.3)"; context.lineWidth = 1;
@@ -402,7 +440,7 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
     context.fill();
 
     context.fillStyle = "red";
-    context.font = "16px sans-serif";
+    context.font = LABEL_FONT;
     context.textAlign = "right";
     context.textBaseline = "bottom";
     context.fillText("Draw from here!", startX - 2, startY - 8);
@@ -437,7 +475,6 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
   // a canvas whose CSS size differs from its logical size (host CSS, or mid-resize), which
   // d3's own event coordinates do not, and pointer capture keeps the stroke going when a
   // finger wanders off the canvas.
-  const canvas = context.canvas;
   let drawing = false;
 
   function pointerAt(e) {
@@ -503,6 +540,28 @@ export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
     const r = canvas.getBoundingClientRect();
     if (inDrawPanel((t.clientY - r.top) * (totalH / r.height))) e.preventDefault();
   }, {passive: false});
+
+  // Reflow with the container. The observer watches the widget's own container div so the
+  // script-tag embed, which has no Observable runtime, is responsive too. Callbacks are
+  // rAF-coalesced and layout only re-runs when the fitted width actually changes, so this
+  // cannot loop. Resizing never emits "input": the stroke lives in data coordinates and
+  // simply re-projects through the new scales.
+  function fitWidth() {
+    const avail = container.clientWidth;
+    return avail > 0 ? Math.max(MIN_WIDTH, Math.min(maxW, avail)) : maxW;
+  }
+  if (typeof ResizeObserver === "function") {
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const fitted = fitWidth();
+        if (fitted !== w) { applyLayout(fitted); render(); }
+      });
+    });
+    ro.observe(container);
+  }
 
   render();
   container.value = currentStroke.map(p => ({ year: p.year, gt: p.gt }));
