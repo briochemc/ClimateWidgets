@@ -15,6 +15,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Daily sea surface temperature</h2>
     <img class="thumb" src="./assets/thumbnails/sst-daily.png" alt="Daily sea surface temperature since 1981 drawn as a spiral, with the current year standing out well beyond the pack">
   </a>
+  <a class="card" href="./belief-map/">
+    <h2>Belief in climate change</h2>
+    <img class="thumb" src="./assets/thumbnails/belief-map.png" alt="A world map in the Equal Earth projection with countries shaded from brown to blue-green by mean belief in climate change">
+  </a>
 </div>
 
 <style>
