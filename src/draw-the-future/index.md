@@ -25,8 +25,10 @@ display(embedSnippets({
   embedPath: "draw-the-future/embed",
   height: 780,
   title: "Draw the future: CO₂ emissions and atmospheric CO₂",
-  note: "The older <code>/embed-simple</code> URL still works and now serves this same " +
-    "widget, so any page already pointing at it keeps working.",
+  note: "The figure fills its column up to 640&nbsp;px wide and reflows down to about " +
+    "320&nbsp;px, so it works on phones; narrower than that it scrolls sideways inside " +
+    "the frame. The older <code>/embed-simple</code> URL still works and now serves this " +
+    "same widget, so any page already pointing at it keeps working.",
   script: `<div id="draw-the-future"></div>
 
 <script type="module">

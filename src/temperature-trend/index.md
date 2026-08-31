@@ -29,9 +29,10 @@ display(embedSnippets({
   embedPath: "temperature-trend/embed",
   height: 660,
   title: "Global mean temperature trends",
-  note: "The figure itself is a fixed 640&nbsp;px wide, so it never reflows. In a column " +
-    "narrower than that it scrolls sideways inside the frame and the preset buttons wrap " +
-    "onto extra rows, so allow about 780 of height there.",
+  note: "The figure fills its column up to 640&nbsp;px wide and reflows down to about " +
+    "320&nbsp;px, so it works on phones; narrower than that it scrolls sideways inside " +
+    "the frame. In a narrow column the preset buttons wrap onto extra rows, so allow " +
+    "about 700 of height there.",
   script: `<div id="temperature-trend"></div>
 
 <script type="module">

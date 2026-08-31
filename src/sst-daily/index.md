@@ -34,9 +34,10 @@ display(embedSnippets({
   embedPath: "sst-daily/embed",
   height: 880,
   title: "Daily global sea surface temperature",
-  note: "The figure itself is a fixed 640&nbsp;px square, so it never reflows. In a column " +
-    "narrower than that it scrolls sideways inside the frame. The data is fetched live " +
-    "from climatereanalyzer.org on every load, so the embed is always current.",
+  note: "The square figure fills its column up to 640&nbsp;px and shrinks with it down " +
+    "to about 320&nbsp;px, so a narrow embed simply shows blank space below the chart " +
+    "rather than scrolling. The data is fetched live from climatereanalyzer.org on " +
+    "every load, so the embed is always current.",
   script: `<div id="sst-daily"></div>
 
 <script type="module">
