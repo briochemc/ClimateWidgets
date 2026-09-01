@@ -17,13 +17,23 @@
 // its whole block and replaces the DOM outright, discarding any mid-animation state.
 import {geoEqualEarth, geoPath} from "https://cdn.jsdelivr.net/npm/d3-geo@3/+esm";
 import {feature} from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
-import {interpolateBrBG} from "https://cdn.jsdelivr.net/npm/d3-scale-chromatic@3/+esm";
+import {schemeYlGnBu} from "https://cdn.jsdelivr.net/npm/d3-scale-chromatic@3/+esm";
 
 const BACKGROUND = "#f2f2f2";
 const OCEAN = "#e6e6e6";
 const NO_DATA = "#d9d9d9";
 const BAR_FILL = "#555";
-const DOMAIN = [0, 100];
+
+// The paper's scale, not the BrBG ramp the two Vlasceanu maps use: seven steps of ten
+// points starting at 30%, pale at the low end and dark at the high end. The figure itself
+// is colored by viridis's mako reversed, which no JavaScript colormap package ships, so
+// this uses ColorBrewer's 7-class YlGnBu — the nearest named equivalent, and the same
+// pale-yellow to green to teal to blue progression. It tracks mako closely through the
+// first five bins and parts company only at the top, where mako runs to near-black and
+// YlGnBu stops at navy.
+const BIN_COLORS = schemeYlGnBu[7];
+const BIN_MIN = 30;
+const BIN_STEP = 10;
 
 const MAP_WIDTH = 640;
 const MIN_MAP_WIDTH = 280;
@@ -110,7 +120,6 @@ export function parseClimateActionSupport(text) {
   return {world, countries: rows.filter(r => r.iso3 !== "WLD")};
 }
 
-let gradSeq = 0;
 
 export function createClimateActionSupportWidget({data, world, width = MAP_WIDTH + 16 + BAR_WIDTH}) {
   const {world: globalRow, countries} = data;
@@ -123,7 +132,13 @@ export function createClimateActionSupportWidget({data, world, width = MAP_WIDTH
     console.warn("climate-action-support: no polygon for", missing.map(r => r.country).join(", "));
   }
 
-  const color = value => Number.isFinite(value) ? interpolateBrBG((value - DOMAIN[0]) / (DOMAIN[1] - DOMAIN[0])) : NO_DATA;
+  // Every observed share sits inside 30-100 (the lowest is 30.5%), so nothing is clamped
+  // in practice; the clamp is only there so a future data refresh cannot fall off the end.
+  const color = value => {
+    if (!Number.isFinite(value)) return NO_DATA;
+    const i = Math.floor((value - BIN_MIN) / BIN_STEP);
+    return BIN_COLORS[Math.max(0, Math.min(BIN_COLORS.length - 1, i))];
+  };
 
   let metricIndex = 0;
   let selected = null; // pinned polygon name
@@ -299,7 +314,6 @@ export function createClimateActionSupportWidget({data, world, width = MAP_WIDTH
   tooltip.hidden = true;
   mapWrap.appendChild(tooltip);
 
-  const gradId = `climate-action-support-gradient-${gradSeq++}`;
   let totalH = 0;
   let pathByName = new Map();
   // Where the tooltip is pinned, in mapWrap-relative coordinates. Kept separate from what
@@ -318,12 +332,13 @@ export function createClimateActionSupportWidget({data, world, width = MAP_WIDTH
     const path = geoPath(projection);
     const mapH = Math.ceil(path.bounds({type: "Sphere"})[1][1]);
 
-    const barW2 = Math.max(180, Math.round(mapW * 0.4));
-    const barX2 = Math.round((mapW - barW2) / 2);
-    const barY = mapH + 10;
-    const barH = 10;
-    const tickY = barY + barH + 16;
-    totalH = tickY + 6; // the colorbar's ticks end the SVG; its caption is the title above
+    const swatchW = 30;
+    const swatchH = 12;
+    const legendW = swatchW * BIN_COLORS.length;
+    const legendX = Math.round((mapW - legendW) / 2);
+    const legendY = mapH + 10;
+    const tickY = legendY + swatchH + 14;
+    totalH = tickY + 6; // the legend's labels end the SVG; its caption is the title above
 
     mapSvg.setAttribute("width", mapW);
     mapSvg.setAttribute("height", totalH);
@@ -331,14 +346,6 @@ export function createClimateActionSupportWidget({data, world, width = MAP_WIDTH
     // The pin is anchored to the coordinates of a past click, which a reflow makes stale;
     // the selection itself is width-independent and survives in the status line.
     hideTooltip();
-
-    const defs = svgEl("defs", {});
-    const grad = svgEl("linearGradient", {id: gradId, x1: 0, y1: 0, x2: 1, y2: 0});
-    for (let i = 0; i <= 10; i++) {
-      grad.appendChild(svgEl("stop", {offset: `${i * 10}%`, "stop-color": interpolateBrBG(i / 10)}));
-    }
-    defs.appendChild(grad);
-    mapSvg.appendChild(defs);
 
     mapSvg.appendChild(svgEl("rect", {width: mapW, height: totalH, fill: BACKGROUND}));
     mapSvg.appendChild(svgEl("path", {d: path({type: "Sphere"}), fill: OCEAN}));
@@ -367,21 +374,21 @@ export function createClimateActionSupportWidget({data, world, width = MAP_WIDTH
     }
     mapSvg.appendChild(g);
 
-    const bar = svgEl("g", {"font-size": 12, fill: "#333"});
-    bar.appendChild(svgEl("rect", {
-      x: barX2, y: barY, width: barW2, height: barH,
-      fill: `url(#${gradId})`, stroke: "#999", "stroke-width": 0.5,
-    }));
-    for (let v = DOMAIN[0]; v <= DOMAIN[1]; v += 25) {
-      const tx = barX2 + (barW2 * (v - DOMAIN[0])) / (DOMAIN[1] - DOMAIN[0]);
-      bar.appendChild(svgEl("line", {
-        x1: tx, y1: barY + barH, x2: tx, y2: barY + barH + 4, stroke: "#333", "stroke-width": 1,
+    // Stepped legend, one swatch per bin, labelled by its lower edge as the paper labels
+    // them ("30%+" ... "90%+") rather than by tick marks on a continuous ramp.
+    const legend = svgEl("g", {"font-size": 10, fill: "#333"});
+    BIN_COLORS.forEach((fill, i) => {
+      legend.appendChild(svgEl("rect", {
+        x: legendX + i * swatchW, y: legendY, width: swatchW, height: swatchH,
+        fill, stroke: "#999", "stroke-width": 0.5,
       }));
-      const t = svgEl("text", {x: tx, y: tickY, "text-anchor": "middle"});
-      t.textContent = `${v}%`;
-      bar.appendChild(t);
-    }
-    mapSvg.appendChild(bar);
+      const t = svgEl("text", {
+        x: legendX + i * swatchW + swatchW / 2, y: tickY, "text-anchor": "middle",
+      });
+      t.textContent = `${BIN_MIN + i * BIN_STEP}%+`;
+      legend.appendChild(t);
+    });
+    mapSvg.appendChild(legend);
 
     // The bar chart is sized to whatever the map came out at, so the two panels share a
     // top and a bottom edge at every width.
@@ -397,7 +404,8 @@ export function createClimateActionSupportWidget({data, world, width = MAP_WIDTH
       const value = dataRow ? dataRow[metric.key] : NaN;
       p.setAttribute("fill", color(value));
     }
-    mapSvg.setAttribute("aria-label", `World map with countries shaded by ${metric.mapTitle.toLowerCase()}, 0 to 100`);
+    mapSvg.setAttribute("aria-label",
+      `World map with countries shaded by ${metric.mapTitle.toLowerCase()}, in steps of ten points from 30% up`);
   }
 
   mapSvg.addEventListener("click", () => {
