@@ -23,6 +23,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Support for climate policy</h2>
     <img class="thumb" src="./assets/thumbnails/policy-support-map.png" alt="A world map in the Equal Earth projection with countries shaded from brown to blue-green by mean support for climate policy">
   </a>
+  <a class="card" href="./climate-action-support/">
+    <h2>Support for climate action</h2>
+    <img class="thumb" src="./assets/thumbnails/climate-action-support.png" alt="A bar chart and a world map in the Equal Earth projection, shaded from brown to blue-green by share willing to contribute income to fight global warming">
+  </a>
 </div>
 
 <style>

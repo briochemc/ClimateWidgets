@@ -10,6 +10,7 @@ export default {
     {name: "Daily sea surface temperature", path: "/sst-daily/"},
     {name: "Belief in climate change", path: "/belief-map/"},
     {name: "Support for climate policy", path: "/policy-support-map/"},
+    {name: "Support for climate action", path: "/climate-action-support/"},
   ],
   head: "",
   theme: "air",
