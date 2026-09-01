@@ -21,7 +21,7 @@ const country = view(createClimateActionSupportWidget({data: support, world}));
 
 ## About the data
 
-The values are derived in [`scripts/climate-action-support.jl`](https://github.com/briochemc/ClimateWidgets/blob/main/scripts/climate-action-support.jl) from the survey microdata on the [IZA Dataverse](https://doi.org/10.15185/gccs.1), following the aggregation in the paper's own replication code: each country's share is weighted by the within-country sampling weight, and the global bars by a weight that additionally makes the country mix population-representative. The figure recreates the paper's Fig. 1, including its stepped color scale — seven ten-point bins from 30% up — though in ColorBrewer's YlGnBu rather than the paper's mako, which no JavaScript colormap package provides. Hong Kong, Singapore, Malta and Mauritius are in the survey but have no polygon at this map's resolution.
+The values are derived in [`scripts/climate-action-support.jl`](https://github.com/briochemc/ClimateWidgets/blob/main/scripts/climate-action-support.jl) from the survey microdata on the [IZA Dataverse](https://doi.org/10.15185/gccs.1), following the aggregation in the paper's own replication code: each country's share is weighted by the within-country sampling weight, and the global bars by a weight that additionally makes the country mix population-representative. The figure recreates the paper's Fig. 1, though with a continuous YlGnBu scale in place of the paper's stepped mako one. It runs from 30% rather than 0%, since every country's share falls between 30.5% and 98.2% and anchoring at zero would spend half the ramp on empty range. Hong Kong, Singapore, Malta and Mauritius are in the survey but have no polygon at this map's resolution.
 
 ## Embed this widget
 

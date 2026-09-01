@@ -25,12 +25,7 @@ Small, self-contained interactive figures for teaching climate science. Each wid
   </a>
   <a class="card" href="./climate-action-support/">
     <h2>Support for climate action</h2>
-    <!-- Thumbnail pending: scripts/take-thumbnails.sh needs a working Chrome, and the one
-         installed here (121, Jan 2024) crashes on this macOS. Once it captures
-         climate-action-support.png, restore the <img> the other cards use:
-         <img class="thumb" src="./assets/thumbnails/climate-action-support.png" alt="A bar
-         chart and a world map in the Equal Earth projection, shaded from brown to
-         blue-green by share willing to contribute income to fight global warming"> -->
+    <img class="thumb" src="./assets/thumbnails/climate-action-support.png" alt="A bar chart of global yes/no shares beside a world map in the Equal Earth projection, shaded from pale yellow to navy by the share willing to contribute 1% of income to fight global warming">
   </a>
 </div>
 
