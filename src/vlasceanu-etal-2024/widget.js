@@ -18,7 +18,7 @@
 // whole block and replaces the DOM outright, discarding any mid-animation state.
 import {geoEqualEarth, geoPath} from "https://cdn.jsdelivr.net/npm/d3-geo@3/+esm";
 import {feature} from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
-import {interpolateYlGnBu} from "https://cdn.jsdelivr.net/npm/d3-scale-chromatic@3/+esm";
+import {interpolateBrBG, interpolateViridis} from "https://cdn.jsdelivr.net/npm/d3-scale-chromatic@3/+esm";
 
 const BACKGROUND = "#f2f2f2";
 const OCEAN = "#e6e6e6";
@@ -45,17 +45,26 @@ const NAME_MAP = {
   USA: "United States of America",
 };
 
-// `domain` is the color scale, trimmed to the range each outcome actually occupies so the
-// ramp is spent on real variation; `barMax` is the bar chart's axis, which always starts
-// at zero because a bar cut off at 70 would misread as a much bigger difference than it is.
-// Values outside `domain` are clamped, so a future table revision degrades rather than
-// breaking.
+// `domain` is the color scale; `ramp` is the interpolator it runs through. Belief, policy
+// and sharing are all percentage-like measures the paper reports on a 0-100 scale, so —
+// like the two maps this widget replaces — they keep a fixed 0-100 domain and the
+// original diverging BrBG ramp, rather than one stretched over each outcome's observed
+// range: that is what makes below/above 50 read as the meaningful midpoint a diverging
+// scale invites, and keeps the three maps comparable with each other. Tree-planting effort
+// is not a percentage (it is pages completed of an 8-page task), so a diverging scale would
+// imply a midpoint it does not have; it keeps its own sequential Viridis ramp over the
+// range the 63 countries actually span. `barMax` is the bar chart's axis, which always
+// starts at zero because a bar cut off partway would misread as a much bigger difference
+// than it is. Values outside `domain` are clamped, so a future table revision degrades
+// rather than breaking.
+const PERCENT_DOMAIN = [0, 100];
+
 const METRICS = [
   {
     key: "belief",
     button: "Climate beliefs",
     title: "Belief in climate change",
-    domain: [70, 100], tickStep: 5,
+    domain: PERCENT_DOMAIN, tickStep: 25, ramp: interpolateBrBG,
     barMax: 100, barTickStep: 25,
     axisFmt: v => `${v}`,
     short: v => v.toFixed(1),
@@ -65,7 +74,7 @@ const METRICS = [
     key: "policy",
     button: "Policy support",
     title: "Support for climate policy",
-    domain: [55, 85], tickStep: 5,
+    domain: PERCENT_DOMAIN, tickStep: 25, ramp: interpolateBrBG,
     barMax: 100, barTickStep: 25,
     axisFmt: v => `${v}`,
     short: v => v.toFixed(1),
@@ -75,7 +84,7 @@ const METRICS = [
     key: "sharing",
     button: "Social media sharing",
     title: "Willingness to share climate information",
-    domain: [15, 95], tickStep: 10,
+    domain: PERCENT_DOMAIN, tickStep: 25, ramp: interpolateBrBG,
     barMax: 100, barTickStep: 25,
     axisFmt: v => `${v}%`,
     short: v => `${v.toFixed(1)}%`,
@@ -85,7 +94,7 @@ const METRICS = [
     key: "wept",
     button: "Tree-planting effort",
     title: "Pages completed to plant trees",
-    domain: [1, 7], tickStep: 1,
+    domain: [1, 7], tickStep: 1, ramp: interpolateViridis,
     barMax: 8, barTickStep: 2,
     axisFmt: v => `${v}`,
     short: v => v.toFixed(2),
@@ -171,7 +180,9 @@ export function createVlasceanuEtal2024Widget({data, world, width = MAP_WIDTH + 
   let mapW = null;
 
   const metric = () => METRICS[metricIndex];
-  const ramp = t => interpolateYlGnBu(Math.max(0, Math.min(1, t)));
+  // Every observed value sits inside its metric's domain, so nothing is clamped in
+  // practice; the clamp only guards a future data refresh from falling off either end.
+  const ramp = t => metric().ramp(Math.max(0, Math.min(1, t)));
   const color = value => {
     if (!Number.isFinite(value)) return NO_DATA;
     const [lo, hi] = metric().domain;
@@ -348,9 +359,10 @@ export function createVlasceanuEtal2024Widget({data, world, width = MAP_WIDTH + 
   const gradId = `vlasceanu-etal-2024-gradient-${gradSeq++}`;
   let totalH = 0;
   let pathByName = new Map();
-  // The colorbar's gradient is the same for every outcome, but its domain and ticks are
-  // not, so the strip is kept in its own group and refilled on each switch.
-  let colorbarG = null, colorbarGeom = null;
+  // The colorbar's gradient used to be the same for every outcome, but now the ramp itself
+  // differs (BrBG for the percentage measures, Viridis for tree-planting), not just the
+  // domain and ticks, so its stops are refilled on each switch too — see fillGradient.
+  let colorbarG = null, colorbarGeom = null, gradEl = null;
   // Where the tooltip is pinned, in mapWrap-relative coordinates. Kept separate from what
   // the tooltip says so that switching outcomes under a pinned country can rewrite the
   // text in place, with no pointer event to take fresh coordinates from.
@@ -387,11 +399,9 @@ export function createVlasceanuEtal2024Widget({data, world, width = MAP_WIDTH + 
     hideTooltip();
 
     const defs = svgEl("defs", {});
-    const grad = svgEl("linearGradient", {id: gradId, x1: 0, y1: 0, x2: 1, y2: 0});
-    for (let i = 0; i <= 10; i++) {
-      grad.appendChild(svgEl("stop", {offset: `${i * 10}%`, "stop-color": ramp(i / 10)}));
-    }
-    defs.appendChild(grad);
+    gradEl = svgEl("linearGradient", {id: gradId, x1: 0, y1: 0, x2: 1, y2: 0});
+    fillGradient();
+    defs.appendChild(gradEl);
     mapSvg.appendChild(defs);
 
     mapSvg.appendChild(svgEl("rect", {width: mapW, height: totalH, fill: BACKGROUND}));
@@ -430,8 +440,18 @@ export function createVlasceanuEtal2024Widget({data, world, width = MAP_WIDTH + 
     refreshStrokes();
   }
 
+  // Repopulated on every switch, not just when the map is (re)built: the gradient's colors
+  // are metric-dependent now, not a constant shared across all four outcomes.
+  function fillGradient() {
+    gradEl.replaceChildren();
+    for (let i = 0; i <= 10; i++) {
+      gradEl.appendChild(svgEl("stop", {offset: `${i * 10}%`, "stop-color": ramp(i / 10)}));
+    }
+  }
+
   function rebuildColorbar() {
     if (!colorbarG) return;
+    fillGradient();
     const m = metric();
     const {x, y, w, h, tickY} = colorbarGeom;
     colorbarG.replaceChildren();
