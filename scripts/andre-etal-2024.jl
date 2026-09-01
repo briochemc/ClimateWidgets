@@ -9,12 +9,12 @@
 # is weighted by the within-country weight `wgt`; global shares are weighted by
 # `wgt_pop15`, which additionally reweights countries to be population-representative.
 #
-# Run from the repo root: julia --project=. scripts/climate-action-support.jl
+# Run from the repo root: julia --project=. scripts/andre-etal-2024.jl
 
 using ZipFile, ReadStatTables, Tables, CSV
 
 const ZIP_URL = "https://dataverse.iza.org/api/access/datafile/234"
-const OUT_PATH = "src/climate-action-support/data/climate-action-support.csv"
+const OUT_PATH = "src/andre-etal-2024/data/andre-etal-2024.csv"
 
 function wmean(vals, wts)
     s = 0.0

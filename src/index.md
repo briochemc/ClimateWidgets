@@ -15,17 +15,13 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Daily sea surface temperature</h2>
     <img class="thumb" src="./assets/thumbnails/sst-daily.png" alt="Daily sea surface temperature since 1981 drawn as a spiral, with the current year standing out well beyond the pack">
   </a>
-  <a class="card" href="./belief-map/">
-    <h2>Belief in climate change</h2>
-    <img class="thumb" src="./assets/thumbnails/belief-map.png" alt="A world map in the Equal Earth projection with countries shaded from brown to blue-green by mean belief in climate change">
+  <a class="card" href="./vlasceanu-etal-2024/">
+    <h2>Vlasceanu et al. 2024</h2>
+    <img class="thumb" src="./assets/thumbnails/vlasceanu-etal-2024.png" alt="A bar of the 63-country mean beside a world map in the Equal Earth projection, shaded from pale yellow to navy by belief in climate change">
   </a>
-  <a class="card" href="./policy-support-map/">
-    <h2>Support for climate policy</h2>
-    <img class="thumb" src="./assets/thumbnails/policy-support-map.png" alt="A world map in the Equal Earth projection with countries shaded from brown to blue-green by mean support for climate policy">
-  </a>
-  <a class="card" href="./climate-action-support/">
-    <h2>Support for climate action</h2>
-    <img class="thumb" src="./assets/thumbnails/climate-action-support.png" alt="A bar chart of global yes/no shares beside a world map in the Equal Earth projection, shaded from pale yellow to navy by the share willing to contribute 1% of income to fight global warming">
+  <a class="card" href="./andre-etal-2024/">
+    <h2>Andre et al. 2024</h2>
+    <img class="thumb" src="./assets/thumbnails/andre-etal-2024.png" alt="A bar chart of global yes/no shares beside a world map in the Equal Earth projection, shaded from pale yellow to navy by the share willing to contribute 1% of income to fight global warming">
   </a>
 </div>
 

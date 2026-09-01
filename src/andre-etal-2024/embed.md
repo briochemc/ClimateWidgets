@@ -1,5 +1,5 @@
 ---
-title: Support for climate policy, by country (embed)
+title: Support for climate action, by country (embed)
 header: false
 footer: false
 sidebar: false
@@ -27,12 +27,12 @@ body {
 </style>
 
 ```js
-import {createPolicySupportMapWidget, parseTabS6} from "./widget.js";
+import {createAndreEtal2024Widget, parseAndreEtal2024} from "./widget.js";
 
-const support = parseTabS6(await FileAttachment("data/Vlasceanu_etal_ScienceAdvances_2024_tabS6.csv").text());
-const world = await FileAttachment("../belief-map/data/countries-110m.json").json();
+const support = parseAndreEtal2024(await FileAttachment("data/andre-etal-2024.csv").text());
+const world = await FileAttachment("../data/countries-110m.json").json();
 ```
 
 ```js
-const country = view(createPolicySupportMapWidget({data: support, world}));
+const country = view(createAndreEtal2024Widget({data: support, world}));
 ```

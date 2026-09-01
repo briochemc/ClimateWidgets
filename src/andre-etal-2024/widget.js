@@ -3,18 +3,19 @@
 // Change 14, 253-259 (the Global Climate Change Survey, 125 countries) as one widget: a
 // bar chart plus a choropleth, with three buttons switching between the figure's three
 // rows (willingness to contribute income, social norms, demand for government action).
-// Data: src/climate-action-support/data/climate-action-support.csv, produced by
-// scripts/climate-action-support.jl from https://doi.org/10.15185/gccs.1.
+// Data: src/andre-etal-2024/data/andre-etal-2024.csv, produced by
+// scripts/andre-etal-2024.jl from https://doi.org/10.15185/gccs.1.
 //
-// The map reuses the Equal Earth + BrBG(0-100) + click-only conventions of
-// ../components/choropleth-map.js (shared by belief-map and policy-support-map), but is
-// not built on that module: this widget swaps which of three columns colors the map and
-// sizes the bars, which choropleth-map's single-metric contract does not support, and its
-// tooltip wording assumes the Vlasceanu study's HDI-bearing rows, which this CSV has none
-// of. Switching rows mutates the same SVG in place (new `fill`/`y`/`height` attributes on
-// the existing elements, no rebuild), so the CSS transitions below animate every switch:
-// the Framework runtime itself does not offer this — a reactive Framework cell re-runs
-// its whole block and replaces the DOM outright, discarding any mid-animation state.
+// Shares the Equal Earth projection, sequential ramp and click-only interaction of the
+// vlasceanu-etal-2024 widget, but not its code: that one carries four measures on four
+// different scales with HDI bounds per country, this one three shares on a single scale
+// with a two-bar global panel. Keeping them apart costs a little duplication and buys
+// each the freedom to change without breaking the other's embeds.
+//
+// Switching rows mutates the same SVG in place (new `fill`/`y`/`height` attributes on the
+// existing elements, no rebuild), so the CSS transitions below animate every switch: the
+// Framework runtime itself does not offer this — a reactive Framework cell re-runs its
+// whole block and replaces the DOM outright, discarding any mid-animation state.
 import {geoEqualEarth, geoPath} from "https://cdn.jsdelivr.net/npm/d3-geo@3/+esm";
 import {feature} from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
 import {interpolateYlGnBu} from "https://cdn.jsdelivr.net/npm/d3-scale-chromatic@3/+esm";
@@ -88,12 +89,12 @@ const METRICS = [
 ];
 
 // One row per country: iso3, country, n, and a 0-100 share (or NaN) for each metric key.
-export function parseClimateActionSupport(text) {
+export function parseAndreEtal2024(text) {
   const lines = text.trim().split(/\r?\n/);
   const header = lines[0].split(",").map(s => s.trim());
   const col = name => {
     const i = header.indexOf(name);
-    if (i < 0) throw new Error(`climate-action-support CSV: no "${name}" column`);
+    if (i < 0) throw new Error(`andre-etal-2024 CSV: no "${name}" column`);
     return i;
   };
   const cIso = col("iso3"), cCountry = col("country"), cN = col("n");
@@ -114,14 +115,14 @@ export function parseClimateActionSupport(text) {
   }
 
   const world = rows.find(r => r.iso3 === "WLD");
-  if (!world) throw new Error('climate-action-support CSV: no "WLD" global row');
+  if (!world) throw new Error('andre-etal-2024 CSV: no "WLD" global row');
   return {world, countries: rows.filter(r => r.iso3 !== "WLD")};
 }
 
 
 let gradSeq = 0;
 
-export function createClimateActionSupportWidget({data, world, width = MAP_WIDTH + 16 + BAR_WIDTH}) {
+export function createAndreEtal2024Widget({data, world, width = MAP_WIDTH + 16 + BAR_WIDTH}) {
   const {world: globalRow, countries} = data;
   const geoFeatures = feature(world, world.objects.countries).features;
   const geoNames = new Set(geoFeatures.map(f => f.properties.name));
@@ -129,7 +130,7 @@ export function createClimateActionSupportWidget({data, world, width = MAP_WIDTH
   const byGeoName = new Map(countries.map(row => [NAME_MAP[row.country] ?? row.country, row]));
   const missing = countries.filter(row => !geoNames.has(NAME_MAP[row.country] ?? row.country));
   if (missing.length) {
-    console.warn("climate-action-support: no polygon for", missing.map(r => r.country).join(", "));
+    console.warn("andre-etal-2024: no polygon for", missing.map(r => r.country).join(", "));
   }
 
   // Every observed share sits inside the domain, so nothing is clamped in practice; the
@@ -297,7 +298,7 @@ export function createClimateActionSupportWidget({data, world, width = MAP_WIDTH
 
   // --- map ---
   const mapSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  mapSvg.setAttribute("class", "climate-action-support");
+  mapSvg.setAttribute("class", "andre-etal-2024");
   mapSvg.setAttribute("role", "img");
   mapSvg.style.display = "block";
   const scroller = document.createElement("div");
@@ -315,7 +316,7 @@ export function createClimateActionSupportWidget({data, world, width = MAP_WIDTH
 
   // SVG gradient ids are looked up document-wide, so two of these widgets on one page must
   // not share one.
-  const gradId = `climate-action-support-gradient-${gradSeq++}`;
+  const gradId = `andre-etal-2024-gradient-${gradSeq++}`;
   let totalH = 0;
   let pathByName = new Map();
   // Where the tooltip is pinned, in mapWrap-relative coordinates. Kept separate from what
