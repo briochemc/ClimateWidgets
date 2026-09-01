@@ -23,6 +23,14 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Andre et al. 2024</h2>
     <img class="thumb" src="./assets/thumbnails/andre-etal-2024.png" alt="A bar chart of global yes/no shares beside a world map in the Equal Earth projection, shaded from pale yellow to navy by the share willing to contribute 1% of income to fight global warming">
   </a>
+  <a class="card" href="./leiserowitz-etal-2026/">
+    <h2>Global Warming's Six Americas</h2>
+    <!-- Thumbnail pending: run `npm run build && npm run thumbnails` to capture
+         leiserowitz-etal-2026.png, then restore the <img> the other cards use:
+         <img class="thumb" src="./assets/thumbnails/leiserowitz-etal-2026.png" alt="A
+         stacked area chart of six climate-opinion segments from 2008 to 2025, with a time
+         slider, beside horizontal bars showing the latest survey's shares"> -->
+  </a>
 </div>
 
 <style>

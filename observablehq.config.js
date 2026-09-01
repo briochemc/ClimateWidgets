@@ -10,6 +10,7 @@ export default {
     {name: "Daily sea surface temperature", path: "/sst-daily/"},
     {name: "Vlasceanu et al. 2024 \u2014 beliefs and action", path: "/vlasceanu-etal-2024/"},
     {name: "Andre et al. 2024 \u2014 support for climate action", path: "/andre-etal-2024/"},
+    {name: "Global Warming's Six Americas", path: "/leiserowitz-etal-2026/"},
   ],
   head: "",
   theme: "air",
