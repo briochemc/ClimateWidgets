@@ -30,7 +30,7 @@ const country = view(createVlasceanuEtal2024Widget({data: study, world}));
 
 The four tables ship here exactly as published — Tables S5 to S8 of the [supplementary materials](https://www.science.org/doi/10.1126/sciadv.adj5778#supplementary-materials) — and everything drawn above is computed from them in the browser. Each value is a posterior mean from the authors' Bayesian hierarchical models (zero-one-inflated beta, with country, item, participant and intervention effects), not an average of their respondents: the raw participant means run about four points lower on belief. The bar is therefore the unweighted mean of the 63 country scores, the same quantity the map is coloured by, rather than a respondent-level average that would not match it. Note that the 63 countries are a convenience sample, so that bar is a 63-country figure and not a world one.
 
-Each colour scale is trimmed to the range its outcome actually occupies, so the four maps are not comparable with one another; the bar chart's own axis always starts at zero. Singapore is in the study but has no polygon at this map's resolution.
+Belief, policy support and sharing are all reported on a 0–100 scale, so the three share one diverging colour scale fixed to that full range: those maps can be read against each other, and the midpoint of the scale is the midpoint of the measure. Tree-planting effort is pages completed out of eight rather than a percentage, so a diverging scale would imply a midpoint it does not have; it gets its own sequential scale over the range the 63 countries span, and is not comparable with the other three. The bar chart's axis always starts at zero. Singapore is in the study but has no polygon at this map's resolution.
 
 ## Embed this widget
 
