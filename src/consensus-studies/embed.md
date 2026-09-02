@@ -33,5 +33,5 @@ const studies = parseConsensusStudies(await FileAttachment("data/consensus-studi
 ```
 
 ```js
-display(createConsensusStudiesWidget({data: studies}));
+const study = view(createConsensusStudiesWidget({data: studies}));
 ```

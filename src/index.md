@@ -33,7 +33,7 @@ Small, self-contained interactive figures for teaching climate science. Each wid
   </a>
   <a class="card" href="./consensus-studies/">
     <h2>Studies of the scientific consensus</h2>
-    <img class="thumb" src="./assets/thumbnails/consensus-studies.png" alt="Ten green pie charts, one per study of the scientific consensus from 2004 to 2021, each nearly whole and labelled with its percentage, from 91% to 100%">
+    <img class="thumb" src="./assets/thumbnails/consensus-studies.png" alt="A row of study buttons above one large green pie chart reading 97%, the share of Cook et al. 2013's abstracts endorsing human-caused warming, with the paper cited below it">
   </a>
 </div>
 

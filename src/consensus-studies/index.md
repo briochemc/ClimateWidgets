@@ -1,6 +1,6 @@
 # Studies of the scientific consensus
 
-Every study that has measured it finds the same thing: the scientists who actually publish climate research overwhelmingly agree that global warming is human-caused. This figure recreates [Skeptical Science's graphic](https://skepticalscience.com/print.php?r=442) of that record, and extends it — the original seven pies are the studies whose authors co-wrote the "consensus on consensus" synthesis in 2016; the last three are that synthesis and the two studies published since. **Click any pie to open the paper.**
+Every study that has measured it finds the same thing: the scientists who actually publish climate research overwhelmingly agree that global warming is human-caused. Pick a study with the buttons to see what it found — the wedge barely moves, which is the point. The studies are those in [Skeptical Science's graphic](https://skepticalscience.com/print.php?r=442) of that record, whose seven pies are the ones synthesised in the 2016 "consensus on consensus" paper, plus three that postdate it: the synthesis itself and the two studies published since. **Click the pie, or the citation under it, to open the paper.**
 
 ```js
 import {createConsensusStudiesWidget, parseConsensusStudies} from "./widget.js";
@@ -9,16 +9,16 @@ const studies = parseConsensusStudies(await FileAttachment("data/consensus-studi
 ```
 
 ```js
-display(createConsensusStudiesWidget({data: studies}));
+const study = view(createConsensusStudiesWidget({data: studies}));
 ```
 
 ## About the data
 
-Agreement rises with expertise, so every one of these surveys reports more than one number. The pies show the figure for the scientists who actually publish climate research, which is the convention the original graphic follows and the one Cook et al. (2016) tabulate: Verheggen et al.'s 91% is for respondents with more than ten climate papers, against 85% across everyone who stated a position; Stenhouse et al.'s 93% is for the actively publishing meteorologists, against 73% of the American Meteorological Society at large. Where a study reports both, its tooltip gives both numbers. That gap is the finding, not a caveat — a survey that reaches further from the field finds more doubt, and the people closest to the evidence are the most united about it.
+Agreement rises with expertise, so every one of these surveys reports more than one number. The pies show the figure for the scientists who actually publish climate research, which is the convention the original graphic follows and the one Cook et al. (2016) tabulate: Verheggen et al.'s 91% is for respondents with more than ten climate papers, against 85% across everyone who stated a position; Stenhouse et al.'s 93% is for the actively publishing meteorologists, against 73% of the American Meteorological Society at large. Where a study reports both, the note under the figure gives both numbers. That gap is the finding, not a caveat — a survey that reaches further from the field finds more doubt, and the people closest to the evidence are the most united about it.
 
-The two newest pies are the ones the original graphic could not have. Myers et al. repeated Doran & Zimmerman's survey a decade on: 91.1% agreement across all 2,548 Earth scientists, 98.7% among those whose publication records confirm them as climate experts, and 100% among the most published of all. Lynas et al. surveyed no one — they sampled 3,000 of the 88,125 climate papers published since 2012 and found four that were skeptical, which is why that pie's missing sliver is too thin to see.
+The two newest pies are the ones the original graphic could not have. Myers et al. repeated Doran & Zimmerman's survey a decade on: 91.1% agreement across all 2,548 Earth scientists, 98.7% among those whose publication records confirm them as climate experts, and 100% among the most published of all. Lynas et al. surveyed no one — they sampled 3,000 of the 88,125 climate papers published since 2012 and found four that were skeptical, which is why that study's missing sliver is too thin to see.
 
-Two pies round: Carlton et al.'s 96.7% shows as 97%, as in the original graphic, and Anderegg et al. report 97–98%, drawn here at the midpoint. The data is a hand-curated [CSV](https://github.com/briochemc/ClimateWidgets/blob/main/src/consensus-studies/data/consensus-studies.csv) — one row per paper, with the finding that each pie's tooltip shows — so there is no build script behind this widget.
+Two pies round: Carlton et al.'s 96.7% shows as 97%, as in the original graphic, and Anderegg et al. report 97–98%, drawn here at the midpoint. In both cases the wedge is drawn from the precise number while the label keeps the graphic's rounded one. The data is a hand-curated [CSV](https://github.com/briochemc/ClimateWidgets/blob/main/src/consensus-studies/data/consensus-studies.csv) — one row per paper, carrying its citation, finding and DOI — so there is no build script behind this widget.
 
 ## Embed this widget
 
@@ -29,10 +29,10 @@ import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
 ```js
 display(embedSnippets({
   embedPath: "consensus-studies/embed",
-  height: 540,
+  height: 580,
   title: "Studies of the scientific consensus on human-caused global warming",
-  note: "A constant ~525&nbsp;px tall at every width; below 320&nbsp;px it scrolls sideways " +
-    "inside the iframe instead of shrinking further.",
+  note: "The figure holds a constant 340&nbsp;px height; the study buttons above it wrap onto " +
+    "more rows as the iframe narrows, so give it extra height below about 480&nbsp;px wide.",
   script: `<div id="consensus-studies"></div>
 
 <script type="module">
