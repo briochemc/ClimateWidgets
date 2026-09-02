@@ -12,6 +12,7 @@ export default {
     {name: "Andre et al. 2024 \u2014 support for climate action", path: "/andre-etal-2024/"},
     {name: "Global Warming's Six Americas", path: "/leiserowitz-etal-2026/"},
     {name: "Climate anxiety in young people", path: "/hickman-etal-2021/"},
+    {name: "Studies of the scientific consensus", path: "/consensus-studies/"},
   ],
   head: "",
   theme: "air",

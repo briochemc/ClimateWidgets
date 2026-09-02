@@ -31,6 +31,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Hickman et al. 2021</h2>
     <img class="thumb" src="./assets/thumbnails/hickman-etal-2021.png" alt="Five bars from not worried to extremely, colored navy to dark red, with a bracket over the very and extremely bars reading 59% very or extremely worried">
   </a>
+  <a class="card" href="./consensus-studies/">
+    <h2>Studies of the scientific consensus</h2>
+    <img class="thumb" src="./assets/thumbnails/consensus-studies.png" alt="Ten green pie charts, one per study of the scientific consensus from 2004 to 2021, each nearly whole and labelled with its percentage, from 91% to 100%">
+  </a>
 </div>
 
 <style>
