@@ -27,6 +27,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Global Warming's Six Americas</h2>
     <img class="thumb" src="./assets/thumbnails/leiserowitz-etal-2026.png" alt="A stacked area chart of six climate-opinion segments from 2008 to 2025, with a time slider, beside horizontal bars showing the latest survey's shares">
   </a>
+  <a class="card" href="./hickman-etal-2021/">
+    <h2>Hickman et al. 2021</h2>
+    <img class="thumb" src="./assets/thumbnails/hickman-etal-2021.png" alt="Five bars from not worried to extremely, colored navy to dark red, with a bracket over the very and extremely bars reading 59% very or extremely worried">
+  </a>
 </div>
 
 <style>

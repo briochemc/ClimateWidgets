@@ -11,6 +11,7 @@ export default {
     {name: "Vlasceanu et al. 2024 \u2014 beliefs and action", path: "/vlasceanu-etal-2024/"},
     {name: "Andre et al. 2024 \u2014 support for climate action", path: "/andre-etal-2024/"},
     {name: "Global Warming's Six Americas", path: "/leiserowitz-etal-2026/"},
+    {name: "Climate anxiety in young people", path: "/hickman-etal-2021/"},
   ],
   head: "",
   theme: "air",
