@@ -1,5 +1,5 @@
 // Studies into scientific agreement on human-caused global warming — one study at a time,
-// picked with the pill buttons, after Skeptical Science's pie-chart graphic
+// picked with the pill buttons under the figure, after Skeptical Science's pie-chart graphic
 // (https://skepticalscience.com/graphics/studies_consensus.jpg, on
 // https://skepticalscience.com/print.php?r=442). That graphic's seven pies are the studies
 // synthesised by Cook et al. (2016); three more are shown here, all published after it was
@@ -9,8 +9,13 @@
 // The original prints all seven pies side by side, which makes its point by repetition. One
 // large pie makes a different one: switching between studies holds the wedge in place and
 // animates only the sliver, so a decade of independent surveys visibly lands on the same
-// answer. The pie is also a link — clicking it, or the citation under the figure, opens that
-// paper's DOI in a new tab.
+// answer. The pie is also a link — clicking it, or the paper's title beside it, opens that
+// study's DOI in a new tab.
+//
+// Layout follows hickman-etal-2021: one grey plate under the whole widget, buttons included,
+// so it reads as a single card. The pie sits at the left of that plate with the paper's title
+// and finding set beside it, which is why those two are HTML rather than SVG text — they run
+// to several lines and need to wrap, which SVG would make us break by hand.
 //
 // Self-contained on purpose — no d3, no other imports — so the script-tag embed on the
 // widget's page is a single ES module import that works from any page. The wedge is one
@@ -22,19 +27,16 @@
 // Sampled from the original graphic.
 const GREEN = "#008137";
 const DISC = "#eceff1"; // the "everyone else" remainder behind each wedge
-const BACKGROUND = "#f2f2f2"; // the plate the map widgets and hickman sit on
+const BACKGROUND = "#f2f2f2"; // the plate the other widgets sit on
 
 const FIGURE_WIDTH = 600;
 const MIN_WIDTH = 320;
-// Constant at every width, like leiserowitz and hickman — embed iframe heights stay put.
-const FIGURE_HEIGHT = 340;
 
 const TRANSITION = "480ms ease"; // buttons, matching hickman
 const TWEEN_MS = 520; // the wedge sweep between studies
+const TOUR_STEP = 1100; // ms per study while the opening sweep plays
 
-// Pre-split rather than wrapped at render time, so the title band's height — and with it the
-// height of the whole figure — does not depend on width.
-const TITLE = ["Scientific agreement on", "human-caused global warming"];
+const TITLE = "Scientific agreement on human-caused global warming";
 
 // The widget opens here rather than on the first button: Cook et al. 2013 is the study the
 // "97%" figure comes from, and its wedge is actually visible, unlike Oreskes' full circle.
@@ -43,11 +45,11 @@ const DEFAULT_STUDY = "Cook et al. 2013";
 
 const SVGNS = "http://www.w3.org/2000/svg";
 
-// One row per study: the short name and year for the button and the label under the pie, the
-// percentage as the graphic writes it, the precise value the wedge is drawn from, and the
-// citation, finding and DOI for the panel underneath. pct_display and pct_value differ
-// wherever the graphic rounds (Carlton's 96.7% shows as 97%) or a paper reports a range
-// (Anderegg's 97–98%, drawn at its midpoint).
+// One row per study: the short name and year for the label under the pie, the full author
+// string for its button, the percentage as the graphic writes it, the precise value the wedge
+// is drawn from, and the paper's title, finding and DOI for the panel beside it. pct_display
+// and pct_value differ wherever the graphic rounds (Carlton's 96.7% shows as 97%) or a paper
+// reports a range (Anderegg's 97–98%, drawn at its midpoint).
 export function parseConsensusStudies(text) {
   const lines = text.trim().split(/\r?\n/);
   const header = lines[0].split(",").map(s => s.trim());
@@ -58,20 +60,23 @@ export function parseConsensusStudies(text) {
   };
   const cLabel = col("label"), cYear = col("year"), cDisplay = col("pct_display");
   const cValue = col("pct_value"), cStudy = col("study"), cTitle = col("title");
-  const cJournal = col("journal"), cDetail = col("detail"), cUrl = col("url");
+  const cDetail = col("detail"), cUrl = col("url");
 
   const studies = [];
   for (const line of lines.slice(1)) {
     if (!line.trim()) continue;
     const cells = line.split(",").map(s => s.trim());
     studies.push({
-      label: cells[cLabel], year: cells[cYear], display: cells[cDisplay],
+      label: cells[cLabel], year: Number(cells[cYear]), display: cells[cDisplay],
       value: Number(cells[cValue]), study: cells[cStudy], title: cells[cTitle],
-      journal: cells[cJournal], detail: cells[cDetail], url: cells[cUrl],
+      detail: cells[cDetail], url: cells[cUrl],
     });
   }
   if (!studies.length) throw new Error("consensus-studies CSV: no data rows");
-  return studies;
+  // Oldest first, so the buttons run in the order the field actually asked the question.
+  // Sorted here rather than trusted from the file, and stable, so the two 2014 studies keep
+  // the curated order they are written in.
+  return studies.sort((a, b) => a.year - b.year);
 }
 
 export function createConsensusStudiesWidget({data, width = FIGURE_WIDTH}) {
@@ -83,37 +88,78 @@ export function createConsensusStudiesWidget({data, width = FIGURE_WIDTH}) {
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
 
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
-  let w, radius, cy, titleFont, pctFont, labelFont;
+  let w, radius, titleFont, pctFont, labelFont, citeFont, detailFont;
 
   function applyLayout(newW) {
     w = newW;
     const t = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
     const lerp = (a, b) => Math.round(a + (b - a) * t);
 
-    radius = lerp(88, 118);
-    titleFont = lerp(14, 19);
-    pctFont = lerp(46, 60);
-    labelFont = lerp(15, 19);
-    // Fixed, so the pie does not drift up and down the frame as the figure is resized; the
-    // label below it follows the radius, and the largest radius still clears FIGURE_HEIGHT.
-    cy = 186;
+    // Smaller than it was when the pie had the plate to itself: the paper's title and finding
+    // now sit beside it, and need room to wrap into rather than a column two words wide.
+    radius = lerp(74, 100);
+    titleFont = lerp(15, 20);
+    pctFont = lerp(40, 53);
+    labelFont = lerp(14, 17);
+    // Set small deliberately. Titles and findings vary a lot in length — Myers et al.'s title
+    // is 130 characters against Anderegg's 35 — and at reading size the longest of them would
+    // outgrow the pie beside it and resize the whole widget mid-tour. Small enough that even
+    // the longest pair fits the height the pie already reserves (see panel.minHeight).
+    citeFont = lerp(12, 13);
+    detailFont = lerp(12, 13);
   }
   applyLayout(maxW);
 
+  // The plate runs under the whole widget, buttons included, so it reads as one card; the SVG
+  // keeps painting its own background rect in the same color, so the two merge seamlessly and
+  // the pie still stands on its own if it is ever pulled out.
   const container = document.createElement("div");
-  container.style.cssText = "font:16px sans-serif;color:#333;";
+  container.style.cssText =
+    "font:16px sans-serif;color:#333;background:" + BACKGROUND + ";" +
+    "padding:10px 12px 12px;border-radius:6px;box-sizing:border-box;";
 
-  // --- study buttons ---
+  const titleEl = document.createElement("div");
+  titleEl.textContent = TITLE;
+  titleEl.style.cssText = "font-weight:bold;color:#111;margin-bottom:8px;";
+  container.appendChild(titleEl);
+
+  // Pie at the left, paper beside it; below about 480 px there is no room for both and the
+  // text wraps under the pie instead.
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:18px;";
+  container.appendChild(row);
+
+  const scroller = document.createElement("div");
+  scroller.style.cssText = "max-width:100%;overflow-x:auto;";
+  const svg = document.createElementNS(SVGNS, "svg");
+  svg.setAttribute("class", "consensus-studies");
+  svg.style.display = "block";
+  scroller.appendChild(svg);
+  row.appendChild(scroller);
+
+  const panel = document.createElement("div");
+  panel.style.cssText = "flex:1 1 240px;min-width:0;";
+  const citeLink = document.createElement("a");
+  citeLink.target = "_blank";
+  citeLink.rel = "noopener";
+  citeLink.style.cssText = "color:#0b57d0;font-weight:500;line-height:1.35;display:block;margin-bottom:6px;";
+  const detail = document.createElement("div");
+  detail.style.cssText = "color:#555;line-height:1.45;";
+  panel.append(citeLink, detail);
+  row.appendChild(panel);
+
+  // --- study buttons, below the figure and on the same plate ---
   const buttons = document.createElement("div");
-  buttons.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;";
+  buttons.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;";
   const buttonEls = studies.map(study => {
     const b = document.createElement("button");
     b.type = "button";
-    b.textContent = `${study.label} ${study.year}`;
+    b.textContent = study.study; // "Cook et al. 2013" — the full author string, not the short label
     b.style.cssText =
       "font:14px sans-serif;padding:7px 14px;border-radius:999px;cursor:pointer;" +
       "transition:background-color " + TRANSITION + ",color " + TRANSITION + ",border-color " + TRANSITION + ";";
     b.addEventListener("click", () => {
+      stopTour();
       if (selected === study) return;
       const from = selected.value;
       selected = study;
@@ -134,34 +180,6 @@ export function createConsensusStudiesWidget({data, width = FIGURE_WIDTH}) {
     });
   }
 
-  // Narrower than MIN_WIDTH the figure stops reflowing and scrolls inside this wrapper rather
-  // than pushing a horizontal scrollbar onto the whole page.
-  const scroller = document.createElement("div");
-  scroller.style.cssText = "max-width:100%;overflow-x:auto;";
-  const svg = document.createElementNS(SVGNS, "svg");
-  svg.setAttribute("class", "consensus-studies");
-  svg.style.display = "block";
-  scroller.appendChild(svg);
-  container.appendChild(scroller);
-
-  // The citation, the finding, and the link out. Real HTML rather than SVG text: these run to
-  // a couple of lines and wrap, which SVG would make us break by hand.
-  const panel = document.createElement("div");
-  panel.style.cssText = "padding:10px 0 0;";
-  const cite = document.createElement("div");
-  cite.style.cssText = "margin-bottom:4px;";
-  const citeLink = document.createElement("a");
-  citeLink.target = "_blank";
-  citeLink.rel = "noopener";
-  citeLink.style.cssText = "color:#0b57d0;";
-  const citeTail = document.createElement("span");
-  citeTail.style.cssText = "color:#555;";
-  cite.append(citeLink, citeTail);
-  const detail = document.createElement("div");
-  detail.style.cssText = "color:#555;line-height:1.45;min-height:2.9em;";
-  panel.append(cite, detail);
-  container.appendChild(panel);
-
   function svgEl(tag, attrs) {
     const el = document.createElementNS(SVGNS, tag);
     for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
@@ -169,29 +187,21 @@ export function createConsensusStudiesWidget({data, width = FIGURE_WIDTH}) {
   }
 
   let link, wedge, pctText, pctSign, pieLabel, ring;
+  let cx, cy;
 
   function buildAll(newW) {
     applyLayout(newW);
 
-    // Capped to the figure's own width rather than the page column's, so the pills stack onto
-    // more rows instead of spilling wider than the figure below them.
-    buttons.style.maxWidth = `${w}px`;
+    // The pie's own box: the disc, its focus ring, and the label under it.
+    const boxW = 2 * (radius + 6);
+    const boxH = 2 * (radius + 6) + 6 + labelFont + 4;
+    cx = boxW / 2;
+    cy = radius + 6;
 
-    svg.setAttribute("width", w);
-    svg.setAttribute("height", FIGURE_HEIGHT);
+    svg.setAttribute("width", boxW);
+    svg.setAttribute("height", boxH);
     svg.replaceChildren();
-
-    svg.appendChild(svgEl("rect", {width: w, height: FIGURE_HEIGHT, fill: BACKGROUND}));
-
-    TITLE.forEach((line, i) => {
-      const t = svgEl("text", {
-        x: w / 2, y: 26 + i * 23, "text-anchor": "middle", "font-size": titleFont, fill: "#333",
-      });
-      t.textContent = line;
-      svg.appendChild(t);
-    });
-
-    const cx = w / 2;
+    svg.appendChild(svgEl("rect", {width: boxW, height: boxH, fill: BACKGROUND}));
 
     // The whole pie is the link, so the percentage and the label under it are as clickable as
     // the wedge itself.
@@ -204,7 +214,7 @@ export function createConsensusStudiesWidget({data, width = FIGURE_WIDTH}) {
 
     // Drawn but hidden, shown on focus: the browser's own outline would box in the label too.
     ring = svgEl("circle", {
-      cx, cy, r: radius + 6, fill: "none", stroke: "rgba(11,87,208,0.4)", "stroke-width": 3,
+      cx, cy, r: radius + 5, fill: "none", stroke: "rgba(11,87,208,0.4)", "stroke-width": 3,
     });
     ring.style.display = "none";
     link.appendChild(ring);
@@ -225,6 +235,8 @@ export function createConsensusStudiesWidget({data, width = FIGURE_WIDTH}) {
     pctText.append(document.createTextNode(""), pctSign);
     link.appendChild(pctText);
 
+    // The short form here — "Cook 2013" — since the buttons and the citation beside the pie
+    // both carry the full author string already.
     pieLabel = svgEl("text", {
       x: cx, y: cy + radius + 6 + labelFont, "text-anchor": "middle",
       "font-size": labelFont, fill: "#333",
@@ -233,12 +245,17 @@ export function createConsensusStudiesWidget({data, width = FIGURE_WIDTH}) {
 
     svg.appendChild(link);
 
+    titleEl.style.fontSize = `${titleFont}px`;
+    citeLink.style.fontSize = `${citeFont}px`;
+    detail.style.fontSize = `${detailFont}px`;
+    // The pie's height is the row's height at every width, whatever the paper beside it says,
+    // so stepping through the studies never resizes the widget under the reader.
+    panel.style.minHeight = `${boxH}px`;
     render();
   }
 
   // Everything that depends on the selection but not on the layout.
   function render() {
-    const cx = w / 2;
     const summary = `${selected.study}: ${selected.detail} Click to open the paper.`;
 
     link.setAttribute("href", selected.url);
@@ -251,7 +268,6 @@ export function createConsensusStudiesWidget({data, width = FIGURE_WIDTH}) {
 
     citeLink.href = selected.url;
     citeLink.textContent = selected.title;
-    citeTail.textContent = ` — ${selected.study}, ${selected.journal}.`;
     detail.textContent = selected.detail;
   }
 
@@ -267,11 +283,11 @@ export function createConsensusStudiesWidget({data, width = FIGURE_WIDTH}) {
     if (frame !== null) { cancelAnimationFrame(frame); frame = null; }
     if (reduceMotion) return;
 
-    const cx = w / 2;
     const toPct = selected.value;
-    // Trailing digits so a 97 → 99.9 sweep counts through 98.4 rather than jumping; the exact
-    // display string is restored at the end.
-    const decimals = selected.display.includes(".") ? 1 : 0;
+    // Counted at the destination's own precision, so a 97 → 99.85 sweep runs through 98.42
+    // rather than jumping, and lands on exactly the digits the label carries.
+    const dot = selected.display.indexOf(".");
+    const decimals = dot < 0 ? 0 : selected.display.length - dot - 1;
     // render() has already written the destination; rewind to the starting frame here rather
     // than waiting for the first rAF callback, so the sweep never flashes its own endpoint.
     wedge.setAttribute("d", arcPath(cx, cy, radius, fromPct));
@@ -300,7 +316,7 @@ export function createConsensusStudiesWidget({data, width = FIGURE_WIDTH}) {
 
   function value() {
     return {
-      study: selected.study, label: selected.label, year: Number(selected.year),
+      study: selected.study, label: selected.label, year: selected.year,
       percent: selected.value, url: selected.url,
     };
   }
@@ -331,6 +347,62 @@ export function createConsensusStudiesWidget({data, width = FIGURE_WIDTH}) {
       }
     });
     ro.observe(container);
+  }
+
+  // Autoplay: walk the studies oldest to newest, one a second, then stop on the last and leave
+  // it there. A single pass rather than leiserowitz's endless loop — the panel beside the pie
+  // is meant to be read, and a widget that kept cycling under a reader would never let them.
+  // Any button press takes over for good.
+  let touring = false, tourTimer = null, tourWatcher = null, tourIndex = 0;
+
+  function stopTour() {
+    tourWatcher?.disconnect();
+    tourWatcher = null;
+    if (!touring) return;
+    touring = false;
+    clearTimeout(tourTimer);
+    tourTimer = null;
+  }
+
+  function tourStep() {
+    if (!touring) return;
+    // A cell that re-runs leaves the previous widget detached but still holding a timer;
+    // without this it would keep stepping an orphaned figure for the life of the page.
+    if (container.isConnected === false) return stopTour();
+    if (tourIndex >= studies.length - 1) return stopTour();
+    tourIndex++;
+    const from = selected.value;
+    selected = studies[tourIndex];
+    update(from);
+    tourTimer = setTimeout(tourStep, TOUR_STEP);
+  }
+
+  function startTour() {
+    if (touring) return;
+    touring = true;
+    tourIndex = 0;
+    const from = selected.value;
+    selected = studies[0];
+    update(from);
+    tourTimer = setTimeout(tourStep, TOUR_STEP);
+  }
+
+  // Two reasons not to start: a reader who has asked for reduced motion should not get an
+  // animation they never requested, and starting while the widget is off-screen would spend
+  // the tour before it is ever looked at. The first is also what keeps the thumbnail
+  // deterministic — the capture forces reduced motion, so it always catches DEFAULT_STUDY.
+  if (!reduceMotion) {
+    if (typeof IntersectionObserver === "function") {
+      tourWatcher = new IntersectionObserver(entries => {
+        if (!entries.some(entry => entry.isIntersecting)) return;
+        tourWatcher.disconnect();
+        tourWatcher = null;
+        startTour();
+      }, {threshold: 0.3});
+      tourWatcher.observe(container);
+    } else {
+      startTour();
+    }
   }
 
   return container;
