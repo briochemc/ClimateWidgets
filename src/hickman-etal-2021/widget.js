@@ -108,12 +108,36 @@ export function createHickmanEtal2021Widget({data, width = FIGURE_WIDTH}) {
     return marginL + slot * (i + 1);
   }
 
+  // The plate runs under the whole widget, buttons included, so it reads as one card; the
+  // SVG keeps painting its own background rect in the same color (below), so the two merge
+  // seamlessly here and the SVG still stands on its own if it is ever pulled out on its own.
   const container = document.createElement("div");
-  container.style.cssText = "font:16px sans-serif;color:#333;";
+  container.style.cssText =
+    "font:16px sans-serif;color:#333;background:" + BACKGROUND + ";" +
+    "padding:10px 12px 12px;border-radius:6px;box-sizing:border-box;";
 
-  // --- country buttons ---
-  const buttons = document.createElement("div");
-  buttons.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;";
+  // Narrower than MIN_WIDTH the figure stops reflowing and scrolls inside this wrapper
+  // rather than pushing a horizontal scrollbar onto the whole page.
+  const scroller = document.createElement("div");
+  scroller.style.cssText = "max-width:100%;overflow-x:auto;";
+  const svg = document.createElementNS(SVGNS, "svg");
+  svg.setAttribute("class", "hickman-etal-2021");
+  svg.setAttribute("role", "img");
+  svg.style.display = "block";
+  scroller.appendChild(svg);
+  container.appendChild(scroller);
+
+  // --- country buttons, below the figure: "All" sits alone on its own row since it is not
+  // a country like the other ten. ---
+  const buttonsWrap = document.createElement("div");
+  buttonsWrap.style.cssText = "margin-top:10px;";
+  const allRow = document.createElement("div");
+  allRow.style.cssText = "display:flex;margin-bottom:8px;";
+  const countryRow = document.createElement("div");
+  countryRow.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;";
+  buttonsWrap.append(allRow, countryRow);
+  container.appendChild(buttonsWrap);
+
   const buttonEls = options.map(name => {
     const b = document.createElement("button");
     b.type = "button";
@@ -126,10 +150,9 @@ export function createHickmanEtal2021Widget({data, width = FIGURE_WIDTH}) {
       selected = name;
       update();
     });
-    buttons.appendChild(b);
+    (name === "All" ? allRow : countryRow).appendChild(b);
     return b;
   });
-  container.appendChild(buttons);
 
   function styleButtons() {
     buttonEls.forEach((b, i) => {
@@ -140,17 +163,6 @@ export function createHickmanEtal2021Widget({data, width = FIGURE_WIDTH}) {
       b.style.color = active ? "#fff" : "#333";
     });
   }
-
-  // Narrower than MIN_WIDTH the figure stops reflowing and scrolls inside this wrapper
-  // rather than pushing a horizontal scrollbar onto the whole page.
-  const scroller = document.createElement("div");
-  scroller.style.cssText = "max-width:100%;overflow-x:auto;";
-  const svg = document.createElementNS(SVGNS, "svg");
-  svg.setAttribute("class", "hickman-etal-2021");
-  svg.setAttribute("role", "img");
-  svg.style.display = "block";
-  scroller.appendChild(svg);
-  container.appendChild(scroller);
 
   const status = document.createElement("div");
   status.style.cssText = "padding:8px 0 0;color:#555;min-height:1.4em;";
@@ -278,8 +290,8 @@ export function createHickmanEtal2021Widget({data, width = FIGURE_WIDTH}) {
     const row = rowFor(selected);
 
     // Capped to the figure's own width rather than the page column's, so the pills stack
-    // onto more rows instead of spilling wider than the chart below them.
-    buttons.style.maxWidth = `${w}px`;
+    // onto more rows instead of spilling wider than the chart above them.
+    buttonsWrap.style.maxWidth = `${w}px`;
 
     svg.setAttribute("width", w);
     svg.setAttribute("height", FIGURE_HEIGHT);
@@ -295,11 +307,11 @@ export function createHickmanEtal2021Widget({data, width = FIGURE_WIDTH}) {
     for (let v = 0; v <= 50; v += 10) {
       const py = y(v);
       svg.appendChild(svgEl("line", {
-        x1: marginL, x2: plotR, y1: py, y2: py, stroke: "#d5d5d5", "stroke-width": 1,
+        x1: marginL, x2: plotR, y1: py, y2: py, stroke: "#b3b3b3", "stroke-width": 1,
       }));
       const t = svgEl("text", {
         x: marginL, y: py - 4, "text-anchor": "start",
-        "font-size": tickFont, fill: "#d5d5d5",
+        "font-size": tickFont, fill: "#b3b3b3",
       });
       t.textContent = v === 50 ? "50% of respondents" : `${v}%`;
       svg.appendChild(t);
