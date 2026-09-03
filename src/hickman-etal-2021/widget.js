@@ -47,6 +47,11 @@ const PLOT_HEIGHT = 306;
 
 const SVGNS = "http://www.w3.org/2000/svg";
 
+// Left edge shared by the gridlines, their tick labels and the in-plot title. marginL (the
+// bars' own left edge) leaves a wide unused strip to its left at every width, so all three
+// use that strip instead of lining up with the bars.
+const AXIS_LEFT = 10;
+
 // One row per country plus the pooled "All" row: country name, the five response counts in
 // RESPONSES order, and their total.
 export function parseHickmanEtal2021(text) {
@@ -301,16 +306,19 @@ export function createHickmanEtal2021Widget({data, width = FIGURE_WIDTH}) {
 
     // Gridlines and ticks stop at 50%, leaving the 50-70 band as pure headroom for the
     // bracket and the in-plot title — see PCT_MAX above. No spine and no separate axis
-    // title: each tick label sits just above its own gridline, left-aligned with the plot
-    // and colored the same quiet gray as the gridlines, with the unit spelled out once on
-    // the top tick ("50% of respondents") rather than on an axis label of its own.
+    // title: each tick label sits just above its own gridline, colored the same quiet gray
+    // as the gridlines, with the unit spelled out once on the top tick. Both run from
+    // AXIS_LEFT rather than marginL (the bars' own left edge): at marginL the labels would
+    // fall directly under the tall bars' tops and get hidden by them, so the whole axis —
+    // gridlines included, so the labels still sit right over their own line — moves into the
+    // unused strip to the bars' left instead.
     for (let v = 0; v <= 50; v += 10) {
       const py = y(v);
       svg.appendChild(svgEl("line", {
-        x1: marginL, x2: plotR, y1: py, y2: py, stroke: "#b3b3b3", "stroke-width": 1,
+        x1: AXIS_LEFT, x2: plotR, y1: py, y2: py, stroke: "#b3b3b3", "stroke-width": 1,
       }));
       const t = svgEl("text", {
-        x: marginL, y: py - 4, "text-anchor": "start",
+        x: AXIS_LEFT, y: py - 4, "text-anchor": "start",
         "font-size": tickFont, fill: "#b3b3b3",
       });
       t.textContent = v === 50 ? "50% of respondents" : `${v}%`;
@@ -326,11 +334,11 @@ export function createHickmanEtal2021Widget({data, width = FIGURE_WIDTH}) {
     });
 
     // The figure's one caption, drawn inside the plot's top-left corner rather than as an
-    // Axis title, exactly where the Julia figure places it.
-    const title1 = svgEl("text", {x: marginL + 10, y: 30, "font-size": titleFont, "font-weight": "bold", fill: "#111"});
+    // Axis title, flush with the gridlines and their labels rather than the bars.
+    const title1 = svgEl("text", {x: AXIS_LEFT, y: 30, "font-size": titleFont, "font-weight": "bold", fill: "#111"});
     title1.textContent = "How worried about climate change";
     svg.appendChild(title1);
-    const title2 = svgEl("text", {x: marginL + 10, y: 52, "font-size": titleFont, "font-weight": "bold", fill: "#111"});
+    const title2 = svgEl("text", {x: AXIS_LEFT, y: 52, "font-size": titleFont, "font-weight": "bold", fill: "#111"});
     title2.textContent = "are young people (16–25 yr)?";
     svg.appendChild(title2);
 

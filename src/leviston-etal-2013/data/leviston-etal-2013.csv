@@ -1,0 +1,13 @@
+time,source,not_happening,dont_know,natural,human_induced
+1,actual,5.6,3.8,40.2,50.4
+1,all,21.6,20.9,23.7,33.7
+1,not_happening,43.3,18.2,18.8,19.7
+1,dont_know,24.1,34.1,18.5,23.3
+1,natural,20.2,21.0,30.1,28.8
+1,human_induced,20.2,20.2,19.5,40.1
+2,actual,7.2,4.4,43.8,44.6
+2,all,23.0,19.9,26.4,30.6
+2,not_happening,49.4,17.3,19.0,14.4
+2,dont_know,28.4,32.7,19.8,19.1
+2,natural,20.4,19.4,35.2,25.1
+2,human_induced,20.9,19.5,19.9,39.8

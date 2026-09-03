@@ -13,6 +13,7 @@ export default {
     {name: "Global Warming's Six Americas", path: "/leiserowitz-etal-2026/"},
     {name: "Climate anxiety in young people", path: "/hickman-etal-2021/"},
     {name: "Studies of the scientific consensus", path: "/consensus-studies/"},
+    {name: "Actual vs. perceived opinion on climate change", path: "/leviston-etal-2013/"},
   ],
   head: "",
   theme: "air",
