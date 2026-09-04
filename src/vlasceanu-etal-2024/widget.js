@@ -24,10 +24,11 @@ const BACKGROUND = "#f2f2f2";
 const OCEAN = "#e6e6e6";
 const NO_DATA = "#d9d9d9";
 const BAR_FILL = "#555";
+const GRID = "#b3b3b3"; // gridlines and their labels, as in the hickman-etal-2021 widget
 
 const MAP_WIDTH = 640;
 const MIN_MAP_WIDTH = 280;
-const BAR_AXIS_W = 36; // left gutter for the bar chart's axis labels
+const BAR_AXIS_W = 36; // strip to the bar's left that the gridlines and their labels start from
 const BAR_PLOT_TOP = 20; // headroom for the top axis label and the bar's value label
 const BAR_TICK_H = 24; // the caption row under the plot
 const BAR_THICKNESS = 56;
@@ -52,11 +53,12 @@ const NAME_MAP = {
 // range: that is what makes below/above 50 read as the meaningful midpoint a diverging
 // scale invites, and keeps the three maps comparable with each other. Tree-planting effort
 // is not a percentage (it is pages completed of an 8-page task), so a diverging scale would
-// imply a midpoint it does not have; it keeps its own sequential Viridis ramp over the
-// range the 63 countries actually span. `barMax` is the bar chart's axis, which always
-// starts at zero because a bar cut off partway would misread as a much bigger difference
-// than it is. Values outside `domain` are clamped, so a future table revision degrades
-// rather than breaking.
+// imply a midpoint it does not have; it keeps its own sequential Viridis ramp, spanning the
+// task's full 0-8 range rather than the 1.5-7 the countries happen to occupy, so the color
+// and the bar beside it are read off the same scale. `barMax` is the bar chart's axis,
+// which always starts at zero because a bar cut off partway would misread as a much bigger
+// difference than it is. Values outside `domain` are clamped, so a future table revision
+// degrades rather than breaking.
 const PERCENT_DOMAIN = [0, 100];
 
 const METRICS = [
@@ -64,6 +66,7 @@ const METRICS = [
     key: "belief",
     button: "Climate beliefs",
     title: "Belief in climate change",
+    note: "How accurate people rated four statements about climate change.",
     domain: PERCENT_DOMAIN, tickStep: 25, ramp: interpolateBrBG,
     barMax: 100, barTickStep: 25,
     axisFmt: v => `${v}%`,
@@ -74,6 +77,7 @@ const METRICS = [
     key: "policy",
     button: "Policy support",
     title: "Support for climate policy",
+    note: "How much people supported nine climate policies.",
     domain: PERCENT_DOMAIN, tickStep: 25, ramp: interpolateBrBG,
     barMax: 100, barTickStep: 25,
     axisFmt: v => `${v}%`,
@@ -84,6 +88,7 @@ const METRICS = [
     key: "sharing",
     button: "Social media sharing",
     title: "Willingness to share climate information",
+    note: "Asked only of the participants who use social media.",
     domain: PERCENT_DOMAIN, tickStep: 25, ramp: interpolateBrBG,
     barMax: 100, barTickStep: 25,
     axisFmt: v => `${v}%`,
@@ -93,10 +98,12 @@ const METRICS = [
   {
     key: "wept",
     button: "Tree-planting effort",
-    title: "Pages completed to plant trees",
-    domain: [1, 7], tickStep: 1, ramp: interpolateViridis,
+    title: "Effort spent to plant trees",
+    note: "1 page of tedious number-screening = 1 real tree planted, up to 8.",
+    domain: [0, 8], tickStep: 2, ramp: interpolateViridis,
     barMax: 8, barTickStep: 2,
     axisFmt: v => `${v}`,
+    axisTop: v => `${v} pages`,
     short: v => v.toFixed(2),
     long: v => `${v.toFixed(2)} of 8 pages`,
   },
@@ -217,7 +224,15 @@ export function createVlasceanuEtal2024Widget({data, world, width = MAP_WIDTH + 
   });
 
   const titleEl = document.createElement("div");
-  titleEl.style.cssText = "font-weight:700;font-size:17px;margin:2px 0 10px;color:#222;";
+  titleEl.style.cssText = "font-weight:700;font-size:17px;margin:2px 0 1px;color:#222;";
+
+  // One line saying what the outcome actually measured. It matters most for the
+  // tree-planting task, which is otherwise opaque — "pages completed" means nothing until
+  // you know each page bought a real tree — but every outcome gets one so switching does
+  // not shift the layout, and so an embed carries its own explanation: the page prose
+  // around this widget does not travel into somebody else's Moodle page.
+  const noteEl = document.createElement("div");
+  noteEl.style.cssText = "font-size:14px;line-height:1.4;margin:0 0 10px;color:#666;";
 
   function styleButtons() {
     buttonEls.forEach((b, i) => {
@@ -246,7 +261,7 @@ export function createVlasceanuEtal2024Widget({data, world, width = MAP_WIDTH + 
 
   // Top to bottom: what you are looking at, the figure, what you clicked, and the
   // controls that change it.
-  container.append(titleEl, row, status, buttons);
+  container.append(titleEl, noteEl, row, status, buttons);
 
   const HINT = "Click a country to see its score.";
 
@@ -309,21 +324,25 @@ export function createVlasceanuEtal2024Widget({data, world, width = MAP_WIDTH + 
     return {value, h: (value / m.barMax) * plotHeight};
   }
 
-  // Gridlines on the bar's own zero-based axis, darker than they would be on white:
-  // #f2f2f2 swallows the faint grays the other widgets use on a white page.
+  // The bar's own zero-based axis, styled like the one in the hickman-etal-2021 widget: no
+  // spine, each tick label sitting just above its own gridline in the same quiet gray, and
+  // the unit spelled out once on the top tick instead of repeated down the axis. Gridlines
+  // and labels share a left edge in the strip beside the bar rather than the bar's own edge
+  // — at the bar's edge a label would be drawn under the bar and hidden by it whenever the
+  // bar reaches that high.
   function drawBarAxis() {
     const m = metric();
+    const topFmt = m.axisTop ?? m.axisFmt;
     axisG.replaceChildren();
     for (let v = 0; v <= m.barMax; v += m.barTickStep) {
       const y = plotBottom - (v / m.barMax) * plotHeight;
       axisG.appendChild(svgEl("line", {
-        x1: BAR_AXIS_W, x2: BAR_WIDTH, y1: y, y2: y, stroke: "#d5d5d5", "stroke-width": 1,
+        x1: 0, x2: BAR_WIDTH, y1: y, y2: y, stroke: GRID, "stroke-width": 1,
       }));
       const t = svgEl("text", {
-        x: BAR_AXIS_W - 6, y, "text-anchor": "end", "dominant-baseline": "middle",
-        "font-size": 10, fill: "#666",
+        x: 0, y: y - 4, "text-anchor": "start", "font-size": 10, fill: GRID,
       });
-      t.textContent = m.axisFmt(v);
+      t.textContent = v === m.barMax ? topFmt(v) : m.axisFmt(v);
       axisG.appendChild(t);
     }
   }
@@ -463,8 +482,14 @@ export function createVlasceanuEtal2024Widget({data, world, width = MAP_WIDTH + 
       colorbarG.appendChild(svgEl("line", {
         x1: tx, y1: y + h, x2: tx, y2: y + h + 4, stroke: "#333", "stroke-width": 1,
       }));
-      const t = svgEl("text", {x: tx, y: tickY, "text-anchor": "middle"});
-      t.textContent = m.axisFmt(v);
+      // Labels start at their own tick, as the bar chart's do, and the unit rides on the
+      // last one. That last label is the only one with nothing to its right to stop it, so
+      // it tucks back inside its tick when a narrow map leaves no room; 0.6em per character
+      // overestimates the width, which is all this decision needs.
+      const label = v + m.tickStep > m.domain[1] ? (m.axisTop ?? m.axisFmt)(v) : m.axisFmt(v);
+      const fits = tx + label.length * 6.6 <= mapW;
+      const t = svgEl("text", {x: tx, y: tickY, "text-anchor": fits ? "start" : "end"});
+      t.textContent = label;
       colorbarG.appendChild(t);
     }
   }
@@ -564,6 +589,7 @@ export function createVlasceanuEtal2024Widget({data, world, width = MAP_WIDTH + 
   function update() {
     styleButtons();
     titleEl.textContent = metric().title;
+    noteEl.textContent = metric().note;
     drawBarAxis();
     updateBars();
     rebuildColorbar();

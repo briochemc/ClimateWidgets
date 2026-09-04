@@ -41,11 +41,11 @@ import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
 ```js
 display(embedSnippets({
   embedPath: "vlasceanu-etal-2024/embed",
-  height: 520,
+  height: 545,
   title: "Vlasceanu et al. 2024 — climate beliefs and action in 63 countries",
   note: "The map fills the row up to 640&nbsp;px wide and the bar chart matches whatever " +
     "height it lands at. Below about 400&nbsp;px the bars stack above the map instead of " +
-    "beside it, which roughly doubles the height — give the iframe about 780 there.",
+    "beside it, which roughly doubles the height — give the iframe about 805 there.",
   script: `<div id="vlasceanu-etal-2024"></div>
 
 <script type="module">
