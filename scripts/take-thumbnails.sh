@@ -57,10 +57,11 @@ shoot() {
   local url="http://127.0.0.1:$PORT/$path"
   local dom
   dom=$("$CHROME" "${CHROME_FLAGS[@]}" --dump-dom "$url" 2>/dev/null)
-  # The two maps are SVG widgets; the rest render a canvas. The class marker is set by
-  # the widget itself, so a page whose module failed to load has neither.
+  # The three plotting widgets render a canvas; the rest are hand-built SVG, and are
+  # listed below. Either marker is set by the widget itself, so a page whose module
+  # failed to load has neither.
   local must_have="<canvas"
-  case $name in vlasceanu-etal-2024|andre-etal-2024|leiserowitz-etal-2026|hickman-etal-2021|consensus-studies) must_have="class=\"$name\"" ;; esac
+  case $name in vlasceanu-etal-2024|andre-etal-2024|leiserowitz-etal-2026|hickman-etal-2021|consensus-studies|leviston-etal-2013|probability-words) must_have="class=\"$name\"" ;; esac
   if ! grep -q "$must_have" <<<"$dom"; then
     echo "WARN: $name rendered no figure — keeping the existing thumbnail" >&2
     return
@@ -100,7 +101,7 @@ shoot() {
 # Do not ask for a narrower window: Chrome clamps --window-size to a minimum window width
 # (about 500 px on macOS), so a smaller number silently yields a wider viewport than
 # requested and a figure that overflows the capture.
-for name in draw-the-future temperature-trend sst-daily vlasceanu-etal-2024 andre-etal-2024 leiserowitz-etal-2026 hickman-etal-2021 consensus-studies; do
+for name in draw-the-future temperature-trend sst-daily vlasceanu-etal-2024 andre-etal-2024 leiserowitz-etal-2026 hickman-etal-2021 consensus-studies leviston-etal-2013 probability-words; do
   case $name in
     sst-daily) guard="Could not load the daily sea surface temperature" ;;
     *) guard="" ;;
@@ -109,7 +110,7 @@ for name in draw-the-future temperature-trend sst-daily vlasceanu-etal-2024 andr
 done
 
 status=0
-for name in draw-the-future temperature-trend sst-daily vlasceanu-etal-2024 andre-etal-2024 leiserowitz-etal-2026 hickman-etal-2021 consensus-studies; do
+for name in draw-the-future temperature-trend sst-daily vlasceanu-etal-2024 andre-etal-2024 leiserowitz-etal-2026 hickman-etal-2021 consensus-studies leviston-etal-2013 probability-words; do
   if [ ! -f "$OUT/$name.png" ]; then
     echo "ERROR: $OUT/$name.png does not exist and could not be generated" >&2
     status=1

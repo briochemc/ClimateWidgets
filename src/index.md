@@ -35,6 +35,14 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Studies of the scientific consensus</h2>
     <img class="thumb" src="./assets/thumbnails/consensus-studies.png" alt="A row of study buttons above one large green pie chart reading 97%, the share of Cook et al. 2013's abstracts endorsing human-caused warming, with the paper cited below it">
   </a>
+  <a class="card" href="./leviston-etal-2013/">
+    <h2>Actual vs. perceived opinion</h2>
+    <img class="thumb" src="./assets/thumbnails/leviston-etal-2013.png" alt="Four coloured bars of Australian opinion on climate change, with a dashed outline over each showing the actual split for comparison">
+  </a>
+  <a class="card" href="./probability-words/">
+    <h2>What a probability word means</h2>
+    <img class="thumb" src="./assets/thumbnails/probability-words.png" alt="Four rows, one per probability word, each a swarm of bubbles sized by how many people gave that answer on a 0 to 100 percent scale, with a box over the middle half and the IPCC's own range shaded in green; three of the four medians sit at 50 percent">
+  </a>
 </div>
 
 <style>
