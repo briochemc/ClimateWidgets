@@ -40,6 +40,7 @@ const OUT_PATH = "src/probability-words/data/probability-words.json"
 
 const TESS_ZIP = "https://osf.io/download/hmgyz/"
 const WINTLE_CSV = "https://osf.io/download/wafxj/"
+const JUANCHICH_SAV = "https://osf.io/download/6ns4c/"
 const MAUBOUSSIN_CSV =
     "https://raw.githubusercontent.com/amauboussin/probability-survey/master/probability_survey_results.csv"
 
