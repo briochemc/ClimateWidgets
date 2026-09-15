@@ -1,4 +1,4 @@
-# Builds the tallies behind the "probability words" widget: three surveys that played the
+# Builds the tallies behind the "probability words" widget: four surveys that played the
 # same game — show people a probability word, ask them to put a number on it — and one
 # tally per (study, condition, word) of how many people gave each whole-percent answer.
 #
@@ -20,6 +20,11 @@
 #   Data on the OSF at https://osf.io/q78fu/ (Clean_Data_For_Analysis.csv). 924 people,
 #   eight intelligence-analysis statements, four formats, the US intelligence community's
 #   ICD 203 lexicon.
+#
+#   Juanchich, Sirota, Teigen & Shepherd (2025), Nature Climate Change
+#   https://doi.org/10.1038/s41558-025-02472-1
+#   Data on the OSF at https://osf.io/ch4wf/ (Experiment 1). 301 people, four ways of
+#   saying the same low probability, two pointing away from the event and two towards it.
 #
 #   Mauboussin & Mauboussin (2018), Harvard Business Review, "If you say something is
 #   'likely', how likely do people think it is?" https://hbr.org/2018/07/... — data and
@@ -170,9 +175,52 @@ function mauboussin_2018(tmp)
     )])
 end
 
+# --- Juanchich, Sirota, Teigen & Shepherd 2025 ------------------------------------------
+# Experiment 1 of eight. Four ways of saying the same low probability, two of them pointing
+# away from the event ("unlikely", "the likelihood is low") and two pointing towards it
+# ("a small probability", "a small possibility"). Between subjects: each of the 301
+# respondents saw one phrasing and answered "what do you think are its chances of
+# happening?" on a 0-100 scale, so the four columns are disjoint and each is one row.
+#
+# The band drawn on these rows is the IPCC's "unlikely" range, and that is the authors'
+# choice rather than ours: the file carries a derived variable coding every answer as
+# "Probability perception within IPCC guidelines 0-33%" or "beyond IPCC guidelines >33%",
+# and counting answers of 33% or less reproduces their split exactly, 284 against 17.
+#
+# Experiment 2 repeats the task for two of the four phrasings; only Experiment 1 ran all
+# four, so it is the one shown.
+function juanchich_2025(tmp)
+    path = joinpath(tmp, "juanchich_e1.sav")
+    println("Downloading $JUANCHICH_SAV ...")
+    download(JUANCHICH_SAV, path)
+    tb = readstat(path)
+
+    phrases = [
+        (:Proba_Unlikely_1, "unlikely"),
+        (:Proba_LowLikelihood_1, "low_likelihood"),
+        (:Proba_ASmallProbabil_1, "small_probability"),
+        (:Proba_ASmallPossibil_1, "small_possibility"),
+    ]
+
+    terms = []
+    respondents = 0
+    for (col, id) in phrases
+        values = [round(Int, unwrap(v)) for v in tb[col] if !ismissing(unwrap(v))]
+        # Disjoint groups, so the study's headcount is their sum, not the largest of them.
+        respondents += length(values)
+        push!(terms, Dict("id" => id, "tally" => tally(values)))
+    end
+
+    Dict("id" => "juanchich-2025", "conditions" => [Dict(
+        "id" => "all",
+        "respondents" => respondents,
+        "terms" => terms,
+    )])
+end
+
 function main()
     tmp = mktempdir()
-    studies = [budescu_2012(tmp), wintle_2019(tmp), mauboussin_2018(tmp)]
+    studies = [budescu_2012(tmp), wintle_2019(tmp), juanchich_2025(tmp), mauboussin_2018(tmp)]
 
     mkpath(dirname(OUT_PATH))
     open(OUT_PATH, "w") do io

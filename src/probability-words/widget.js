@@ -1,4 +1,4 @@
-// What people think a probability word means. Three surveys played the same game — show
+// What people think a probability word means. Four surveys played the same game — show
 // someone a word for chance, ask them to put a number on it — and disagreed with the
 // institutions that publish those words for a living.
 //
@@ -7,12 +7,17 @@
 //   Wintle et al. (2019)            924 people, eight intelligence-analysis statements,
 //                                   four formats, the US intelligence community's ICD 203
 //                                   lexicon — the same four words, a different rulebook.
+//   Juanchich et al. (2025)         301 people, four ways of saying the same low
+//                                   probability: two pointing away from the event
+//                                   ("unlikely", "the likelihood is low") and two pointing
+//                                   towards it ("a small probability", "a small
+//                                   possibility"). Between subjects, one phrasing each.
 //   Mauboussin & Mauboussin (2018)  1,976 people, 23 everyday phrases judged bare, with no
 //                                   context and no official scale to be right about.
 //
 // The figure runs horizontally, one row per word: the 0-100% scale across the x axis, the
-// official range for that word shaded on the row where one exists, the answers themselves
-// as bubbles, and a box for the middle half.
+// official range for that word shaded on the row where one exists, and the answers
+// themselves as bubbles, coloured by whether they fall inside that range.
 //
 // The answers are heaped on round numbers rather than spread out, so one dot per person
 // would be mostly overplotting. Every distinct value gets one bubble instead, with its area
@@ -21,10 +26,8 @@
 // is allowed to overlap or to leave its row: fitBubbles solves for the largest bubble scale
 // at which the whole figure still packs, rather than trusting a constant picked by eye.
 //
-// The reader places their own estimate on each row first and only then reveals the data,
-// which makes the widget run the first study's control condition on them before showing how
-// everyone else answered. Their answers persist across studies wherever the word does, so
-// the same ring can be compared against the IPCC's readers and the intelligence world's.
+// Hovering or focusing a bubble names it exactly — how many people gave that answer, out of
+// how many — because area is readable as "bigger" but not as a number.
 //
 // Studies differ in how many words they asked about — four against twenty-three — so the
 // row pitch, and with it the figure's height, is a function of the selected study. Width
@@ -34,7 +37,7 @@
 // widget's page is a single ES module import that works from any page.
 //
 // Data: src/probability-words/data/probability-words.json, one tally per study, condition
-// and word, written by scripts/probability-words.jl from the three sources above. Every
+// and word, written by scripts/probability-words.jl from the four sources above. Every
 // answer is kept, including the 0s and 100s Budescu et al. recoded away — see "About the
 // data" on the widget's page.
 
@@ -52,10 +55,26 @@ const BOTTOM_CHROME = 66; // axis ticks and the source line, below the last row
 const TICK_OFFSET = 20;
 const SOURCE_OFFSET = 52;
 
-// Okabe-Ito: the official range, the respondents, the reader's own answer.
+// Okabe-Ito. A bubble is coloured by whether that answer falls inside the range the
+// publishing body assigns to the word: green inside, vermillion outside, and plain blue
+// where the phrase has no official range to be judged against.
 const BAND_COLOR = "#009E73";
-const DOT_COLOR = "#0072B2";
-const GUESS_COLOR = "#D55E00";
+const IN_COLOR = "#009E73";
+const OUT_COLOR = "#D55E00";
+const NEUTRAL_COLOR = "#0072B2";
+const KEY_COLOR = "#8a8a8a"; // the size key stands for magnitude, not for membership
+const PICK_COLOR = "#111";
+
+// Radius is the square root of the count, so it is the bubble's *area* that is proportional
+// to the number of people. Nothing is floored to a minimum size: that would make the
+// smallest bubbles overstate themselves, and the whole point of the encoding is that area
+// can be read as a headcount. In a study where one answer is 1,233 of 1,862 the radius
+// range is 35 to 1, so the rarest answers do land under a pixel and show only as a faint
+// trace. That is the honest rendering of one person in a thousand.
+
+// A bubble smaller than this is still pickable out to this radius, so the tiny ones can be
+// hovered at all.
+const MIN_PICK_R = 5;
 
 // Round counts for the size key. The largest that fits the study's biggest pile, plus one
 // about a tenth of it, plus one.
@@ -156,6 +175,19 @@ const ICD_TERMS = [
    rule: "5% to 20%", short: "5-20%"},
 ];
 
+// All four of Juanchich et al.'s phrasings are ways of saying the same thing, so they share
+// one band: the IPCC's "unlikely". That is the authors' own yardstick — their data file
+// codes each answer as within "IPCC guidelines 0-33%" or beyond it — not a choice made here.
+const UNLIKELY_BAND = {lo: 0, hi: 33, loOpen: false, hiOpen: false,
+  rule: "0% to 33%", short: "0-33%"};
+
+const JUANCHICH_TERMS = [
+  {id: "unlikely", label: "unlikely", ...UNLIKELY_BAND},
+  {id: "low_likelihood", label: "the likelihood is low", ...UNLIKELY_BAND},
+  {id: "small_probability", label: "a small probability", ...UNLIKELY_BAND},
+  {id: "small_possibility", label: "a small possibility", ...UNLIKELY_BAND},
+];
+
 const STUDIES = [
   {
     id: "budescu-2012",
@@ -195,6 +227,22 @@ const STUDIES = [
     ],
   },
   {
+    id: "juanchich-2025",
+    pill: "Ways to say unlikely",
+    title: ["Four ways of saying", "the same low probability"],
+    cite: "Juanchich et al.",
+    year: 2025,
+    journal: "Nature Climate Change",
+    url: "https://doi.org/10.1038/s41558-025-02472-1",
+    authority: "the IPCC",
+    setting: "as a bare phrase, with no sentence around it",
+    terms: JUANCHICH_TERMS,
+    sentences: null,
+    conditions: [
+      {id: "all", label: "Everyone", blurb: "one of the four phrasings, at random"},
+    ],
+  },
+  {
     id: "mauboussin-2018",
     pill: "Everyday words",
     title: ["How people read", "everyday words for chance"],
@@ -229,11 +277,11 @@ export function parseProbabilityWords(json) {
     const order = first.terms.map(t => t.id);
 
     const terms = order.map(id => {
-      const spec_ = spec.terms?.find(t => t.id === id);
-      if (spec.terms && !spec_) {
+      const known = spec.terms?.find(t => t.id === id);
+      if (spec.terms && !known) {
         throw new Error(`probability-words JSON: study "${spec.id}" has unexpected word "${id}"`);
       }
-      return spec_ ?? {id, label: id.replace(/_/g, " "), lo: null, hi: null, rule: null, short: null};
+      return known ?? {id, label: id.replace(/_/g, " "), lo: null, hi: null, rule: null, short: null};
     });
     if (spec.terms && spec.terms.length !== terms.length) {
       throw new Error(`probability-words JSON: study "${spec.id}" is missing words`);
@@ -328,29 +376,31 @@ function textWidth(text, font) {
   return measureCtx.measureText(text).width;
 }
 
-export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, revealed} = {}) {
+export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) {
   const {studies} = data;
 
-  // Snap instead of animating for a reader who has asked the system for reduced motion —
-  // and, because the thumbnail script forces that setting, open on the revealed frame so
-  // every capture shows the figure rather than the empty guessing grid.
+  // Snap instead of animating for a reader who has asked the system for reduced motion,
+  // which is also what the thumbnail script forces, so every capture is the same frame.
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
   const TRANS = reduceMotion ? "0s" : TRANSITION;
 
   let study = studies[0];
   let condition = study.conditions[0];
-  let isRevealed = revealed ?? reduceMotion;
-  const guesses = new Map(); // word id -> percent, so an answer follows its word across studies
-  let hovered = null; // row index whose detail the status line is showing
-  let dragging = null;
+  let labelRow = null; // row whose word is being read out, set by its label
+  let labelPinned = false; // clicking the word keeps its text up
+  let picked = null; // {row, value} of the bubble being named, or null
+  let pinned = false; // a picked bubble survives the pointer leaving, until dismissed
 
   // Vertical geometry, recomputed only when the study changes.
-  let nRows, rowPitch, swarmHalf, boxH, figureHeight, rowBottom, tickY, sourceY;
+  let nRows, rowPitch, swarmHalf, figureHeight, rowBottom, tickY, sourceY;
 
   let w, marginL, marginR, plotL, plotR, axL, axR, unitR;
-  let longSentence, shortAxisName, showKey, showInRange;
-  let titleFont, termFont, readFont, subReadFont, tickFont, sourceFont, keyFont;
-  let ringR;
+  let longSentence, shortAxisName, showKey, showInRange, longMedian;
+  let titleFont, termFont, readFont, subReadFont, tickFont, sourceFont, keyFont, pickFont;
+
+  // The laid-out bubbles for the current width, by condition then row; also what the
+  // pointer and the arrow keys hit-test against.
+  let layouts = {};
 
   function applyStudyGeometry() {
     nRows = study.terms.length;
@@ -358,7 +408,6 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
     // follows, which is why an embed has to allow for the tallest study.
     rowPitch = nRows <= 5 ? 72 : nRows <= 10 ? 46 : 24;
     swarmHalf = rowPitch * 0.43;
-    boxH = Math.max(8, rowPitch * 0.36);
     rowBottom = ROW_TOP + rowPitch * nRows;
     figureHeight = rowBottom + BOTTOM_CHROME;
     tickY = rowBottom + TICK_OFFSET;
@@ -378,7 +427,7 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
     tickFont = lerp(9, 11);
     sourceFont = lerp(7, 8);
     keyFont = lerp(8.5, 10);
-    ringR = clamp(swarmHalf * 0.3, 4, lerp(7, 9));
+    pickFont = lerp(9.5, 11);
 
     // The left margin is measured, not guessed: "with moderate probability" and "very
     // likely" need very different amounts of room, and a constant would either clip the
@@ -386,13 +435,16 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
     const labelFont = `bold ${termFont}px sans-serif`;
     const widest = Math.max(...study.terms.map(term => textWidth(term.label, labelFont)));
     marginL = clamp(Math.ceil(widest) + 18, 76, Math.round(w * 0.45));
-    marginR = lerp(46, 96);
+    marginR = lerp(66, 96); // fits "med 49.5%" at the narrow end, "median 100%" at the wide
     plotL = marginL;
     plotR = w - marginR;
 
     // Stepwise, not continuous: text either fits or it does not, and switching at a
     // threshold beats letting it shrink until it is unreadable.
     showInRange = w >= 450 && study.authority !== null;
+    // The number on the right is a median, and with the box plots gone nothing else on the
+    // row says so, so it carries its own word rather than standing there bare.
+    longMedian = w >= 450;
     shortAxisName = w < 430;
     showKey = w >= 520;
     longSentence = w >= 480;
@@ -421,38 +473,17 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
   scroller.appendChild(svg);
   container.appendChild(scroller);
 
-  // --- status area: the prompt before the data is shown, the legend after it, and the
-  // hovered or focused row's own detail in place of either. Its height is reserved in
-  // buildAll so hovering never reflows the page below, and the Reveal control sits on its
-  // own line so it does not shift as the text changes length. ---
+  // --- status area: the legend, or the hovered row's own detail, or the picked bubble's
+  // exact count. Its height is reserved in buildAll so moving the pointer never reflows the
+  // page below. ---
   const statusText = document.createElement("div");
   statusText.style.cssText = "padding:8px 0 0;font-size:13px;line-height:1.35;color:#555;";
+  statusText.setAttribute("aria-live", "polite");
   container.appendChild(statusText);
 
-  const statusControls = document.createElement("div");
-  statusControls.style.cssText = "display:flex;align-items:center;gap:4px;height:34px;";
-  container.appendChild(statusControls);
-
-  const revealButton = pillButton("Reveal the answers", () => {
-    isRevealed = true;
-    update();
-  });
-  const skipLink = textLink("Skip", () => {
-    isRevealed = true;
-    update();
-  });
-  const againLink = textLink("Guess again", () => {
-    guesses.clear();
-    isRevealed = false;
-    update();
-  });
-  statusControls.append(revealButton, skipLink, againLink);
-
-  // --- study buttons, then the selected study's condition buttons. Both are hidden rather
-  // than removed before the reveal, so the plate does not change height when the data
-  // appears. ---
+  // --- study buttons, then the selected study's condition buttons. ---
   const studyRow = document.createElement("div");
-  studyRow.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;";
+  studyRow.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;";
   container.appendChild(studyRow);
 
   const conditionRow = document.createElement("div");
@@ -466,6 +497,7 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
       // Keep the reader on the same presentation format where the new study also ran one,
       // so switching studies compares like with like rather than resetting to the default.
       condition = s.conditions.find(c => c.id === condition.id) ?? s.conditions[0];
+      clearPick();
       applyStudyGeometry();
       buildAll(w);
       emit();
@@ -482,6 +514,7 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
       const b = pillButton(`${c.label} (${c.respondents})`, () => {
         if (condition === c) return;
         condition = c;
+        clearPick();
         update();
       });
       conditionRow.appendChild(b);
@@ -504,17 +537,6 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
     return b;
   }
 
-  function textLink(text, onClick) {
-    const a = document.createElement("button");
-    a.type = "button";
-    a.textContent = text;
-    a.style.cssText =
-      "font:13px sans-serif;padding:0 4px;margin-left:6px;border:0;background:none;" +
-      "color:#0b57d0;text-decoration:underline;cursor:pointer;";
-    a.addEventListener("click", onClick);
-    return a;
-  }
-
   function svgEl(tag, attrs) {
     const el = document.createElementNS(SVGNS, tag);
     for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
@@ -522,8 +544,9 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
   }
 
   // Elements rebuilt by buildAll and mutated by update.
-  let bandRects = [], trackRects = [], swarmGroups = {}, boxParts = [];
-  let guessGroups = [], focusRects = [], readMain = [], readSub = [], hitRects = [];
+  let bandRects = [], swarmGroups = {};
+  let labelGroups = [], labelUnderlines = [], readMain = [], readSub = [], hitRects = [];
+  let pickRing, pickLabel, pickLabelHalo;
 
   // --- the bubble swarm -----------------------------------------------------------------
   // Bubbles arrive biggest-first, so the piles that carry most of the people are the ones
@@ -658,8 +681,8 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
 
   // --- build ------------------------------------------------------------------------
   // Rebuilt on resize and on a change of study: both move every horizontal metric, and the
-  // second moves the vertical ones too. The condition and the reader's answers survive it,
-  // so this is also what a first build runs.
+  // second moves the vertical ones too. The condition survives it, so this is also what a
+  // first build runs.
   function buildAll(newW) {
     applyLayout(newW);
 
@@ -669,6 +692,7 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
     unitR = fit.scale;
     axL = fit.axL;
     axR = fit.axR;
+    layouts = fit.byCondition;
 
     // Capped to the figure's own width rather than the page column's, so the pills stack
     // onto more rows instead of spilling wider than the chart above them.
@@ -682,11 +706,10 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
     svg.replaceChildren();
     svg.appendChild(svgEl("rect", {width: w, height: figureHeight, fill: BACKGROUND}));
 
-    const title = study.title;
     const title1 = svgEl("text", {x: 10, y: 26, "font-size": titleFont, "font-weight": "bold", fill: "#111"});
-    title1.textContent = title[0];
+    title1.textContent = study.title[0];
     const title2 = svgEl("text", {x: 10, y: 48, "font-size": titleFont, "font-weight": "bold", fill: "#111"});
-    title2.textContent = title[1];
+    title2.textContent = study.title[1];
     svg.append(title1, title2);
 
     // Size key, in the empty strip to the right of the two-line title: area is hard to
@@ -705,10 +728,7 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
         // Spacing on the bubble alone runs the labels into each other.
         const slot = Math.max(2 * r, textWidth(String(count), `${keyFont}px sans-serif`));
         cursor -= slot / 2;
-        svg.appendChild(svgEl("circle", {
-          cx: cursor, cy: keyCY, r, fill: DOT_COLOR, "fill-opacity": 0.75,
-          stroke: BACKGROUND, "stroke-width": 0.6,
-        }));
+        svg.appendChild(bubbleCircle(cursor, keyCY, r, KEY_COLOR));
         const label = svgEl("text", {
           x: cursor, y: keyLabelY, "text-anchor": "middle", "font-size": keyFont, fill: "#777",
         });
@@ -745,31 +765,26 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
     axisName.textContent = shortAxisName ? "probability:" : "probability meant:";
     svg.appendChild(axisName);
 
-    bandRects = [];
-    trackRects = [];
-    study.terms.forEach((term, i) => {
-      // Only the two studies with a published scale have a band; the everyday phrases have
+    bandRects = study.terms.map((term, i) => {
+      // Only the studies with a published scale have a band; the everyday phrases have
       // nothing to be right or wrong about, so their rows carry no shading at all.
       const band = svgEl("rect", {
         x: term.lo === null ? 0 : x(term.lo),
         y: rowY(i) - swarmHalf,
         width: term.lo === null ? 0 : Math.max(0, x(term.hi) - x(term.lo)),
         height: swarmHalf * 2,
-        fill: BAND_COLOR, opacity: 0,
+        fill: BAND_COLOR, opacity: term.lo === null ? 0 : 0.18,
       });
-      band.style.transition = `opacity ${TRANS}`;
       svg.appendChild(band);
-      bandRects.push(band);
+      return band;
+    });
 
-      // The bar the reader drags along. Before the reveal it is the only thing on the row,
-      // so it is drawn thick enough to read as a control rather than as another gridline;
-      // afterwards it thins out to a rule the ring can sit on.
-      const track = svgEl("rect", {
-        x: axL, y: rowY(i) - 2, width: axR - axL, height: 4, rx: 2, fill: "#c9c9c9",
-      });
-      track.style.transition = `opacity ${TRANS}, fill ${TRANS}`;
-      svg.appendChild(track);
-      trackRects.push(track);
+    // A faint rule down the middle of each row, so an empty stretch of the scale still
+    // reads as part of that word's row rather than as blank plate.
+    study.terms.forEach((_, i) => {
+      svg.appendChild(svgEl("rect", {
+        x: axL, y: rowY(i) - 0.5, width: axR - axL, height: 1, fill: "#c9c9c9",
+      }));
     });
 
     // One group per condition, all built up front so switching cross-fades rather than
@@ -780,70 +795,105 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
       g.style.transition = `opacity ${TRANS}`;
       study.terms.forEach((_, i) => {
         const cy = rowY(i);
-        for (const p of fit.byCondition[cond.id][i]) {
-          // A hairline of the plate's own colour, so bubbles that end up touching still
-          // read as two answers rather than as one blob.
-          g.appendChild(svgEl("circle", {
-            cx: p.x, cy: cy + p.y, r: p.r, fill: DOT_COLOR, "fill-opacity": 0.75,
-            stroke: BACKGROUND, "stroke-width": 0.6,
-          }));
+        for (const p of layouts[cond.id][i]) {
+          g.appendChild(bubbleCircle(p.x, cy + p.y, p.r, bubbleFill(study.terms[i], p.value)));
         }
       });
       svg.appendChild(g);
       swarmGroups[cond.id] = g;
     }
 
-    // The middle half of each group's answers, over the swarm. Both marks are rects, so x
-    // and width can carry a CSS transition — a line's x1/x2 cannot — and the summary slides
-    // between conditions. No whiskers: the bubbles already show the whole spread, and with
-    // answers piled on 0 and 100 they would stretch across the entire axis.
-    boxParts = study.terms.map((_, i) => {
-      const cy = rowY(i);
-      const mk = attrs => {
-        const el = svgEl("rect", attrs);
-        el.style.transition = `x ${TRANS}, width ${TRANS}, opacity ${TRANS}`;
-        el.setAttribute("opacity", 0);
-        svg.appendChild(el);
-        return el;
-      };
-      // Unfilled: the bubbles underneath carry the ink, and a wash over them would make the
-      // ones inside the box read as a different colour from the ones outside.
-      const box = mk({
-        x: axL, y: cy - boxH / 2, width: 0, height: boxH,
-        fill: "none", stroke: "#111", "stroke-width": 1.2,
-      });
-      const median = mk({x: axL, y: cy - boxH / 2, width: 3, height: boxH, fill: "#111"});
-      return {box, median};
+    // The highlight on a named bubble: a ring around it and its exact count above it. One
+    // pair of elements, moved rather than recreated, so there is nothing to clean up.
+    pickRing = svgEl("circle", {
+      r: 0, fill: "none", stroke: PICK_COLOR, "stroke-width": 2, opacity: 0,
     });
-
-    // The reader's own answer: a vermillion ring with a white halo so it reads over the
-    // bubbles. No transition — while dragging it has to track the pointer exactly.
-    guessGroups = [];
-    focusRects = [];
-    study.terms.forEach((_, i) => {
-      const focus = svgEl("rect", {
-        x: plotL - 4, y: rowY(i) - swarmHalf - 3, width: plotR - plotL + 8, height: swarmHalf * 2 + 6,
-        rx: 4, fill: "none", stroke: "#0b57d0", "stroke-width": 2, opacity: 0,
-      });
-      svg.appendChild(focus);
-      focusRects.push(focus);
-
-      const g = svgEl("g", {opacity: 0});
-      g.appendChild(svgEl("circle", {r: ringR, fill: "none", stroke: "#fff", "stroke-width": 4.5}));
-      g.appendChild(svgEl("circle", {r: ringR, fill: "none", stroke: GUESS_COLOR, "stroke-width": 2.5}));
-      svg.appendChild(g);
-      guessGroups.push(g);
+    svg.appendChild(pickRing);
+    // Drawn twice: once as a fat background-coloured stroke, once in ink. That is what
+    // keeps the number legible where it lands on top of the bubbles.
+    pickLabelHalo = svgEl("text", {
+      "text-anchor": "middle", "font-size": pickFont, "font-weight": "bold",
+      fill: "none", stroke: BACKGROUND, "stroke-width": 3.5, "stroke-linejoin": "round", opacity: 0,
     });
+    pickLabel = svgEl("text", {
+      "text-anchor": "middle", "font-size": pickFont, "font-weight": "bold",
+      fill: "#111", opacity: 0,
+    });
+    svg.append(pickLabelHalo, pickLabel);
 
     // Row labels, left of the plot: the word itself, which is the whole point of the
-    // figure, so it is set at reading size rather than as a tick label.
-    study.terms.forEach((term, i) => {
+    // figure, so it is set at reading size rather than as a tick label. The word is also
+    // the control for its own row — pointing at it, or focusing it, writes that row's
+    // sentences and figures into the status line, and clicking keeps them there. A
+    // transparent rect behind the glyphs does the catching, because text on its own is
+    // only hoverable where the ink is.
+    labelGroups = [];
+    labelUnderlines = study.terms.map((term, i) => {
+      const cy = rowY(i);
+      const width = textWidth(term.label, `bold ${termFont}px sans-serif`);
+      const right = marginL - 10;
+
+      const g = svgEl("g", {});
+      g.setAttribute("tabindex", "0");
+      g.style.cursor = "pointer";
+      g.style.outline = "none";
+
+      g.appendChild(svgEl("rect", {
+        x: right - width - 6, y: cy - rowPitch / 2, width: width + 12, height: rowPitch,
+        fill: "transparent",
+      }));
+
       const label = svgEl("text", {
-        x: marginL - 10, y: rowY(i) + termFont * 0.35, "text-anchor": "end",
+        x: right, y: cy + termFont * 0.35, "text-anchor": "end",
         "font-size": termFont, "font-weight": "bold", fill: "#111",
       });
       label.textContent = term.label;
-      svg.appendChild(label);
+      g.appendChild(label);
+
+      // Shown while the word is being read out, so it is clear which row the text belongs
+      // to and that the word is worth pointing at in the first place.
+      const underline = svgEl("rect", {
+        x: right - width, y: cy + termFont * 0.35 + 3, width, height: 1.5,
+        fill: "#111", opacity: 0,
+      });
+      g.appendChild(underline);
+
+      g.addEventListener("pointerenter", () => {
+        if (labelPinned) return;
+        labelRow = i;
+        update();
+      });
+      g.addEventListener("pointerleave", () => {
+        if (labelPinned || document.activeElement === g) return;
+        if (labelRow === i) labelRow = null;
+        update();
+      });
+      g.addEventListener("click", () => {
+        const again = labelPinned && labelRow === i;
+        labelRow = again ? null : i;
+        labelPinned = !again;
+        update();
+      });
+      g.addEventListener("focus", () => { labelRow = i; update(); });
+      g.addEventListener("blur", () => {
+        if (labelPinned || labelRow !== i) return;
+        labelRow = null;
+        update();
+      });
+      // The word is the row's single tab stop, so the arrow keys have to reach the bubbles
+      // from here rather than from a second focusable strip over the plot.
+      g.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          g.dispatchEvent(new MouseEvent("click"));
+          return;
+        }
+        stepWithKey(e, i);
+      });
+
+      svg.appendChild(g);
+      labelGroups.push(g);
+      return underline;
     });
 
     // Readouts, right of the plot.
@@ -863,34 +913,13 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
       readSub.push(sub);
     });
 
-    // Transparent hit areas on top: they take the focus (so Tab walks the rows and the
-    // arrow keys move that row's estimate) and give the pointer something to aim at.
-    hitRects = study.terms.map((term, i) => {
+    // Transparent strips over the plot, carrying the row's accessible description. The
+    // pointer is handled on the SVG itself, and the keyboard through the word on the left,
+    // so these take no focus of their own.
+    hitRects = study.terms.map((_, i) => {
       const r = svgEl("rect", {
         x: plotL - 4, y: rowY(i) - rowPitch / 2, width: plotR - plotL + 8, height: rowPitch,
-        fill: "transparent", role: "slider", "aria-valuemin": 0, "aria-valuemax": 100,
-      });
-      r.setAttribute("tabindex", "0");
-      r.style.cursor = "ew-resize";
-      r.style.outline = "none";
-      r.addEventListener("focus", () => { hovered = i; update({emit: false}); });
-      r.addEventListener("blur", () => { if (hovered === i) hovered = null; update({emit: false}); });
-      r.addEventListener("pointerenter", () => { hovered = i; update({emit: false}); });
-      r.addEventListener("pointerleave", () => {
-        if (hovered === i && document.activeElement !== r) { hovered = null; update({emit: false}); }
-      });
-      r.addEventListener("keydown", e => {
-        const stepBy = e.shiftKey ? 10 : 1;
-        const current = guesses.has(term.id) ? guesses.get(term.id) : 50;
-        let next = current;
-        if (e.key === "ArrowLeft" || e.key === "ArrowDown") next = current - stepBy;
-        else if (e.key === "ArrowRight" || e.key === "ArrowUp") next = current + stepBy;
-        else if (e.key === "Home") next = 0;
-        else if (e.key === "End") next = 100;
-        else return;
-        e.preventDefault();
-        guesses.set(term.id, clamp(Math.round(next), 0, 100));
-        update();
+        fill: "transparent",
       });
       svg.appendChild(r);
       return r;
@@ -899,6 +928,13 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
     // Below about 470px the full citation with its link would overrun the figure's left
     // edge (it is fixed, right-anchored text at a small font, sized for the 600px figure);
     // a shorter form there avoids that rather than letting it clip.
+    const sourceLink = svgEl("a", {target: "_blank", rel: "noopener", tabindex: "0"});
+    sourceLink.setAttribute("href", study.url);
+    sourceLink.style.cursor = "pointer";
+    const sourceTitle = svgEl("title", {});
+    sourceTitle.textContent = `Open ${study.url} in a new tab`;
+    sourceLink.appendChild(sourceTitle);
+
     const source = svgEl("text", {
       x: w - 10, y: sourceY, "text-anchor": "end", "font-size": sourceFont, fill: "#808080",
     });
@@ -909,70 +945,66 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
       const prefix = document.createElementNS(SVGNS, "tspan");
       prefix.textContent = "Data source: ";
       const rest = document.createElementNS(SVGNS, "tspan");
-      rest.textContent = ` ${study.journal}, ${study.year} (${study.url})`;
-      source.append(prefix, italic, rest);
+      rest.textContent = ` ${study.journal}, ${study.year} `;
+      // Only the address is inked as a link, so the citation still reads as a citation
+      // while the clickable part looks clickable.
+      const href = document.createElementNS(SVGNS, "tspan");
+      href.setAttribute("fill", "#0b57d0");
+      href.setAttribute("text-decoration", "underline");
+      href.textContent = `(${study.url})`;
+      source.append(prefix, italic, rest, href);
     } else {
+      const comma = document.createElementNS(SVGNS, "tspan");
+      comma.textContent = ", ";
       const rest = document.createElementNS(SVGNS, "tspan");
-      rest.textContent = `, ${study.journal} (${study.year})`;
-      source.append(italic, rest);
+      rest.setAttribute("fill", "#0b57d0");
+      rest.setAttribute("text-decoration", "underline");
+      rest.textContent = `${study.journal} (${study.year})`;
+      source.append(italic, comma, rest);
     }
-    svg.appendChild(source);
+    sourceLink.appendChild(source);
+    svg.appendChild(sourceLink);
 
     buildConditionButtons();
     update({emit: false});
   }
 
-  // --- update: everything that depends on the selection or the mode, never on layout ----
+  function bubbleCircle(cx, cy, r, fill) {
+    // The hairline separating touching bubbles has to shrink with them, or it eats the
+    // smallest ones entirely.
+    return svgEl("circle", {
+      cx, cy, r, fill, "fill-opacity": 0.78,
+      stroke: BACKGROUND, "stroke-width": Math.min(0.6, r * 0.35),
+    });
+  }
+
+  // Green inside the range the publishing body assigns to the word, vermillion outside it,
+  // plain blue where the phrase has no official range to be judged against.
+  function bubbleFill(term, value) {
+    if (term.lo === null) return NEUTRAL_COLOR;
+    return inside(value, term) ? IN_COLOR : OUT_COLOR;
+  }
+
+  // --- update: everything that depends on the selection, never on layout ----------------
   function update({emit: shouldEmit = true} = {}) {
     studyButtons.forEach((b, i) => stylePill(b, studies[i] === study));
     conditionButtons.forEach((b, i) => stylePill(b, study.conditions[i] === condition));
 
-    studyRow.style.visibility = isRevealed ? "visible" : "hidden";
-    conditionRow.style.visibility = isRevealed ? "visible" : "hidden";
-    revealButton.style.display = isRevealed ? "none" : "";
-    skipLink.style.display = isRevealed ? "none" : "";
-    againLink.style.display = isRevealed && guesses.size ? "" : "none";
-    // The primary action while the data is hidden, so it is filled rather than outlined.
-    revealButton.style.background = "#333";
-    revealButton.style.color = "#fff";
-    revealButton.style.border = "1px solid #333";
-
     for (const g of Object.values(swarmGroups)) g.style.opacity = 0;
-    if (isRevealed && swarmGroups[condition.id]) swarmGroups[condition.id].style.opacity = 1;
+    if (swarmGroups[condition.id]) swarmGroups[condition.id].style.opacity = 1;
 
     study.terms.forEach((term, i) => {
-      bandRects[i].setAttribute("opacity", isRevealed && term.lo !== null ? 0.18 : 0);
-      trackRects[i].setAttribute("opacity", isRevealed ? 0.4 : 1);
-      trackRects[i].setAttribute("fill", hovered === i && !isRevealed ? "#9a9a9a" : "#c9c9c9");
-
       const s = condition.rows[i];
-      const parts = boxParts[i];
-      const on = isRevealed && s.n > 0;
-      setRect(parts.box, x(s.q1), x(s.q3) - x(s.q1), on);
-      setRect(parts.median, x(s.median) - 1.5, 3, on);
+      labelUnderlines[i].setAttribute("opacity", labelRow === i ? 1 : 0);
 
-      const guess = guesses.get(term.id);
-      guessGroups[i].setAttribute("opacity", guess === undefined ? 0 : 1);
-      guessGroups[i].setAttribute("transform", `translate(${x(guess ?? 50)},${rowY(i)})`);
-      focusRects[i].setAttribute("opacity", hovered === i ? 0.5 : 0);
+      readMain[i].textContent = s.n ? `${longMedian ? "median" : "med"} ${fmt(s.median)}%` : "";
+      readSub[i].textContent =
+        showInRange && s.n && s.pctInRange !== null ? `${s.pctInRange.toFixed(0)}% in range` : "";
 
-      // Before the reveal the readout echoes the reader's own answer; after it, the group's
-      // median and, where the word has an official range, how much of the group met it.
-      if (!isRevealed) {
-        readMain[i].setAttribute("fill", GUESS_COLOR);
-        readMain[i].textContent = guess === undefined ? "" : `${guess}%`;
-        readSub[i].textContent = "";
-      } else {
-        readMain[i].setAttribute("fill", "#333");
-        readMain[i].textContent = s.n ? `${fmt(s.median)}%` : "";
-        readSub[i].textContent =
-          showInRange && s.n && s.pctInRange !== null ? `${s.pctInRange.toFixed(0)}% in range` : "";
-      }
-
-      hitRects[i].setAttribute("aria-valuenow", guess ?? 50);
-      hitRects[i].setAttribute("aria-label", rowSpeech(i, term, s, guess));
+      labelGroups[i].setAttribute("aria-label", rowSpeech(i, term, s));
     });
 
+    renderPick();
     renderStatus();
     svg.setAttribute("aria-label", summaryText());
 
@@ -987,12 +1019,6 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
     b.style.color = active ? "#fff" : "#333";
   }
 
-  function setRect(el, x0, width, on) {
-    el.setAttribute("x", x0);
-    el.setAttribute("width", Math.max(0, width));
-    el.setAttribute("opacity", on ? 1 : 0);
-  }
-
   // The group that read the range inside the sentence saw it there, so that is what this
   // shows while their answers are on screen — the reader sees what the respondents saw.
   function termAsShown(term) {
@@ -1000,27 +1026,100 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
     return term.label + (inline && term.rule ? ` (${term.rule})` : "");
   }
 
-  function rowSpeech(i, term, s, guess) {
-    const sentences = study.sentences?.[term.id];
-    const where = sentences
-      ? `, used in: ${sentences.map(x => x.pre + termAsShown(term) + x.post).join(" And: ")}`
-      : ` ${study.setting}`;
-    const rule = term.rule ? ` ${study.authority} means ${term.rule}.` : "";
-    return `Your estimate of the probability meant by "${term.label}"${where}.` +
-      (guess === undefined ? " No estimate yet." : ` You said ${guess}%.`) +
-      (isRevealed
-        ? `${rule} Median of the ${s.n} answers in this group: ${fmt(s.median)}%` +
-          (s.pctInRange === null ? "." : `, of which ${s.pctInRange.toFixed(0)} percent meet it.`)
-        : "");
+  // --- the picked bubble ----------------------------------------------------------------
+  function bubbleAt(row, value) {
+    return layouts[condition.id]?.[row]?.find(b => b.value === value) ?? null;
+  }
+
+  function clearPick() {
+    picked = null;
+    pinned = false;
+  }
+
+  // Hit-test within one row. Tiny bubbles are given a larger catch radius so they can be
+  // hovered at all; where those overlap, the closest edge wins.
+  function hitTest(row, px, py) {
+    const bubbles = layouts[condition.id]?.[row];
+    if (!bubbles) return null;
+    const cy = rowY(row);
+    let best = null;
+    let bestScore = Infinity;
+    for (const b of bubbles) {
+      const reach = Math.max(b.r, MIN_PICK_R);
+      const dx = px - b.x;
+      const dy = py - (cy + b.y);
+      const dist = Math.hypot(dx, dy);
+      if (dist > reach) continue;
+      const score = dist - b.r; // nearest edge, so a big bubble is not stolen by a speck
+      if (score < bestScore) {
+        bestScore = score;
+        best = b;
+      }
+    }
+    return best;
+  }
+
+  function renderPick() {
+    const b = picked ? bubbleAt(picked.row, picked.value) : null;
+    if (!b) {
+      for (const el of [pickRing, pickLabel, pickLabelHalo]) el.setAttribute("opacity", 0);
+      return;
+    }
+    const cy = rowY(picked.row) + b.y;
+    const ringR = Math.max(b.r, MIN_PICK_R * 0.7) + 2.5;
+    pickRing.setAttribute("cx", b.x);
+    pickRing.setAttribute("cy", cy);
+    pickRing.setAttribute("r", ringR);
+    pickRing.setAttribute("opacity", 1);
+
+    // Above the bubble by default; below it when that would run into the row above.
+    const above = cy - ringR - 4 - pickFont * 0.3;
+    const below = cy + ringR + 4 + pickFont * 0.9;
+    const top = rowY(picked.row) - swarmHalf;
+    const labelY = above - pickFont * 0.7 >= top ? above : below;
+    const text = `${b.value}% · ${b.count}`;
+    const half = textWidth(text, `bold ${pickFont}px sans-serif`) / 2;
+    const labelX = clamp(b.x, 10 + half, w - 10 - half);
+    for (const el of [pickLabelHalo, pickLabel]) {
+      el.setAttribute("x", labelX);
+      el.setAttribute("y", labelY);
+      el.setAttribute("opacity", 1);
+      el.textContent = text;
+    }
   }
 
   function renderStatus() {
     statusText.replaceChildren();
 
-    if (hovered !== null) {
-      const term = study.terms[hovered];
-      const s = condition.rows[hovered];
-      const guess = guesses.get(term.id);
+    // A named bubble is the most specific thing on screen, so it wins the line.
+    if (picked) {
+      const b = bubbleAt(picked.row, picked.value);
+      const term = study.terms[picked.row];
+      const s = condition.rows[picked.row];
+      if (b) {
+        const strong = document.createElement("strong");
+        strong.style.color = "#111";
+        strong.textContent = `${b.count} of the ${s.n} answers`;
+        statusText.append(
+          strong,
+          document.createTextNode(
+            ` for “${term.label}” put it at exactly ${b.value}%` +
+            `, that is ${((100 * b.count) / s.n).toFixed(1)}% of them` +
+            (term.lo === null
+              ? "."
+              : inside(b.value, term)
+                ? `, inside ${study.authority}'s ${term.rule}.`
+                : `, outside ${study.authority}'s ${term.rule}.`) +
+            (pinned ? " Click anywhere else, or press Escape, to release it." : ""),
+          ),
+        );
+        return;
+      }
+    }
+
+    if (labelRow !== null) {
+      const term = study.terms[labelRow];
+      const s = condition.rows[labelRow];
       const sentences = study.sentences?.[term.id];
 
       if (sentences) {
@@ -1045,43 +1144,42 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
       facts.style.color = "#111";
       const bits = [];
       if (term.short) bits.push(`${study.authority}: ${term.short}`);
-      if (guess !== undefined) bits.push(`you ${guess}%`);
-      if (isRevealed && s.n) {
+      if (s.n) {
         bits.push(`median ${fmt(s.median)}%`);
         bits.push(`commonest answer ${s.mode}% (${s.modeCount} of ${s.n})`);
         if (s.pctInRange !== null) bits.push(`${s.pctInRange.toFixed(0)}% in range`);
       }
-      facts.textContent = (bits.length ? " " + bits.join(" · ") + "." : "");
+      facts.textContent = bits.length ? " " + bits.join(" · ") + "." : "";
       statusText.appendChild(facts);
       return;
     }
 
-    if (!isRevealed) {
-      statusText.textContent =
-        "Each row is a word for chance, as it was put to " +
-        `${study.conditions[0].respondents} people ${study.setting}. What probability do you ` +
-        "think was meant by each one? Drag along a row to place your answer, or focus a row " +
-        "and use the arrow keys. Hover or focus a row to read more about it.";
-      return;
-    }
-
     const band = study.authority
-      ? ` The shaded band is the range ${study.authority} assigns to that word`
-      : " There is no official range for these phrases, so no band is shaded";
+      ? ` The shaded band is the range ${study.authority} assigns to that word,` +
+        " and a bubble is green when the answer lands inside it, orange when it misses."
+      : " There is no official range for these phrases, so no band is shaded and the" +
+        " bubbles carry no verdict.";
     statusText.textContent =
       "Every bubble gathers the people who gave the same answer, and its area is how many " +
-      `they were: the ${condition.respondents} in this group saw ${condition.blurb}. The box ` +
-      "covers the middle half of the answers and the thick line is the median." + band +
-      (guesses.size ? ", and the ring is your own answer." : ".") +
-      " Hover or focus a row to read more about it.";
+      `they were: the ${condition.respondents} in this group saw ${condition.blurb}.` + band +
+      " Point at a bubble for its exact count, or at a word on the left for its sentences" +
+      " and figures; click either to keep it up. Tab reaches the words, and the arrow keys" +
+      " step along a row from there.";
+  }
+
+  function rowSpeech(i, term, s) {
+    const rule = term.rule ? ` ${study.authority} means ${term.rule}.` : "";
+    const met = s.pctInRange === null ? "" : ` ${s.pctInRange.toFixed(0)} percent meet it.`;
+    const sel = picked && picked.row === i ? (() => {
+      const b = bubbleAt(i, picked.value);
+      return b ? ` Selected: ${b.count} answers at ${b.value} percent.` : "";
+    })() : "";
+    return `${term.label}, judged ${study.setting}.${rule} ` +
+      `${s.n} answers, median ${fmt(s.median)} percent, commonest ${s.mode} percent.${met}${sel}` +
+      " Click to keep this text up. Use the left and right arrow keys to step through the answers.";
   }
 
   function summaryText() {
-    if (!isRevealed) {
-      return `${study.title.join(" ")}. ${study.terms.length} words, one per row, each with a ` +
-        "0 to 100 percent slider for your own estimate. The responses are hidden until you " +
-        "reveal them.";
-    }
     const parts = study.terms.map((term, i) => {
       const s = condition.rows[i];
       const rule = term.rule ? `, which ${study.authority} uses to mean ${term.rule}` : "";
@@ -1093,7 +1191,7 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
       `who saw ${condition.blurb}: ${parts}.`;
   }
 
-  // --- pointer -------------------------------------------------------------------------
+  // --- pointer and keyboard --------------------------------------------------------------
   function pointerAt(e) {
     const r = svg.getBoundingClientRect();
     return {
@@ -1108,47 +1206,86 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
     return i >= 0 && i < study.terms.length ? i : null;
   }
 
-  const pctAt = px => clamp(Math.round(((px - axL) / (axR - axL)) * 100), 0, 100);
+  svg.addEventListener("pointermove", e => {
+    if (pinned) return;
+    const {px, py} = pointerAt(e);
+    const row = rowAt(py);
+    const hit = row === null ? null : hitTest(row, px, py);
+    const same = (picked?.row === row && picked?.value === hit?.value) || (!picked && !hit);
+    svg.style.cursor = hit ? "pointer" : "default";
+    if (same) return;
+    picked = hit ? {row, value: hit.value} : null;
+    update();
+  });
 
+  svg.addEventListener("pointerleave", () => {
+    if (pinned) return;
+    picked = null;
+    update();
+  });
+
+  // Tapping is the only way to inspect a bubble without a hover, so a click pins the
+  // highlight; clicking off a bubble, or pressing Escape, lets it go.
   svg.addEventListener("pointerdown", e => {
     const {px, py} = pointerAt(e);
-    const i = rowAt(py);
-    if (i === null) return;
-    // The row is locked at pointerdown, so a sloppy vertical drag adjusts the row the
-    // reader started on rather than jumping to its neighbour.
-    dragging = i;
-    svg.setPointerCapture(e.pointerId);
-    hitRects[i].focus?.();
-    hovered = i;
-    guesses.set(study.terms[i].id, pctAt(px));
-    update();
+    const row = rowAt(py);
+    const hit = row === null ? null : hitTest(row, px, py);
+    if (hit) {
+      const again = pinned && picked?.row === row && picked?.value === hit.value;
+      picked = again ? null : {row, value: hit.value};
+      pinned = !again;
+      update();
+      e.preventDefault();
+    } else if (picked || pinned) {
+      // Clicking bare plate lets a pinned bubble go, but a click on the word's own strip
+      // has to reach the label's handler, so nothing is prevented here.
+      clearPick();
+      update();
+    }
+  });
+
+  function stepWithKey(e, row) {
+    const bubbles = layouts[condition.id]?.[row];
+    if (!bubbles?.length) return;
+    if (e.key === "Escape") {
+      clearPick();
+      update();
+      return;
+    }
+    // Stepping follows the scale, not the drawing order, so the arrow keys walk left to
+    // right along the axis the way the eye does.
+    const byValue = [...bubbles].sort((a, b) => a.value - b.value);
+    const at = picked && picked.row === row
+      ? byValue.findIndex(b => b.value === picked.value)
+      : -1;
+    let next = at;
+    if (e.key === "ArrowLeft" || e.key === "ArrowDown") next = at < 0 ? byValue.length - 1 : at - 1;
+    else if (e.key === "ArrowRight" || e.key === "ArrowUp") next = at < 0 ? 0 : at + 1;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = byValue.length - 1;
+    else return;
     e.preventDefault();
-  });
-
-  svg.addEventListener("pointermove", e => {
-    if (dragging === null) return;
-    const {px} = pointerAt(e);
-    const id = study.terms[dragging].id;
-    const next = pctAt(px);
-    if (guesses.get(id) === next) return;
-    guesses.set(id, next);
+    next = clamp(next, 0, byValue.length - 1);
+    picked = {row, value: byValue[next].value};
+    pinned = false;
     update();
-  });
-
-  for (const type of ["pointerup", "pointercancel"]) {
-    svg.addEventListener(type, e => {
-      if (dragging === null) return;
-      dragging = null;
-      svg.releasePointerCapture(e.pointerId);
-    });
   }
 
+  container.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    if (!picked && labelRow === null) return;
+    clearPick();
+    labelRow = null;
+    labelPinned = false;
+    update();
+  });
+
   function value() {
+    const b = picked ? bubbleAt(picked.row, picked.value) : null;
     return {
       study: study.id,
       condition: condition.id,
-      revealed: isRevealed,
-      guesses: Object.fromEntries(guesses),
+      selected: b ? {term: study.terms[picked.row].id, value: b.value, count: b.count} : null,
     };
   }
 
@@ -1163,8 +1300,8 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH, reveal
 
   // Reflow with the container. Rebuilding relays every bubble, so the work is coalesced
   // into one animation frame rather than run once per resize notification. Resizing never
-  // emits "input": the study, the condition, the mode and the reader's answers are
-  // data-space state, unchanged by re-layout.
+  // emits "input": the study, the condition and the picked bubble are data-space state,
+  // unchanged by re-layout.
   if (typeof ResizeObserver === "function") {
     const maxW = Math.max(MIN_WIDTH, Math.round(width));
     let pending = 0;
