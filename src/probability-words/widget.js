@@ -395,7 +395,7 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) 
   let nRows, rowPitch, swarmHalf, figureHeight, rowBottom, tickY, sourceY;
 
   let w, marginL, marginR, plotL, plotR, axL, axR, unitR;
-  let longSentence, shortAxisName, showKey, showInRange, longMedian;
+  let longSentence, shortAxisName, showKey, showInRange;
   let titleFont, termFont, readFont, subReadFont, tickFont, sourceFont, keyFont, pickFont;
 
   // The laid-out bubbles for the current width, by condition then row; also what the
@@ -435,16 +435,15 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) 
     const labelFont = `bold ${termFont}px sans-serif`;
     const widest = Math.max(...study.terms.map(term => textWidth(term.label, labelFont)));
     marginL = clamp(Math.ceil(widest) + 18, 76, Math.round(w * 0.45));
-    marginR = lerp(66, 96); // fits "med 49.5%" at the narrow end, "median 100%" at the wide
+    // Only the studies with an official range have anything to put on the right, so the
+    // everyday phrases get that space back as axis instead of an empty column.
+    marginR = study.authority === null ? lerp(16, 26) : lerp(58, 78);
     plotL = marginL;
     plotR = w - marginR;
 
     // Stepwise, not continuous: text either fits or it does not, and switching at a
     // threshold beats letting it shrink until it is unreadable.
-    showInRange = w >= 450 && study.authority !== null;
-    // The number on the right is a median, and with the box plots gone nothing else on the
-    // row says so, so it carries its own word rather than standing there bare.
-    longMedian = w >= 450;
+    showInRange = study.authority !== null;
     shortAxisName = w < 430;
     showKey = w >= 520;
     longSentence = w >= 480;
@@ -901,8 +900,10 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) 
     readSub = [];
     study.terms.forEach((_, i) => {
       const cy = rowY(i);
+      // The share of the row that met the official range, which is the whole point of the
+      // colouring, set big with its qualifier under it rather than as one long line.
       const main = svgEl("text", {
-        x: w - 10, y: showInRange ? cy - 1 : cy + termFont * 0.35, "text-anchor": "end",
+        x: w - 10, y: cy - 1, "text-anchor": "end",
         "font-size": readFont, fill: "#333",
       });
       const sub = svgEl("text", {
@@ -997,9 +998,9 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) 
       const s = condition.rows[i];
       labelUnderlines[i].setAttribute("opacity", labelRow === i ? 1 : 0);
 
-      readMain[i].textContent = s.n ? `${longMedian ? "median" : "med"} ${fmt(s.median)}%` : "";
-      readSub[i].textContent =
-        showInRange && s.n && s.pctInRange !== null ? `${s.pctInRange.toFixed(0)}% in range` : "";
+      const hasRange = showInRange && s.n && s.pctInRange !== null;
+      readMain[i].textContent = hasRange ? `${s.pctInRange.toFixed(0)}%` : "";
+      readSub[i].textContent = hasRange ? "in range" : "";
 
       labelGroups[i].setAttribute("aria-label", rowSpeech(i, term, s));
     });
