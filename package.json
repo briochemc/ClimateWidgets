@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "observable preview",
     "build": "observable build",
-    "thumbnails": "bash scripts/take-thumbnails.sh"
+    "thumbnails": "node scripts/take-thumbnails.mjs"
   },
   "keywords": [],
   "author": "",

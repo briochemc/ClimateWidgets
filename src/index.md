@@ -73,7 +73,7 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     margin: 0 0 0.5rem;
     text-wrap: balance;
   }
-  /* The thumbnails are captured square (see scripts/take-thumbnails.sh); cover-cropping
+  /* The thumbnails are captured square (see scripts/take-thumbnails.mjs); cover-cropping
      is only a safety net so a re-captured image of another shape still fills the card. */
   .widget-cards .thumb {
     display: block;

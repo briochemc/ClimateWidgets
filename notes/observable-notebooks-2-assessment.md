@@ -23,7 +23,7 @@
 - All six widgets are plain ES modules that run buildless (proven by `embed/*.html` and the jsDelivr script-tag embed path, which bypasses Framework entirely).
 - What Framework actually provides: page shell/theme (`air`), sidebar/search/pager chrome, `FileAttachment` resolution, cross-block dataflow, hashed asset copying, and the stable `/<widget>/embed` URLs.
 - Notebook Kit has **no equivalent multi-page site chrome** today (no sidebar/search/pager); recreating it would need a custom page template. In practice this matters little here: the homepage card gallery (plain HTML/CSS, fully portable — only ~20 lines of Framework CSS variables and `grid`/`card` utility classes to inline) is the real navigation.
-- A migration would take roughly a day, with the risk concentrated in: the 8 embed pages' front matter + `#observablehq-*` CSS overrides; the stable public URLs `/embed`, `/embed-simple`, `/<widget>/embed`; and `scripts/take-thumbnails.sh` assuming `dist/<name>/embed.html`.
+- A migration would take roughly a day, with the risk concentrated in: the 8 embed pages' front matter + `#observablehq-*` CSS overrides; the stable public URLs `/embed`, `/embed-simple`, `/<widget>/embed`; and `scripts/take-thumbnails.mjs` assuming `dist/<name>/embed.html`.
 
 **Moodle embeds are safe under any migration.** The script-tag snippet loads `widget.js` and its data from jsDelivr straight out of the repo — no build tool involved. The iframe snippet just points at `https://briochemc.github.io/ClimateWidgets/<widget>/embed` and keeps working as long as any builder produces pages at those exact URLs. The copy-pastable HTML would be character-for-character identical in 2.0.
 
