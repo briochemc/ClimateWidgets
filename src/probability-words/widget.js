@@ -44,6 +44,7 @@
 const SVGNS = "http://www.w3.org/2000/svg";
 
 const BACKGROUND = "#f2f2f2";
+const BAR_BACKGROUND = "#e4e4e4"; // the group bar, a shade under the plate so it reads as a tray
 const FIGURE_WIDTH = 600;
 const MIN_WIDTH = 320;
 const TRANSITION = "480ms ease";
@@ -201,10 +202,14 @@ const STUDIES = [
     setting: "in sentences from the IPCC's Fourth Assessment Report",
     terms: IPCC_TERMS,
     sentences: IPCC_SENTENCES,
+    // `format` names the presentation format independently of the study's own condition
+    // ids, so that switching study lands on the matching group where the new study ran one.
     conditions: [
-      {id: "control", label: "Words only", blurb: "the word on its own"},
-      {id: "translation", label: "IPCC table shown", blurb: "the IPCC's translation table beside it"},
-      {id: "vn", label: "Numbers in the sentence", blurb: "the range printed in the sentence"},
+      {id: "control", format: "words", label: "Words only", blurb: "the word on its own"},
+      {id: "translation", format: "table", label: "IPCC table shown",
+       blurb: "the IPCC's translation table beside it"},
+      {id: "vn", format: "inline", label: "Numbers in the sentence",
+       blurb: "the range printed in the sentence"},
     ],
   },
   {
@@ -220,10 +225,13 @@ const STUDIES = [
     terms: ICD_TERMS,
     sentences: null, // the paper does not publish the statements alongside its data
     conditions: [
-      {id: "control", label: "Words only", blurb: "the word on its own"},
-      {id: "table", label: "Table on a click", blurb: "a table of ranges one click away"},
-      {id: "tool", label: "Tooltip on hover", blurb: "the range on hovering the word"},
-      {id: "brackets", label: "Numbers in the sentence", blurb: "the range printed in the sentence"},
+      {id: "control", format: "words", label: "Words only", blurb: "the word on its own"},
+      {id: "table", format: "table", label: "Table on a click",
+       blurb: "a table of ranges one click away"},
+      {id: "tool", format: "tooltip", label: "Tooltip on hover",
+       blurb: "the range on hovering the word"},
+      {id: "brackets", format: "inline", label: "Numbers in the sentence",
+       blurb: "the range printed in the sentence"},
     ],
   },
   {
@@ -239,7 +247,7 @@ const STUDIES = [
     terms: JUANCHICH_TERMS,
     sentences: null,
     conditions: [
-      {id: "all", label: "Everyone", blurb: "one of the four phrasings, at random"},
+      {id: "all", format: "words", label: "Everyone", blurb: "one of the four phrasings, at random"},
     ],
   },
   {
@@ -254,7 +262,7 @@ const STUDIES = [
     setting: "with no sentence around them",
     terms: null, // taken from the data, in the order the extraction script wrote them
     sentences: null,
-    conditions: [{id: "all", label: "Everyone", blurb: "the phrase on its own"}],
+    conditions: [{id: "all", format: "words", label: "Everyone", blurb: "the phrase on its own"}],
   },
 ];
 
@@ -453,13 +461,40 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) 
   const x = pct => axL + ((axR - axL) * pct) / 100;
   const rowY = i => ROW_TOP + rowPitch * (i + 0.5);
 
-  // The plate runs under the whole widget, buttons included, so it reads as one card; the
+  // The plate runs under the whole widget, tabs included, so it reads as one card; the
   // SVG keeps painting its own background rect in the same color (below), so the two merge
   // seamlessly here and the SVG still stands on its own if it is ever pulled out.
   const container = document.createElement("div");
   container.style.cssText =
     "font:16px sans-serif;color:#333;background:" + BACKGROUND + ";" +
     "padding:10px 12px 12px;border-radius:6px;box-sizing:border-box;";
+
+  // --- controls: the studies as a strip of tabs across the top, and the selected study's
+  // groups in a bar hanging off it, above the figure. The bar is tinted so it reads as a
+  // tray belonging to the active tab: the groups are *within* the study, not a second
+  // dimension beside it. The bar never disappears — a study with a single group says so in
+  // words rather than showing one permanently pressed button or nothing at all. ---
+  const uid = `probability-words-${++instances}`;
+
+  const tabRow = document.createElement("div");
+  tabRow.setAttribute("role", "tablist");
+  tabRow.setAttribute("aria-label", "Survey");
+  tabRow.style.cssText = "display:flex;flex-wrap:wrap;border-bottom:1px solid #c4c4c4;";
+  container.appendChild(tabRow);
+
+  // Everything under the strip belongs to the active tab.
+  const panel = document.createElement("div");
+  panel.setAttribute("role", "tabpanel");
+  container.appendChild(panel);
+
+  const groupBar = document.createElement("div");
+  groupBar.setAttribute("role", "group");
+  groupBar.setAttribute("aria-label", "Group within the survey");
+  groupBar.style.cssText =
+    "display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;" +
+    "margin-bottom:8px;border-radius:0 0 6px 6px;box-sizing:border-box;" +
+    "background:" + BAR_BACKGROUND + ";font-size:13px;line-height:1.35;color:#555;";
+  panel.appendChild(groupBar);
 
   // Narrower than MIN_WIDTH the figure stops reflowing and scrolls inside this wrapper
   // rather than pushing a horizontal scrollbar onto the whole page.
@@ -470,7 +505,7 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) 
   svg.style.display = "block";
   svg.style.touchAction = "pan-y";
   scroller.appendChild(svg);
-  container.appendChild(scroller);
+  panel.appendChild(scroller);
 
   // --- status area: the legend, or the hovered row's own detail, or the picked bubble's
   // exact count. Its height is reserved in buildAll so moving the pointer never reflows the
@@ -478,58 +513,90 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) 
   const statusText = document.createElement("div");
   statusText.style.cssText = "padding:8px 0 0;font-size:13px;line-height:1.35;color:#555;";
   statusText.setAttribute("aria-live", "polite");
-  container.appendChild(statusText);
+  panel.appendChild(statusText);
 
-  // --- study buttons, then the selected study's condition buttons. ---
-  const studyRow = document.createElement("div");
-  studyRow.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;";
-  container.appendChild(studyRow);
-
-  const conditionRow = document.createElement("div");
-  conditionRow.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;";
-  container.appendChild(conditionRow);
-
-  const studyButtons = studies.map(s => {
-    const b = pillButton(s.pill, () => {
-      if (study === s) return;
-      study = s;
-      // Keep the reader on the same presentation format where the new study also ran one,
-      // so switching studies compares like with like rather than resetting to the default.
-      condition = s.conditions.find(c => c.id === condition.id) ?? s.conditions[0];
-      clearPick();
-      applyStudyGeometry();
-      buildAll(w);
-      emit();
+  const studyTabs = studies.map((s, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.id = `${uid}-tab-${i}`;
+    b.setAttribute("role", "tab");
+    b.textContent = s.pill;
+    // The underline sits over the strip's rule, hence the negative margin. The weight never
+    // changes between states, so activating a tab cannot reflow the strip.
+    b.style.cssText =
+      "font:14px sans-serif;padding:8px 12px;cursor:pointer;background:none;" +
+      "border:0;border-bottom:3px solid transparent;margin-bottom:-1px;" +
+      "transition:color " + TRANS + ",border-color " + TRANS + ";";
+    b.addEventListener("click", () => selectStudy(s));
+    b.addEventListener("pointerenter", () => { if (study !== s) b.style.color = "#111"; });
+    b.addEventListener("pointerleave", () => styleTab(b, study === s));
+    // The strip is one tab stop; the arrow keys move between studies from there, as a
+    // tablist is expected to work.
+    b.addEventListener("keydown", e => {
+      const n = studies.length;
+      let next;
+      if (e.key === "ArrowRight") next = (i + 1) % n;
+      else if (e.key === "ArrowLeft") next = (i - 1 + n) % n;
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = n - 1;
+      else return;
+      e.preventDefault();
+      selectStudy(studies[next]);
+      studyTabs[next].focus();
     });
-    studyRow.appendChild(b);
+    tabRow.appendChild(b);
     return b;
   });
 
-  let conditionButtons = [];
-
-  function buildConditionButtons() {
-    conditionRow.replaceChildren();
-    conditionButtons = study.conditions.map(c => {
-      const b = pillButton(`${c.label} (${c.respondents})`, () => {
-        if (condition === c) return;
-        condition = c;
-        clearPick();
-        update();
-      });
-      conditionRow.appendChild(b);
-      return b;
-    });
-    // A study with a single group has nothing to switch between, so the row collapses
-    // rather than showing one permanently pressed button.
-    conditionRow.style.display = study.conditions.length > 1 ? "flex" : "none";
+  function selectStudy(s) {
+    if (study === s) return;
+    study = s;
+    // Keep the reader on the same presentation format where the new study also ran one,
+    // so switching studies compares like with like rather than resetting to the default.
+    condition = s.conditions.find(c => c.format === condition.format) ?? s.conditions[0];
+    clearPick();
+    // A row index from the old study means nothing in the new one.
+    labelRow = null;
+    labelPinned = false;
+    applyStudyGeometry();
+    buildAll(w);
+    emit();
   }
 
+  let conditionButtons = [];
+
+  function buildGroupBar() {
+    groupBar.replaceChildren();
+    const total = study.conditions.reduce((n, c) => n + c.respondents, 0);
+    const caption = document.createElement("span");
+    groupBar.appendChild(caption);
+
+    if (study.conditions.length > 1) {
+      const ways = WAYS[study.conditions.length] ?? String(study.conditions.length);
+      caption.textContent = `${num(total)} people, split ${ways} ways by what they saw:`;
+      conditionButtons = study.conditions.map(c => {
+        const b = pillButton(c.label, () => {
+          if (condition === c) return;
+          condition = c;
+          clearPick();
+          update();
+        });
+        groupBar.appendChild(b);
+        return b;
+      });
+    } else {
+      caption.textContent = `${num(total)} people, all shown ${study.conditions[0].blurb}.`;
+      conditionButtons = [];
+    }
+  }
+
+  // A shade smaller than the tabs, so the two levels read as levels.
   function pillButton(text, onClick) {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = text;
     b.style.cssText =
-      "font:14px sans-serif;padding:7px 14px;border-radius:999px;cursor:pointer;" +
+      "font:13px sans-serif;padding:5px 12px;border-radius:999px;cursor:pointer;" +
       "border:1px solid #ccc;background:#fff;color:#333;" +
       "transition:background-color " + TRANS + ",color " + TRANS + ",border-color " + TRANS + ";";
     b.addEventListener("click", onClick);
@@ -693,10 +760,10 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) 
     axR = fit.axR;
     layouts = fit.byCondition;
 
-    // Capped to the figure's own width rather than the page column's, so the pills stack
-    // onto more rows instead of spilling wider than the chart above them.
-    studyRow.style.maxWidth = `${w}px`;
-    conditionRow.style.maxWidth = `${w}px`;
+    // Capped to the figure's own width rather than the page column's, so the tabs and pills
+    // wrap onto more rows instead of spilling wider than the chart below them.
+    tabRow.style.maxWidth = `${w}px`;
+    groupBar.style.maxWidth = `${w}px`;
     statusText.style.maxWidth = `${w}px`;
     statusText.style.minHeight = `${(longSentence ? 3 : 5) * 1.35}em`;
 
@@ -966,7 +1033,7 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) 
     sourceLink.appendChild(source);
     svg.appendChild(sourceLink);
 
-    buildConditionButtons();
+    buildGroupBar();
     update({emit: false});
   }
 
@@ -988,7 +1055,8 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) 
 
   // --- update: everything that depends on the selection, never on layout ----------------
   function update({emit: shouldEmit = true} = {}) {
-    studyButtons.forEach((b, i) => stylePill(b, studies[i] === study));
+    studyTabs.forEach((b, i) => styleTab(b, studies[i] === study));
+    panel.setAttribute("aria-labelledby", studyTabs[studies.indexOf(study)].id);
     conditionButtons.forEach((b, i) => stylePill(b, study.conditions[i] === condition));
 
     for (const g of Object.values(swarmGroups)) g.style.opacity = 0;
@@ -1013,6 +1081,14 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) 
     if (shouldEmit) emit();
   }
 
+  // The active tab is the one tab stop in the strip; the others are reached by arrow key.
+  function styleTab(b, active) {
+    b.setAttribute("aria-selected", String(active));
+    b.tabIndex = active ? 0 : -1;
+    b.style.color = active ? "#111" : "#666";
+    b.style.borderBottomColor = active ? "#333" : "transparent";
+  }
+
   function stylePill(b, active) {
     b.setAttribute("aria-pressed", String(active));
     b.style.border = active ? "1px solid #333" : "1px solid #ccc";
@@ -1023,7 +1099,7 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) 
   // The group that read the range inside the sentence saw it there, so that is what this
   // shows while their answers are on screen — the reader sees what the respondents saw.
   function termAsShown(term) {
-    const inline = condition.id === "vn" || condition.id === "brackets";
+    const inline = condition.format === "inline";
     return term.label + (inline && term.rule ? ` (${term.rule})` : "");
   }
 
@@ -1326,6 +1402,17 @@ export function createProbabilityWordsWidget({data, width = FIGURE_WIDTH} = {}) 
 function fmt(v) {
   return v === null ? "" : Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
+
+function num(n) {
+  return n.toLocaleString("en-US");
+}
+
+// Counts of groups, spelt out in the bar's caption.
+const WAYS = {2: "two", 3: "three", 4: "four", 5: "five"};
+
+// Numbered per widget on the page, so the tab and panel ids that tie them together for
+// assistive technology stay unique when the widget is embedded more than once.
+let instances = 0;
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));

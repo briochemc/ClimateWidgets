@@ -52,11 +52,11 @@ import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
 ```js
 display(embedSnippets({
   embedPath: "probability-words/embed",
-  height: 830,
+  height: 880,
   title: "What people think a probability word means",
   note: "The figure's height depends on how many words the selected study asked about, from " +
     "420&nbsp;px for the three four-word studies to 684&nbsp;px for the 23 everyday phrases. " +
-    "The height above fits the tallest; drop it to about 600&nbsp;px if you only ever want " +
+    "The height above fits the tallest; drop it to about 660&nbsp;px if you only ever want " +
     "the four-word studies on screen.",
   script: `<div id="probability-words"></div>
 
