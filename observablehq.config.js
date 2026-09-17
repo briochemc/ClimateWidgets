@@ -17,6 +17,8 @@ export default {
     {name: "What a probability word means", path: "/probability-words/"},
   ],
   head: "",
+  // Embed pages disable the footer themselves, so this only shows on the regular pages.
+  footer: `Source code on <a href="https://github.com/briochemc/ClimateWidgets" target="_blank" rel="noopener">GitHub</a>.`,
   theme: "air",
   toc: false,
   pager: true,
