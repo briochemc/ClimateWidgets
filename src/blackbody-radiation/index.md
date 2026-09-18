@@ -20,7 +20,7 @@ const blackbody = view(createBlackbodyRadiationWidget());
 B_\lambda(\lambda, T) = \frac{2hc^2}{\lambda^5}\,\frac{1}{e^{hc/\lambda k_\mathrm{B} T} - 1}
 ```
 
-Its peak sits at ${tex`\lambda_\text{peak} = b/T`} with ${tex`b = 2898`} μm·K: 0.50 μm for the Sun, 10 μm for the Earth's surface. That is why a temperature slider can be drawn on a wavelength axis at all. Every temperature has one wavelength where it peaks, the handle sits at that wavelength, and each object's tick on the slider is directly below the peak of its gray curve. Hotter is to the left only because shorter wavelengths are. On the logarithmic axis the correspondence is even: doubling the temperature moves the peak the same distance to the left wherever you start.
+Its peak sits at ${tex`\lambda_\text{peak} = b/T`} with ${tex`b = 2898`} μm K: 0.50 μm for the Sun, 10 μm for the Earth's surface. That is why a temperature slider can be drawn on a wavelength axis at all. Every temperature has one wavelength where it peaks, the handle sits at that wavelength, and each object's tick on the slider is directly below the peak of its gray curve. Hotter is to the left only because shorter wavelengths are. On the logarithmic axis the correspondence is even: doubling the temperature moves the peak the same distance to the left wherever you start.
 
 **The curve never changes shape.** On the logarithmic axis every curve in the figure, black or gray, is the same shape: temperature slides it sideways and stretches it upward, and does nothing else. The coloured band marks visible light, 0.38 to 0.75 μm. At the Sun's temperature it sits under the peak. With the slider at a light-bulb filament the peak has moved well into the infrared and only the curve's short-wavelength foot is left in the band, which is why a filament wastes more than 90% of its power as heat. Below about 800 K nothing is left in the band at all.
 
@@ -34,7 +34,7 @@ Its peak sits at ${tex`\lambda_\text{peak} = b/T`} with ${tex`b = 2898`} μm·K:
 
 ## About the figure
 
-The constants are the exact SI values of ${tex`h`}, ${tex`c`} and ${tex`k_\mathrm{B}`}, and radiance is per micrometre of wavelength, which keeps the numbers readable at Earth temperatures (about 8 W·m⁻²·sr⁻¹·μm⁻¹ at the 288 K peak). The implementation was checked three ways: the numerical peak against Wien's constant, the numerical integral over wavelength against ${tex`\sigma T^4/\pi`} (they agree to six figures from 210 K to 20,000 K), and the percentile points against the table in Wikipedia's [Planck's law](https://en.wikipedia.org/wiki/Planck%27s_law#Percentiles) article. The ultraviolet, visible and infrared shares come from the series for the integral of Planck's law up to a given wavelength, with the visible band taken as 380 to 750 nm.
+The constants are the exact SI values of ${tex`h`}, ${tex`c`} and ${tex`k_\mathrm{B}`}, and radiance is per micrometre of wavelength, which keeps the numbers readable at Earth temperatures (about 8 W m<sup>−2</sup> sr<sup>−1</sup> μm<sup>−1</sup> at the 288 K peak). The implementation was checked three ways: the numerical peak against Wien's constant, the numerical integral over wavelength against ${tex`\sigma T^4/\pi`} (they agree to six figures from 210 K to 20,000 K), and the percentile points against the table in Wikipedia's [Planck's law](https://en.wikipedia.org/wiki/Planck%27s_law#Percentiles) article. The ultraviolet, visible and infrared shares come from the series for the integral of Planck's law up to a given wavelength, with the visible band taken as 380 to 750 nm.
 
 The wavelength axis is fixed: 0.05 to 100 μm on the logarithmic scale, 0 to 4 μm on the linear one, and switching between them morphs one scale into the other so that each curve can be followed across. The radiance axis runs to 1.5 times the current peak, except on the linear scale below 1449 K, where it holds at 1.5 times the peak of the 1449 K curve, the last one whose peak is in the left half of the axis. Its tick marks come from the 1–2–5 sequence and fade in and out according to how far apart they are on screen, so the axis rescales continuously instead of jumping. A reference curve is labelled while its peak is inside the frame and tall enough to read, and unlabelled otherwise. One caution about the logarithmic view: equal widths on a log axis are not equal ranges of wavelength, so there the area under the curve is not proportional to power. The percentages under the figure are computed from the integral, not read off the picture.
 
@@ -45,7 +45,7 @@ The wavelength axis is fixed: 0.05 to 100 μm on the logarithmic scale, 0 to 4 �
 | Object | Temperature | Note |
 |---|---|---|
 | Mars | 210 K | Global mean surface temperature |
-| Earth from space | 255 K | Effective emission temperature: what balances the 240 W·m⁻² of absorbed sunlight |
+| Earth from space | 255 K | Effective emission temperature: what balances the 240 W m<sup>−2</sup> of absorbed sunlight |
 | Ice | 273 K | Melting point of water, 0 °C |
 | Earth's surface | 288 K | Global mean surface temperature, about 15 °C |
 | Human body | 306 K | Skin, about 33 °C, rather than the 37 °C core: skin is what radiates |

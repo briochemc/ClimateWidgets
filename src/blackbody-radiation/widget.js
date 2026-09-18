@@ -547,7 +547,18 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
       x: titleFont, y: yMid, transform: `rotate(-90 ${titleFont} ${yMid})`, "text-anchor": "middle",
       "font-size": titleFont, fill: "#555",
     }, svg);
-    yTitle.textContent = "Spectral radiance (W·m⁻²·sr⁻¹·μm⁻¹)";
+    // The exponents are set as real superscripts with a true minus sign (U+2212). Unicode's
+    // ready-made superscript minus, U+207B, would be less work, but Helvetica and its kin
+    // draw it as a short hyphen. Each run is a tspan; a raised one is smaller and shifted up
+    // by `rise`, and the run after it shifts back down by the same amount.
+    const rise = 0.36 * titleFont;
+    // Units are separated by a thin space (U+2009), the other SI-sanctioned form, not a dot.
+    const runs = ["Spectral radiance (W\u2009m", "^−2", "\u2009sr", "^−1", "\u2009μm", "^−1", ")"];
+    runs.forEach((run, i) => {
+      const raised = run.startsWith("^"), afterRaised = i > 0 && runs[i - 1].startsWith("^");
+      const t = svgEl("tspan", raised ? {dy: -rise, "font-size": 0.72 * titleFont} : afterRaised ? {dy: rise} : {}, yTitle);
+      t.textContent = raised ? run.slice(1) : run;
+    });
     const xTitle = svgEl("text", {
       x: (plotL + plotR) / 2, y: plotB + 36, "text-anchor": "middle", "font-size": titleFont, fill: "#555",
     }, svg);
