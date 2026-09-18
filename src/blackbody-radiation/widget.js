@@ -150,11 +150,15 @@ export function blackbodyCss(T) {
 // objects are not perfect black bodies — a flame or a gas least of all — so each gray curve
 // is the black body at that object's temperature, which is an upper bound on what the
 // object itself emits.
+//
+// `emphasis` marks the two this site is about, the Sun and the Earth's surface: what arrives
+// and what leaves. Their curves are drawn at double width and darker, and their labels
+// bolder, so that wherever the slider is, those two can be picked out of the family.
 export const OBJECTS = [
   {name: "Mars", T: 210},
   {name: "Earth from space", T: 255},
   {name: "Ice", T: 273},
-  {name: "Earth's surface", T: 288},
+  {name: "Earth's surface", T: 288, emphasis: true},
   {name: "Human body", T: 306},
   {name: "Kettle", T: 373},
   {name: "Oven", T: 523},
@@ -164,7 +168,7 @@ export const OBJECTS = [
   {name: "Molten iron", T: 1811},
   {name: "Light bulb", T: 2700},
   {name: "Betelgeuse", T: 3600},
-  {name: "Sun", T: 5772},
+  {name: "Sun", T: 5772, emphasis: true},
   {name: "Sirius", T: 9940},
   {name: "Rigel", T: 12100},
 ];
@@ -334,7 +338,8 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   const hint = document.createElement("div");
   hint.style.cssText = "padding:8px 0 0;color:#888;font-size:14px;";
   hint.textContent =
-    "Drag the slider or the peak itself, pick an object, or type a temperature. With the " +
+    "Drag the slider or the peak itself, pick an object (its button, or its label on a curve), " +
+    "or type a temperature. With the " +
     "figure focused, ← and → move the peak by 1% (10% with Shift), ↑ and ↓ make it hotter " +
     "or cooler; Page Up and Page Down step between the objects.";
   container.appendChild(hint);
@@ -385,6 +390,19 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   const Y_HOLD_LN = Math.log((WIEN_B * 1e6) / (LINEAR_MAX / 2));
   const yScaleT = lnT => Math.exp(lnT + mix * Math.max(0, Y_HOLD_LN - lnT));
 
+  // Where the black body at Tref falls back through the radiance `level` on the long side of
+  // its peak, in μm: where an emphasised curve's label goes once the peak is out of the frame.
+  // Planck's law only falls beyond its peak, so bisect, in log wavelength.
+  const LIMB_V = 1.3;
+  function limbWavelength(Tref, level) {
+    let lo = Math.log(peakWavelength(Tref)), hi = Math.log(1e-2); // the peak, to 1 cm
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2;
+      if (planck(Math.exp(mid), Tref) > level) lo = mid; else hi = mid;
+    }
+    return Math.exp(lo) * 1e6;
+  }
+
   // Path of the black body at Tref, in a frame sized for the black body at Ty. Its own peak
   // is added to the samples: on the linear axis a star's whole curve is a few pixels wide,
   // and the columns either side of the peak would otherwise clip the top off it.
@@ -403,6 +421,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   }
 
   // ---- static scaffolding, rebuilt on resize ------------------------------------------------
+  let labelHits = []; // where the legible reference labels are, for pointer hit-testing
   let refPaths, refLabels, curve, curveFill, underClip, visUnder, curveLabel, guide, yTickG;
   let handleG, handleDot, focusRing, sliderLabel, endLabels, trackL, trackR;
 
@@ -498,7 +517,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     }
 
     const refs = svgEl("g", {"clip-path": `url(#${uid}-plot)`, fill: "none", "stroke-width": 1}, svg);
-    refPaths = OBJECTS.map(() => svgEl("path", {}, refs));
+    refPaths = OBJECTS.map(o => svgEl("path", o.emphasis ? {"stroke-width": 2} : {}, refs));
 
     const active = svgEl("g", {"clip-path": `url(#${uid}-plot)`}, svg);
     curveFill = svgEl("path", {fill: "rgba(0,0,0,0.04)"}, active);
@@ -533,7 +552,10 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     bandLabel("infrared", (irFrom + plotR) / 2, "middle", smoothstep(1, 1.3, (plotR - irFrom) / textW("infrared")));
 
     refLabels = OBJECTS.map(o => {
-      const t = svgEl("text", {"text-anchor": "middle", "font-size": labelFont, fill: "#555", ...halo}, svg);
+      const t = svgEl("text", {
+        "text-anchor": "middle", "font-size": labelFont, ...halo,
+        ...(o.emphasis ? {fill: "#333", "font-weight": 600} : {fill: "#555"}),
+      }, svg);
       t.textContent = o.name;
       return t;
     });
@@ -689,6 +711,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     // Reference curves and their labels. p is a reference's peak height in units of the
     // frame's; its peak's x is fixed, directly above its tick on the slider.
     const placed = [{x: ownX, y: ownY, half: ownHalf}];
+    labelHits = [];
     const order = OBJECTS.map((o, i) => ({o, i, r: o.T / T})).sort((a, b) => Math.abs(Math.log(a.r)) - Math.abs(Math.log(b.r)));
     for (const {o, i} of order) {
       const p = (o.T / Ty) ** 5;
@@ -697,21 +720,36 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
       let opacity = 0;
       if (visible) {
         // Legible means the peak is inside the frame and the curve is not pressed flat.
-        opacity = smoothstep(0.05, 0.11, p) * (1 - smoothstep(1.22, 1.4, p));
-        opacity *= 1 - smoothstep(plotR - 6, plotR + 6, sliderX(o.T)); // peak off the axis
-        const half = labelHalfWidth(o.name, labelFont);
-        const x = clamp(sliderX(o.T), plotL + half + 3, plotR - half - 3), y = vy(p) - 7;
+        const half = labelHalfWidth(o.name, labelFont) * (o.emphasis ? 1.06 : 1); // bold runs wider
+        const peakOnAxis = 1 - smoothstep(plotR - 6, plotR + 6, sliderX(o.T));
+        let x = clamp(sliderX(o.T), plotL + half + 3, plotR - half - 3), y = vy(p) - 7;
+        if (o.emphasis) {
+          // The Sun and the Earth keep their names when their peak leaves through the top:
+          // the label slides off the peak onto the curve's descending limb, to sit beside it
+          // just inside the frame (at LIMB_V of the frame's peak). k is how far along that
+          // slide it is. It goes only when the limb itself is off the axis.
+          const k = smoothstep(1.15, 1.45, p);
+          const limbX = lx(limbWavelength(o.T, LIMB_V * peakRadiance(Ty)));
+          const limbFits = 1 - smoothstep(plotR - 2 * half - 14, plotR - 2 * half - 8, limbX);
+          opacity = smoothstep(0.05, 0.11, p) * ((1 - k) * peakOnAxis + k * limbFits);
+          x += (limbX + 6 + half - x) * k;
+          y += (vy(LIMB_V) + 4 - y) * k;
+        } else {
+          opacity = smoothstep(0.05, 0.11, p) * (1 - smoothstep(1.22, 1.4, p)) * peakOnAxis;
+        }
         // Closest-in-temperature labels are placed first; a later one that would overprint
         // an earlier one fades out in proportion to how much they overlap vertically.
         for (const q of placed) {
           if (Math.abs(q.x - x) < q.half + half + 4) opacity *= smoothstep(9, 15, Math.abs(q.y - y));
         }
         if (opacity > 0.01) placed.push({x, y, half});
+        if (opacity > 0.4) labelHits.push({i, x, y, half}); // legible enough to be a target
         setAttrs(refLabels[i], {x: x.toFixed(1), y: y.toFixed(1)});
         refPaths[i].setAttribute("d", curvePath(o.T, Ty));
         // Unlabelled curves stay in view but recede, so a fan of hotter objects crossing the
         // frame reads as background and the one or two labelled neighbours stand out.
-        refPaths[i].setAttribute("stroke", mixGray(0xd0, 0x80, opacity));
+        // The Sun and the Earth recede less than the rest: they are meant to be found.
+        refPaths[i].setAttribute("stroke", o.emphasis ? mixGray(0x9c, 0x55, opacity) : mixGray(0xd0, 0x80, opacity));
       }
       refLabels[i].setAttribute("opacity", opacity.toFixed(3));
     }
@@ -883,9 +921,24 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     return roundK(sliderT(clamp(px, trackL, trackR)));
   }
 
+  // A reference curve's label is a button for that object: pressing it carries the active
+  // curve onto that one, exactly as the object's button below the figure does. The target is
+  // padded to roughly a fingertip, and it takes precedence over dragging the plot.
+  function labelAt(px, py) {
+    return labelHits.find(h => Math.abs(px - h.x) <= h.half + 6 && py >= h.y - labelFont - 8 && py <= h.y + 8);
+  }
+
   svg.addEventListener("pointerdown", e => {
     const {px, py} = pointerAt(e);
-    if (morph || (!overSlider(py) && !overPlot(px, py))) return; // mid-switch the scale is moving
+    if (morph) return; // mid-switch the scale is moving
+    const hit = labelAt(px, py);
+    if (hit) {
+      svg.focus();
+      setTarget(OBJECTS[hit.i].T, "tween");
+      e.preventDefault();
+      return;
+    }
+    if (!overSlider(py) && !overPlot(px, py)) return;
     dragging = true;
     svg.setPointerCapture(e.pointerId);
     svg.focus();
@@ -897,7 +950,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   svg.addEventListener("pointermove", e => {
     const {px, py} = pointerAt(e);
     if (!dragging) {
-      svg.style.cursor = overSlider(py) || overPlot(px, py) ? "ew-resize" : "default";
+      svg.style.cursor = labelAt(px, py) ? "pointer" : overSlider(py) || overPlot(px, py) ? "ew-resize" : "default";
       return;
     }
     setTarget(temperatureAt(px), "follow");
