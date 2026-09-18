@@ -279,6 +279,17 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   tempField.append("Temperature", tempInput, "K");
   controls.appendChild(tempField);
 
+  // Plays the tour again after the reader has taken over (or stops it), in whichever scale
+  // is showing. Words rather than a ▶ glyph, which iOS swaps for a colour emoji.
+  const tourButton = document.createElement("button");
+  tourButton.type = "button";
+  tourButton.textContent = "Play tour";
+  tourButton.style.cssText =
+    "font:13px sans-serif;color:#333;background:#fff;border:1px solid #ccc;border-radius:999px;" +
+    "padding:3px 12px;cursor:pointer;";
+  tourButton.addEventListener("click", () => (touring ? stopTour() : startTour(0)));
+  controls.appendChild(tourButton);
+
   // Applied when the entry is finished (Enter, or leaving the box), not per keystroke: "57"
   // on the way to "5772" is not a temperature anyone asked for. Out-of-range entries are
   // clamped to the slider's range, and an empty or unreadable one puts the current value back.
@@ -306,7 +317,8 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     b.style.cssText =
       "font:13px sans-serif;padding:3px 10px;cursor:pointer;border:1px solid #ccc;" +
       `border-radius:${i ? "0 999px 999px 0" : "999px 0 0 999px"};${i ? "margin-left:-7px;" : ""}`;
-    b.addEventListener("click", () => { stopTour(); setScale(name); });
+    // Switching scale does not end the tour: it changes how the tour is seen, not where it is.
+    b.addEventListener("click", () => setScale(name));
     scaleBar.appendChild(b);
     return b;
   });
@@ -345,7 +357,9 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     "Drag the slider or the peak itself, pick an object (its button, or its label on a curve), " +
     "or type a temperature. With the figure focused, ← and → move the peak by 1% (10% with " +
     "Shift), ↑ and ↓ make it hotter or cooler; Page Up and Page Down step between the objects.";
-  const HINT_TOUR = "Touring the objects — drag the slider, pick an object or press a key to take over.";
+  const HINT_TOUR =
+    "Touring the objects — drag the slider, pick an object or press a key to take over; " +
+    "Play tour starts it again.";
   hint.textContent = HINT_IDLE;
   container.appendChild(hint);
 
@@ -1044,8 +1058,10 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   // each, so the point of the figure (the peak walking across the spectrum while the radiance
   // axis climbs through nine orders of magnitude) lands without anyone having to touch it.
   // Same timing and manners as temperature-trend's tour: it loops until the first sign of the
-  // reader taking over, which ends it for good, because a control that moves on its own under
-  // your cursor is maddening. Each hop is the widget's ordinary eased glide, the one the
+  // reader taking over the temperature, which ends it, because a control that moves on its
+  // own under your cursor is maddening. It does not come back by itself; the Play tour button
+  // brings it back. Switching between the log and linear scales is not taking over, and the
+  // tour carries on through the morph. Each hop is the widget's ordinary eased glide, the one the
   // buttons use, never shorter than TOUR_GLIDE; the long way round, from the hottest object
   // back to the coldest, takes the glide's own maximum instead.
   const TOUR_HOLD = 2000;  // ms resting on each object
@@ -1060,6 +1076,14 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     clearTimeout(tourTimer);
     tourTimer = null;
     hint.textContent = HINT_IDLE;
+    showTouring();
+  }
+
+  function showTouring() {
+    tourButton.textContent = touring ? "Stop tour" : "Play tour";
+    tourButton.style.borderColor = touring ? ACCENT : "#ccc";
+    tourButton.style.color = touring ? ACCENT : "#333";
+    tourButton.setAttribute("aria-pressed", touring);
   }
 
   function tourStep(i) {
@@ -1072,13 +1096,18 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     tourTimer = setTimeout(() => tourStep((i + 1) % OBJECTS.length), glide + TOUR_HOLD);
   }
 
-  function startTour() {
+  // `delay` is the pause before the first hop: a rest on the opening frame when the tour
+  // starts by itself, none when the reader has just asked for it.
+  function startTour(delay = TOUR_HOLD) {
     if (touring) return;
+    tourWatcher?.disconnect();
+    tourWatcher = null;
     touring = true;
     hint.textContent = HINT_TOUR;
-    // Begin with the object after wherever the widget opened (the Sun, unless told otherwise).
+    showTouring();
+    // Begin with the next object up from wherever the temperature is now.
     const next = OBJECTS.findIndex(o => o.T > target);
-    tourTimer = setTimeout(() => tourStep(next < 0 ? 0 : next), TOUR_HOLD);
+    tourTimer = setTimeout(() => tourStep(next < 0 ? 0 : next), delay);
   }
 
   // Two reasons not to start: a reader who has asked the system for reduced motion should
