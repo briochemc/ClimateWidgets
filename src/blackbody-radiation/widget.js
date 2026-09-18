@@ -9,11 +9,12 @@
 //
 // A toggle swaps the log axis for a linear one, 0 to LINEAR_MAX μm, and the slider stays
 // under the peak: it is always the wavelength scale read through Wien's law, whatever that
-// scale is. Linear is the textbook picture, and it suits the hot end of the range. It also
-// shows at once why the default is log: anything cooler than about 720 K peaks beyond the
-// end of the axis, so its curve is not in the picture at all, and the slider, which can
-// only reach the wavelengths the axis has, stops there too (the buttons and the keyboard
-// still go colder). The switch is a morph, not a cut: the scale is a blend of the two,
+// scale is. Linear is the textbook picture, and it suits the cold end of the range, where
+// the Earth is. It also shows at once why the default is log: on an axis long enough to
+// hold the Earth's curve, the Sun's is a spike against the left edge and the hot third of
+// the slider is a few pixels wide. (The slider can only reach wavelengths the axis has, so
+// its track is clipped to the axis; with this range nothing is lost, since the coldest
+// peak, 16 μm, is inside it.) The switch is a morph, not a cut: the scale is a blend of the two,
 // `mix`, eased from 0 to 1, so every curve, tick and label travels to its new place.
 //
 // Only the radiance axis follows the curve, running from 0 to Y_SPAN times the peak. The
@@ -180,11 +181,13 @@ const T_MIN = 180, T_MAX = 20000;
 // margin also shortens the slider, which only spans the stretch the peak can reach, so the
 // margins are no wider than it takes for the curve to be down to about 1% at either edge.
 const LAMBDA_MIN = 0.05, LAMBDA_MAX = 100;
-// The linear alternative runs from 0 to this, μm. No choice holds both ends of the slider.
-// This one is for the hot end: the Sun's curve fills the left third with its tail in view,
-// a filament or molten iron fills the frame, and everything that peaks beyond 4 μm (cooler
-// than 724 K, which includes the Earth) is simply off the axis.
-const LINEAR_MAX = 4;
+// The linear alternative runs from 0 to this, μm. No choice serves both ends of the slider.
+// This one is for the cold end: the Earth's surface peaks at 10 μm, the middle of the axis,
+// and every peak the slider can reach (out to 16 μm at T_MIN) is on it, at the price of
+// squeezing the Sun's whole curve into the first tenth. Everything else that depends on the
+// range (the ticks, the slider's extent, where the radiance axis stops following) is
+// derived from this constant.
+const LINEAR_MAX = 20;
 const MORPH_MS = 650;
 const Y_SPAN = 1.5; // y-axis runs from 0 to this many peak radiances
 const SAMPLES = 480;
@@ -284,6 +287,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     if (tempInput.value.trim() !== "" && Number.isFinite(typed)) setTarget(Math.round(typed), "tween");
     tempInput.value = target;
   }
+  tempInput.addEventListener("focus", () => stopTour());
   tempInput.addEventListener("change", commitTemperature);
   tempInput.addEventListener("keydown", e => {
     if (e.key === "Enter") { commitTemperature(); tempInput.blur(); }
@@ -302,7 +306,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     b.style.cssText =
       "font:13px sans-serif;padding:3px 10px;cursor:pointer;border:1px solid #ccc;" +
       `border-radius:${i ? "0 999px 999px 0" : "999px 0 0 999px"};${i ? "margin-left:-7px;" : ""}`;
-    b.addEventListener("click", () => setScale(name));
+    b.addEventListener("click", () => { stopTour(); setScale(name); });
     scaleBar.appendChild(b);
     return b;
   });
@@ -337,11 +341,12 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
 
   const hint = document.createElement("div");
   hint.style.cssText = "padding:8px 0 0;color:#888;font-size:14px;";
-  hint.textContent =
+  const HINT_IDLE =
     "Drag the slider or the peak itself, pick an object (its button, or its label on a curve), " +
-    "or type a temperature. With the " +
-    "figure focused, ← and → move the peak by 1% (10% with Shift), ↑ and ↓ make it hotter " +
-    "or cooler; Page Up and Page Down step between the objects.";
+    "or type a temperature. With the figure focused, ← and → move the peak by 1% (10% with " +
+    "Shift), ↑ and ↓ make it hotter or cooler; Page Up and Page Down step between the objects.";
+  const HINT_TOUR = "Touring the objects — drag the slider, pick an object or press a key to take over.";
+  hint.textContent = HINT_IDLE;
   container.appendChild(hint);
 
   function svgEl(tag, attrs = {}, parent) {
@@ -382,7 +387,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   // The temperature the radiance axis is sized for: its top is Y_SPAN times this body's peak.
   // On the log axis that is the displayed temperature itself, so the active curve always
   // fills the frame. On the linear axis it stops following once the peak passes the middle
-  // of the axis (2 μm, 1449 K): a cooler body's curve is increasingly cut off by the right
+  // of the axis (LINEAR_MAX / 2, so 10 μm and 290 K): a cooler body's curve is increasingly cut off by the right
   // edge, and a frame sized to a peak that is barely or not at all in view would inflate the
   // stump that is. Held at the last curve that sits comfortably inside the axis, the frame
   // lets cooler curves do what they really do, which is sink. Blended by `mix`, in log T, so
@@ -512,8 +517,11 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
       }
     }
     if (mix > 0) {
-      const step = plotW / (LINEAR_MAX / 0.5) >= 44 ? 5 : 10; // in tenths of a μm
-      for (let k = 0; k <= LINEAR_MAX * 10; k++) xTick(k / 10, k % step === 0, k % step === 0, "#444", mix);
+      // In tenths of a μm, to keep the loop in integers. The labelled step is the finest of
+      // these that leaves the labels 44 px apart; each has a short unlabelled tick to go with it.
+      const pxPerTenth = plotW / (LINEAR_MAX * 10);
+      const [major, minor] = [[5, 1], [10, 5], [20, 10], [50, 10], [100, 50]].find(([m]) => m * pxPerTenth >= 44) ?? [100, 50];
+      for (let k = 0; k <= LINEAR_MAX * 10; k += minor) xTick(k / 10, k % major === 0, k % major === 0, "#444", mix);
     }
 
     const refs = svgEl("g", {"clip-path": `url(#${uid}-plot)`, fill: "none", "stroke-width": 1}, svg);
@@ -793,7 +801,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     temp.style.cssText = "color:#888;font-size:12px;";
     temp.textContent = formatK(o.T);
     b.append(dot, o.name, temp);
-    b.addEventListener("click", () => setTarget(o.T, "tween"));
+    b.addEventListener("click", () => { stopTour(); setTarget(o.T, "tween"); });
     chipBar.appendChild(b);
     return b;
   });
@@ -832,8 +840,9 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   // ---- motion -------------------------------------------------------------------------------
   // "follow": the figure trails the slider with a short exponential lag, so a drag, a key
   // press or a click on the track all glide. "tween": a fixed-duration ease for the chips,
-  // long enough to watch the axes travel across several decades.
-  function setTarget(T, mode) {
+  // long enough to watch the axes travel across several decades (`minDuration` lets the tour
+  // ask for at least its own glide time).
+  function setTarget(T, mode, minDuration = 0) {
     T = clamp(T, T_MIN, T_MAX);
     if (T !== target) {
       target = T;
@@ -848,7 +857,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
       return;
     }
     tween = mode === "tween"
-      ? {from: shownLn, to, start: performance.now(), duration: clamp(350 + 450 * Math.abs(to - shownLn), 350, 1600)}
+      ? {from: shownLn, to, start: performance.now(), duration: Math.max(minDuration, clamp(350 + 450 * Math.abs(to - shownLn), 350, 1600))}
       : null;
     if (raf === null) {
       lastFrame = performance.now();
@@ -930,6 +939,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
 
   svg.addEventListener("pointerdown", e => {
     const {px, py} = pointerAt(e);
+    stopTour();
     if (morph) return; // mid-switch the scale is moving
     const hit = labelAt(px, py);
     if (hit) {
@@ -977,6 +987,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     else if (e.key === "Home") T = T_MAX; // the left end of the track
     else if (e.key === "End") T = T_MIN;
     else return;
+    stopTour();
     e.preventDefault();
     setTarget(T, e.key.startsWith("Page") || e.key === "Home" || e.key === "End" ? "tween" : "follow");
   });
@@ -1017,6 +1028,65 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
       if (fitted !== w) { applyLayout(fitted); build(); }
     });
     ro.observe(container);
+  }
+
+  // Tour: visit the objects in button order, coldest to hottest and round again, resting on
+  // each, so the point of the figure (the peak walking across the spectrum while the radiance
+  // axis climbs through nine orders of magnitude) lands without anyone having to touch it.
+  // Same timing and manners as temperature-trend's tour: it loops until the first sign of the
+  // reader taking over, which ends it for good, because a control that moves on its own under
+  // your cursor is maddening. Each hop is the widget's ordinary eased glide, the one the
+  // buttons use, never shorter than TOUR_GLIDE; the long way round, from the hottest object
+  // back to the coldest, takes the glide's own maximum instead.
+  const TOUR_HOLD = 2000;  // ms resting on each object
+  const TOUR_GLIDE = 900;  // ms gliding between two neighbours
+  let touring = false, tourTimer = null, tourWatcher = null;
+
+  function stopTour() {
+    tourWatcher?.disconnect();
+    tourWatcher = null;
+    if (!touring) return;
+    touring = false;
+    clearTimeout(tourTimer);
+    tourTimer = null;
+    hint.textContent = HINT_IDLE;
+  }
+
+  function tourStep(i) {
+    if (!touring) return;
+    // A cell that re-runs leaves the previous widget detached but still holding a timer.
+    if (container.isConnected === false) return stopTour();
+    const from = shownLn;
+    setTarget(OBJECTS[i].T, "tween", TOUR_GLIDE);
+    const glide = Math.max(TOUR_GLIDE, clamp(350 + 450 * Math.abs(Math.log(OBJECTS[i].T) - from), 350, 1600));
+    tourTimer = setTimeout(() => tourStep((i + 1) % OBJECTS.length), glide + TOUR_HOLD);
+  }
+
+  function startTour() {
+    if (touring) return;
+    touring = true;
+    hint.textContent = HINT_TOUR;
+    // Begin with the object after wherever the widget opened (the Sun, unless told otherwise).
+    const next = OBJECTS.findIndex(o => o.T > target);
+    tourTimer = setTimeout(() => tourStep(next < 0 ? 0 : next), TOUR_HOLD);
+  }
+
+  // Two reasons not to start: a reader who has asked the system for reduced motion should
+  // not get an animation they never requested, and starting while the widget is off-screen
+  // would run the tour before it is ever looked at. Reduced motion is also what keeps the
+  // thumbnail capture deterministic: it never tours, so the frame is always the opening one.
+  if (!reduceMotion) {
+    if (typeof IntersectionObserver === "function") {
+      tourWatcher = new IntersectionObserver(entries => {
+        if (!entries.some(entry => entry.isIntersecting)) return;
+        tourWatcher.disconnect();
+        tourWatcher = null;
+        startTour();
+      }, {threshold: 0.3});
+      tourWatcher.observe(container);
+    } else {
+      startTour();
+    }
   }
 
   return container;
