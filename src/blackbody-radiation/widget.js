@@ -7,12 +7,14 @@
 // under the peak it controls. Dragging the handle drags the peak. The price is direction:
 // wavelength grows to the right, so temperature grows to the left.
 //
-// A toggle swaps the log axis for a linear one, 0 to LINEAR_MAX µm, and the slider stays
+// A toggle swaps the log axis for a linear one, 0 to LINEAR_MAX μm, and the slider stays
 // under the peak: it is always the wavelength scale read through Wien's law, whatever that
-// scale is. Linear is the textbook picture and suits the Earth's end of the range; it also
-// shows at once why the default is log, because everything hotter than a filament becomes a
-// spike against the left edge. The switch is a morph, not a cut: the scale is a blend of
-// the two, `mix`, eased from 0 to 1, so every curve, tick and label travels to its new place.
+// scale is. Linear is the textbook picture, and it suits the hot end of the range. It also
+// shows at once why the default is log: anything cooler than about 720 K peaks beyond the
+// end of the axis, so its curve is not in the picture at all, and the slider, which can
+// only reach the wavelengths the axis has, stops there too (the buttons and the keyboard
+// still go colder). The switch is a morph, not a cut: the scale is a blend of the two,
+// `mix`, eased from 0 to 1, so every curve, tick and label travels to its new place.
 //
 // Only the radiance axis follows the curve, running from 0 to Y_SPAN times the peak. The
 // peak grows as T⁵, nine orders of magnitude over the slider's range, so its tick marks are
@@ -168,16 +170,17 @@ export const OBJECTS = [
 ];
 
 const T_MIN = 180, T_MAX = 20000;
-// The fixed wavelength axis, µm. The peak travels from 0.145 µm at T_MAX to 16 µm at T_MIN,
+// The fixed wavelength axis, μm. The peak travels from 0.145 μm at T_MAX to 16 μm at T_MIN,
 // and the curve has a short rise on the blue side of its peak and a long tail on the red
 // side, so the axis needs margin at both ends, more on the right. But every decade of
 // margin also shortens the slider, which only spans the stretch the peak can reach, so the
 // margins are no wider than it takes for the curve to be down to about 1% at either edge.
 const LAMBDA_MIN = 0.05, LAMBDA_MAX = 100;
-// The linear alternative runs from 0 to this, µm. Any choice strands one end of the slider:
-// this one keeps the long tail of a 288 K curve in view (it is down to 6% at 40 µm) and
-// gives up on the stars.
-const LINEAR_MAX = 40;
+// The linear alternative runs from 0 to this, μm. No choice holds both ends of the slider.
+// This one is for the hot end: the Sun's curve fills the left third with its tail in view,
+// a filament or molten iron fills the frame, and everything that peaks beyond 4 μm (cooler
+// than 724 K, which includes the Earth) is simply off the axis.
+const LINEAR_MAX = 4;
 const MORPH_MS = 650;
 const Y_SPAN = 1.5; // y-axis runs from 0 to this many peak radiances
 const SAMPLES = 480;
@@ -306,7 +309,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   }
 
   // ---- scales -------------------------------------------------------------------------------
-  // x is wavelength (µm in): log, linear, or mid-switch a blend of the two, which is still
+  // x is wavelength (μm in): log, linear, or mid-switch a blend of the two, which is still
   // monotonic, so still a scale. y is B/B_peak of the displayed temperature.
   const DECADES = Math.log10(LAMBDA_MAX / LAMBDA_MIN);
   const lx = um => {
@@ -318,7 +321,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     const f = (px - plotL) / plotW;
     if (mix === 0) return LAMBDA_MIN * 10 ** (f * DECADES);
     if (mix === 1) return Math.max(0, f * LINEAR_MAX);
-    let lo = -6, hi = 4; // log10 µm
+    let lo = -6, hi = 4; // log10 μm
     for (let i = 0; i < 48; i++) {
       const mid = (lo + hi) / 2;
       if (lx(10 ** mid) < px) lo = mid; else hi = mid;
@@ -333,11 +336,22 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   // One sample per pixel column or so, with its wavelength; rebuilt with the layout.
   let xs, lams;
 
-  // Path of the black body at Tref, in the frame of the displayed temperature T. Its own peak
+  // The temperature the radiance axis is sized for: its top is Y_SPAN times this body's peak.
+  // On the log axis that is the displayed temperature itself, so the active curve always
+  // fills the frame. On the linear axis it stops following once the peak passes the middle
+  // of the axis (2 μm, 1449 K): a cooler body's curve is increasingly cut off by the right
+  // edge, and a frame sized to a peak that is barely or not at all in view would inflate the
+  // stump that is. Held at the last curve that sits comfortably inside the axis, the frame
+  // lets cooler curves do what they really do, which is sink. Blended by `mix`, in log T, so
+  // that a switch of scale carries the radiance axis across smoothly too.
+  const Y_HOLD_LN = Math.log((WIEN_B * 1e6) / (LINEAR_MAX / 2));
+  const yScaleT = lnT => Math.exp(lnT + mix * Math.max(0, Y_HOLD_LN - lnT));
+
+  // Path of the black body at Tref, in a frame sized for the black body at Ty. Its own peak
   // is added to the samples: on the linear axis a star's whole curve is a few pixels wide,
   // and the columns either side of the peak would otherwise clip the top off it.
-  function curvePath(Tref, T) {
-    const bPeak = peakRadiance(T), lamRef = peakWavelength(Tref) * 1e6;
+  function curvePath(Tref, Ty) {
+    const bPeak = peakRadiance(Ty), lamRef = peakWavelength(Tref) * 1e6;
     let d = "", peakDone = false;
     const add = (x, v) => { d += `${d ? "L" : "M"}${x},${vy(Math.min(1e3, v)).toFixed(1)}`; }; // clipped far above the frame
     for (let i = 0; i <= SAMPLES; i++) {
@@ -365,8 +379,11 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
       xs.push(px.toFixed(1));
       lams.push(lxInvert(px));
     }
+    // The track covers the wavelengths the peak can reach, but no more than the axis has: on
+    // the linear scale the cold end of the range peaks beyond the right edge.
     trackL = sliderX(T_MAX);
-    trackR = sliderX(T_MIN);
+    trackR = Math.min(sliderX(T_MIN), plotR);
+    const coldest = sliderT(trackR);
     const visL = lx(VIS_LO * 1e6), visR = lx(VIS_HI * 1e6);
 
     const defs = svgEl("defs", {}, svg);
@@ -397,8 +414,9 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     // Stops are evenly spaced in log T and placed wherever the scale puts them, which on
     // the linear axis crowds the hot colours into the track's first few pixels.
     for (let i = 0; i <= 48; i++) {
-      const T = T_MAX * (T_MIN / T_MAX) ** (i / 48);
+      const T = Math.max(coldest, T_MAX * (T_MIN / T_MAX) ** (i / 48));
       svgEl("stop", {offset: ((sliderX(T) - trackL) / (trackR - trackL)).toFixed(4), "stop-color": blackbodyCss(T)}, trackGrad);
+      if (T === coldest) break;
     }
 
     // Plot contents, bottom to top: visible band, gridlines, references, active curve, labels.
@@ -414,7 +432,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
 
     // Wavelength ticks. They only move during a switch of scale, so they are drawn here and
     // not per frame. Log: a long labelled tick per decade, short ones at 2 to 9 between
-    // them. Linear: a labelled tick every 5 or 10 µm and a short one every 1. Mid-switch both
+    // them. Linear: a labelled tick every 5 or 10 μm and a short one every 1. Mid-switch both
     // sets are drawn on the blended scale, cross-faded.
     const xTick = (um, major, label, labelFill, opacity) => {
       const px = lx(um);
@@ -437,8 +455,8 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
       }
     }
     if (mix > 0) {
-      const step = plotW / (LINEAR_MAX / 5) >= 44 ? 5 : 10;
-      for (let um = 0; um <= LINEAR_MAX; um++) xTick(um, um % step === 0, um % step === 0, "#444", mix);
+      const step = plotW / (LINEAR_MAX / 0.5) >= 44 ? 5 : 10; // in tenths of a μm
+      for (let k = 0; k <= LINEAR_MAX * 10; k++) xTick(k / 10, k % step === 0, k % step === 0, "#444", mix);
     }
 
     const refs = svgEl("g", {"clip-path": `url(#${uid}-plot)`, fill: "none", "stroke-width": 1}, svg);
@@ -484,9 +502,9 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     }, svg);
 
     const yTitle = svgEl("text", {x: 0, y: 12, "font-size": titleFont, fill: "#555"}, svg);
-    yTitle.textContent = "↑ Spectral radiance (W·m⁻²·sr⁻¹·µm⁻¹)";
+    yTitle.textContent = "↑ Spectral radiance (W·m⁻²·sr⁻¹·μm⁻¹)";
     const xTitle = svgEl("text", {x: plotR, y: plotB + 36, "text-anchor": "end", "font-size": titleFont, fill: "#555"}, svg);
-    xTitle.textContent = `Wavelength (µm${xScale === "log" ? ", log scale" : ""}) →`;
+    xTitle.textContent = `Wavelength (μm${xScale === "log" ? ", log scale" : ""}) →`;
 
     // Slider: the track, a tick per reference object (each directly under that object's
     // peak), end labels, handle.
@@ -496,9 +514,10 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     }, svg);
     for (const o of OBJECTS) {
       const px = sliderX(o.T);
+      if (px > trackR + 0.5) continue;
       svgEl("line", {x1: px, x2: px, y1: trackY - 13, y2: trackY - 8, stroke: "#888", "stroke-width": 1}, svg);
     }
-    endLabels = [[trackL, "start", T_MAX], [trackR, "end", T_MIN]].map(([x, anchor, T]) => {
+    endLabels = [[trackL, "start", T_MAX], [trackR, "end", roundK(coldest)]].map(([x, anchor, T]) => {
       const t = svgEl("text", {x, y: trackY + handleR + 16, "text-anchor": anchor, "font-size": tickFont, fill: "#888"}, svg);
       t.textContent = formatK(T);
       return t;
@@ -577,15 +596,20 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   function render() {
     const T = Math.exp(shownLn);
     const peakX = sliderX(T);
+    const Ty = yScaleT(shownLn);
+    const ownP = (T / Ty) ** 5; // the active curve's peak in units of the frame's: 1 unless held
 
-    drawTicks(yTickG, lodTicks(Y_SPAN * peakRadiance(T) * 1e-6, plotH, 24), placeY);
+    drawTicks(yTickG, lodTicks(Y_SPAN * peakRadiance(Ty) * 1e-6, plotH, 24), placeY);
 
-    const d = curvePath(T, T);
+    const d = curvePath(T, Ty);
     curve.setAttribute("d", d);
     const closed = `${d}L${plotR},${plotB}L${plotL},${plotB}Z`;
     curveFill.setAttribute("d", closed);
     underClip.setAttribute("d", closed);
-    setAttrs(guide, {x1: peakX.toFixed(1), x2: peakX.toFixed(1), y1: vy(1).toFixed(1)});
+    // On the linear axis a cool body's peak is beyond the right edge. Then there is no peak
+    // to point at: the guide goes, and the curve's label waits at the edge with an arrow.
+    const onAxis = 1 - smoothstep(plotR - 6, plotR + 6, peakX);
+    setAttrs(guide, {x1: peakX.toFixed(1), x2: peakX.toFixed(1), y1: vy(ownP).toFixed(1), opacity: onAxis.toFixed(3)});
 
     // The active curve's own label: the temperature, and the object's name when it is one.
     // Set first, because the reference labels below are laid out around it.
@@ -593,23 +617,24 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     // exact temperature (5772 K, not 5770 K).
     const Tround = Math.abs(T - target) < 0.5 ? target : roundK(T);
     const match = OBJECTS.find(o => Math.abs(o.T - T) < 0.5);
-    curveLabel.textContent = match ? `${match.name} · ${formatK(match.T)}` : formatK(Tround);
+    curveLabel.textContent = (match ? `${match.name} · ${formatK(match.T)}` : formatK(Tround)) + (onAxis < 0.5 ? " →" : "");
     const ownHalf = labelHalfWidth(curveLabel.textContent, labelFont + 1);
-    const ownX = clamp(peakX, plotL + ownHalf + 3, plotR - ownHalf - 3), ownY = vy(1) - 8;
+    const ownX = clamp(peakX, plotL + ownHalf + 3, plotR - ownHalf - 3), ownY = vy(ownP) - 8;
     setAttrs(curveLabel, {x: ownX.toFixed(1), y: ownY.toFixed(1)});
 
     // Reference curves and their labels. p is a reference's peak height in units of the
-    // active curve's; its peak's x is fixed, directly above its tick on the slider.
+    // frame's; its peak's x is fixed, directly above its tick on the slider.
     const placed = [{x: ownX, y: ownY, half: ownHalf}];
     const order = OBJECTS.map((o, i) => ({o, i, r: o.T / T})).sort((a, b) => Math.abs(Math.log(a.r)) - Math.abs(Math.log(b.r)));
-    for (const {o, i, r} of order) {
-      const p = r ** 5;
+    for (const {o, i} of order) {
+      const p = (o.T / Ty) ** 5;
       const visible = p * plotH / Y_SPAN > 0.5; // else flatter than a pixel
       refPaths[i].style.display = visible ? "" : "none";
       let opacity = 0;
       if (visible) {
         // Legible means the peak is inside the frame and the curve is not pressed flat.
         opacity = smoothstep(0.05, 0.11, p) * (1 - smoothstep(1.22, 1.4, p));
+        opacity *= 1 - smoothstep(plotR - 6, plotR + 6, sliderX(o.T)); // peak off the axis
         const half = labelHalfWidth(o.name, labelFont);
         const x = clamp(sliderX(o.T), plotL + half + 3, plotR - half - 3), y = vy(p) - 7;
         // Closest-in-temperature labels are placed first; a later one that would overprint
@@ -619,7 +644,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
         }
         if (opacity > 0.01) placed.push({x, y, half});
         setAttrs(refLabels[i], {x: x.toFixed(1), y: y.toFixed(1)});
-        refPaths[i].setAttribute("d", curvePath(o.T, T));
+        refPaths[i].setAttribute("d", curvePath(o.T, Ty));
         // Unlabelled curves stay in view but recede, so a fan of hotter objects crossing the
         // frame reads as background and the one or two labelled neighbours stand out.
         refPaths[i].setAttribute("stroke", mixGray(0xd0, 0x80, opacity));
@@ -628,7 +653,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     }
 
     // The handle tracks the pointer exactly while dragging, and the figure otherwise.
-    const hx = sliderX(dragging ? target : T);
+    const hx = clamp(sliderX(dragging ? target : T), trackL, trackR);
     handleG.setAttribute("transform", `translate(${hx.toFixed(1)},${trackY})`);
     handleDot.setAttribute("fill", blackbodyCss(dragging ? target : T));
     const labelX = clamp(hx, plotL + 24, plotR - 24);
@@ -785,6 +810,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   // A reference object within a few pixels of the pointer wins, so its exact temperature
   // can be reached by dragging; otherwise the value is rounded to about three figures.
   function temperatureAt(px) {
+    px = clamp(px, trackL, trackR); // the handle cannot leave the track, so neither can the value
     let best = null, bestDist = 2.5;
     for (const o of OBJECTS) {
       const d = Math.abs(sliderX(o.T) - px);
@@ -903,7 +929,7 @@ function formatC(T) {
 
 function formatWavelength(lambda) {
   const um = lambda * 1e6;
-  return um < 1 ? `${um.toPrecision(3)} µm (${Math.round(um * 1000)} nm)` : `${um.toPrecision(3)} µm`;
+  return um < 1 ? `${um.toPrecision(3)} μm (${Math.round(um * 1000)} nm)` : `${um.toPrecision(3)} μm`;
 }
 
 function formatPower(watts) {
