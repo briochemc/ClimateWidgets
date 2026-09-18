@@ -735,7 +735,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     // exact temperature (5772 K, not 5770 K).
     const Tround = Math.abs(T - target) < 0.5 ? target : roundK(T);
     const match = OBJECTS.find(o => Math.abs(o.T - T) < 0.5);
-    curveLabel.textContent = (match ? `${match.name} · ${formatK(match.T)}` : formatK(Tround)) + (onAxis < 0.5 ? " →" : "");
+    curveLabel.textContent = (match ? `${match.name} ≈ ${formatK(match.T)}` : formatK(Tround)) + (onAxis < 0.5 ? " →" : "");
     const ownHalf = labelHalfWidth(curveLabel.textContent, labelFont + 1);
     const ownX = clamp(peakX, plotL + ownHalf + 3, plotR - ownHalf - 3), ownY = vy(ownP) - 8;
     setAttrs(curveLabel, {x: ownX.toFixed(1), y: ownY.toFixed(1)});
@@ -823,7 +823,9 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
       `box-shadow:0 0 0 1px #111${glow(o.T) > 0.05 ? `,0 0 5px ${c}` : ""};`;
     const temp = document.createElement("span");
     temp.style.cssText = "color:#888;font-size:12px;";
-    temp.textContent = formatK(o.T);
+    // ≈ throughout: these are representative temperatures (a mean, a typical value, a rounded
+    // effective temperature), not measurements of one particular kettle or star.
+    temp.textContent = `≈ ${formatK(o.T)}`;
     b.append(dot, o.name, temp);
     b.addEventListener("click", () => { stopTour(); setTarget(o.T, "tween"); });
     chipBar.appendChild(b);
@@ -843,14 +845,14 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
 
     swatchDot.style.background = blackbodyCss(T);
     swatchDot.style.boxShadow = glowing ? `0 0 4px ${blackbodyCss(T)}` : "none";
-    statusHead.textContent = `${formatK(T)} (${formatC(T)})${match ? ` — ${match.name}` : ""}. `;
+    statusHead.textContent = `${formatK(T)} (${formatC(T)})${match ? ` ≈ ${match.name}` : ""}. `;
     const text =
       `Peak at ${formatWavelength(lam)}, ${where}. Radiates ${formatPower(radiantExitance(T))} per m² of ` +
       `surface: ${formatShare(s.ultraviolet)} ultraviolet, ${formatShare(s.visible)} visible, ` +
       `${formatShare(s.infrared)} infrared.` + (glowing ? "" : " No visible glow: too cold to see by its own light.");
     statusBody.textContent = text;
     svg.setAttribute("aria-label",
-      `Black-body spectrum at ${formatK(T)}${match ? `, ${match.name}` : ""}. ${text} ` +
+      `Black-body spectrum at ${formatK(T)}${match ? `, approximately ${match.name}` : ""}. ${text} ` +
       "Left and right arrows move the peak, up and down arrows change the temperature; Page Up and Page Down step between reference objects.");
 
     chips.forEach((b, i) => {
