@@ -2,7 +2,7 @@
 
 Everything warmer than absolute zero glows. How brightly, and in what colours, depends on its temperature alone: that is Planck's law, and it is where the greenhouse effect starts. The Sun, at 5772 K, glows mostly in visible light. The Earth, at 288 K, glows too, but entirely in the infrared, at wavelengths twenty times longer. The atmosphere treats those two kinds of light very differently.
 
-Drag the slider, or pick an object, and watch the axes. The frame always follows the curve, so the curve itself stays put: what changes is the scale it is drawn on, and which of the gray reference curves are in view.
+Drag the slider, drag the peak itself, or pick an object. The slider lies along the wavelength axis with its handle directly under the peak of the curve, so moving it left, toward the hot end, carries the peak toward shorter wavelengths, out of the infrared, through the visible band and into the ultraviolet. The radiance axis rescales as you go, because it has to: the peak at the hot end of the slider is seventeen billion times higher than at the cold end.
 
 ```js
 import {createBlackbodyRadiationWidget} from "./widget.js";
@@ -14,27 +14,29 @@ const blackbody = view(createBlackbodyRadiationWidget());
 
 ## What to look for
 
-**The curve never changes shape.** Planck's law gives the spectral radiance of a perfect absorber and emitter, a *black body*, at wavelength ${tex`\lambda`} and temperature ${tex`T`}:
+**The slider is Wien's law.** Planck's law gives the spectral radiance of a perfect absorber and emitter, a *black body*, at wavelength ${tex`\lambda`} and temperature ${tex`T`}:
 
 ```tex
 B_\lambda(\lambda, T) = \frac{2hc^2}{\lambda^5}\,\frac{1}{e^{hc/\lambda k_\mathrm{B} T} - 1}
 ```
 
-Measured in units of its own peak, that curve is identical at every temperature. Temperature only sets the two scales, and the two axes of the figure are those two scales.
+Its peak sits at ${tex`\lambda_\text{peak} = b/T`} with ${tex`b = 2898`} µm·K: 0.50 µm for the Sun, 10 µm for the Earth's surface. That is why a temperature slider can be drawn on a wavelength axis at all. Every temperature has one wavelength where it peaks, the handle sits at that wavelength, and each object's tick on the slider is directly below the peak of its gray curve. Hotter is to the left only because shorter wavelengths are. On the logarithmic axis the correspondence is even: doubling the temperature moves the peak the same distance to the left wherever you start.
 
-**The wavelength axis is Wien's law.** The peak sits at ${tex`\lambda_\text{peak} = b/T`} with ${tex`b = 2898`} µm·K: 0.50 µm for the Sun, 10 µm for the Earth's surface. Double the temperature and every number on the x-axis halves. The coloured band marks visible light, 0.38 to 0.75 µm. At the Sun's temperature it sits under the peak. By the time the slider is down at a light-bulb filament the band has slid well to the left of the peak, which is why a filament wastes more than 90% of its power as heat, and below about 800 K there is nothing under it at all.
+**The curve never changes shape.** On the logarithmic axis every curve in the figure, black or gray, is the same shape: temperature slides it sideways and stretches it upward, and does nothing else. The coloured band marks visible light, 0.38 to 0.75 µm. At the Sun's temperature it sits under the peak. With the slider at a light-bulb filament the peak has moved well into the infrared and only the curve's short-wavelength foot is left in the band, which is why a filament wastes more than 90% of its power as heat. Below about 800 K nothing is left in the band at all.
 
-**The radiance axis is a fifth power.** The height of the peak grows as ${tex`T^5`}, and the area under the curve, the total power, as ${tex`T^4`} (the Stefan–Boltzmann law, ${tex`\sigma T^4`} per square metre of surface). The Sun's surface is 20 times hotter than the Earth's, so its peak is 3.2 million times higher and each square metre radiates 160,000 times the power. This is why the gray curves behave as they do: a slightly cooler object is already much lower, a much cooler one is pressed flat against the axis, and a hotter one leaves through the top of the frame almost at once. A hotter body outshines a cooler one at *every* wavelength, not just near its own peak: the curves never cross.
+**The radiance axis is a fifth power.** The height of the peak grows as ${tex`T^5`}, and the total power radiated as ${tex`T^4`} (the Stefan–Boltzmann law, ${tex`\sigma T^4`} per square metre of surface). The Sun's surface is 20 times hotter than the Earth's, so its peak is 3.2 million times higher and each square metre radiates 160,000 times the power. This is why the gray curves behave as they do: a slightly cooler object is already much lower, a much cooler one is pressed flat against the axis, and a hotter one leaves through the top of the frame almost at once. A hotter body outshines a cooler one at *every* wavelength, not just near its own peak: the curves never cross.
 
-**Sunlight and earthlight barely overlap.** 98% of the power of a 5772 K black body lies between 0.25 and 4.0 µm. 98% of a 288 K one lies between 5.0 and 80 µm. Click *Sun* and then *Earth's surface* and note that no tick label survives the trip. Gases such as water vapour and CO₂ are largely transparent across the first range and absorb strongly in parts of the second, so energy arrives more easily than it leaves. The two Earth entries are the result: seen from space the Earth radiates like a 255 K body, 240 W per m², which balances the sunlight it absorbs, while the surface underneath is at 288 K and radiates 390 W per m².
+**Try the linear axis.** The *Linear* button redraws the same curves against a plain wavelength axis from 0 to 40 µm. At the Earth's end of the slider this is the picture in the textbooks: a steep rise, a peak, and a long tail, and it is the honest one for judging power by eye, since on a linear axis the area under the curve *is* the power. Then click *Sun*. The whole solar spectrum becomes a spike against the left edge, its peak an eightieth of the way along the axis. No linear axis can show sunlight and earthlight together, which is the reason the default here is logarithmic, and it is a fair picture of how far apart the two are.
 
-**Only a quarter of the power is on the short side of the peak.** The curve rises steeply and falls slowly, so the peak is not the middle: 25% of the power is at shorter wavelengths and 75% at longer ones, at any temperature. Half lies beyond 1.42 peak wavelengths.
+**Sunlight and earthlight barely overlap.** 98% of the power of a 5772 K black body lies between 0.25 and 4.0 µm. 98% of a 288 K one lies between 5.0 and 80 µm. Click *Sun* and then *Earth's surface* and watch the curve cross the axis from one side of 4 µm to the other. Gases such as water vapour and CO₂ are largely transparent across the first range and absorb strongly in parts of the second, so energy arrives more easily than it leaves. The two Earth entries are the result: seen from space the Earth radiates like a 255 K body, 240 W per m², which balances the sunlight it absorbs, while the surface underneath is at 288 K and radiates 390 W per m².
+
+**Only a quarter of the power is on the short side of the peak.** Against wavelength itself (the linear view) the curve rises steeply and falls slowly, so the peak is not the middle: 25% of the power is at shorter wavelengths and 75% at longer ones, at any temperature. Half lies beyond 1.42 peak wavelengths.
 
 ## About the figure
 
 The constants are the exact SI values of ${tex`h`}, ${tex`c`} and ${tex`k_\mathrm{B}`}, and radiance is per micrometre of wavelength, which keeps the numbers readable at Earth temperatures (about 8 W·m⁻²·sr⁻¹·µm⁻¹ at the 288 K peak). The implementation was checked three ways: the numerical peak against Wien's constant, the numerical integral over wavelength against ${tex`\sigma T^4/\pi`} (they agree to six figures from 210 K to 20,000 K), and the percentile points against the table in Wikipedia's [Planck's law](https://en.wikipedia.org/wiki/Planck%27s_law#Percentiles) article. The ultraviolet, visible and infrared shares come from the series for the integral of Planck's law up to a given wavelength, with the visible band taken as 380 to 750 nm.
 
-The x-axis runs from zero to five peak wavelengths and the y-axis to 1.5 times the peak. Tick marks come from the 1–2–5 sequence and fade in and out according to how far apart they are on screen, so the axes rescale continuously instead of jumping. A reference curve is labelled while its peak is inside the frame and tall enough to read, and unlabelled otherwise.
+The wavelength axis is fixed: 0.05 to 100 µm on the logarithmic scale, 0 to 40 µm on the linear one, and switching between them morphs one scale into the other so that each curve can be followed across. The radiance axis runs to 1.5 times the current peak. Its tick marks come from the 1–2–5 sequence and fade in and out according to how far apart they are on screen, so the axis rescales continuously instead of jumping. A reference curve is labelled while its peak is inside the frame and tall enough to read, and unlabelled otherwise. One caution about the logarithmic view: equal widths on a log axis are not equal ranges of wavelength, so there the area under the curve is not proportional to power. The percentages under the figure are computed from the integral, not read off the picture.
 
 **Colour.** The swatch, the slider track and the dots on the buttons show the colour of a black body at that temperature: Planck's law weighted by the CIE 1931 colour-matching functions (in the analytic fit of [Wyman, Sloan & Shirley, 2013](https://jcgt.org/published/0002/02/01/)), converted to sRGB. The results agree with Mitchell Charity's widely used [black-body colour table](http://www.vendian.org/mncharity/dir3/blackbody/) to within a few units per channel. Hue is physics; brightness is not. A screen cannot show the many orders of magnitude between a dull red glow and a filament, so the swatch simply fades to black below the [Draper point](https://en.wikipedia.org/wiki/Draper_point), 798 K, where a solid first becomes visible by its own light in a dark room. Note that the Sun comes out nearly white, not yellow, which is correct.
 
@@ -70,18 +72,19 @@ import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
 ```js
 display(embedSnippets({
   embedPath: "blackbody-radiation/embed",
-  height: 740,
+  height: 775,
   title: "Black-body radiation",
   note: "The figure is a fixed 466&nbsp;px tall; the rest is the read-out and the object " +
     "buttons, which wrap onto more rows as the frame narrows. The height above suits a frame " +
-    "640&nbsp;px wide or more. Allow about 940&nbsp;px for a 320&nbsp;px phone-width frame.",
+    "640&nbsp;px wide or more. Allow about 975&nbsp;px for a 320&nbsp;px phone-width frame.",
   script: `<div id="blackbody-radiation"></div>
 
 <script type="module">
   import {createBlackbodyRadiationWidget}
     from "${cdnUrl("blackbody-radiation/widget.js")}";
 
-  // Optional: {temperature: 288} to open on the Earth's surface instead of the Sun.
+  // Options: {temperature: 288} opens on the Earth's surface instead of the Sun,
+  // {scale: "linear"} on the linear wavelength axis instead of the logarithmic one.
   document.getElementById("blackbody-radiation")
     .appendChild(createBlackbodyRadiationWidget());
 <\/script>`
