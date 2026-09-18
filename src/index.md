@@ -43,6 +43,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>What a probability word means</h2>
     <img class="thumb" src="./assets/thumbnails/probability-words.png" alt="Four rows, one per probability word, each a swarm of bubbles sized by how many people gave that answer on a 0 to 100 percent scale; bubbles inside the IPCC's own shaded range are green and the many outside it are orange">
   </a>
+  <a class="card" href="./blackbody-radiation/">
+    <h2>Black-body radiation</h2>
+    <img class="thumb" src="./assets/thumbnails/blackbody-radiation.png" alt="Planck's curve of spectral radiance against wavelength for the Sun at 5772 K, with the band of visible light coloured in under its peak, fainter gray curves for cooler and hotter objects, and a temperature slider whose track runs from black through red and white to blue">
+  </a>
 </div>
 
 <style>
