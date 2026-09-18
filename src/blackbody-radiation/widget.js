@@ -201,7 +201,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
 
   // Vertical layout is constant, so the SVG's height never changes; only horizontal metrics
   // and fonts are recomputed on resize (applyLayout, below).
-  const plotT = 28, plotH = 330, plotB = plotT + plotH;
+  const plotT = 14, plotH = 330, plotB = plotT + plotH;
   const trackY = plotB + 68; // slider centre line, clear of the x-axis ticks and title
   const trackH = 8, handleR = 9;
   const totalH = trackY + 40;
@@ -213,7 +213,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     w = newW;
     const t = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
     const lerp = (a, b) => Math.round(a + (b - a) * t);
-    plotL = lerp(46, 56);
+    plotL = lerp(62, 74); // the rotated radiance title, then tick labels as wide as "3.5×10⁷"
     plotR = w - lerp(12, 18);
     plotW = plotR - plotL;
     tickFont = lerp(9, 11);
@@ -403,7 +403,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   }
 
   // ---- static scaffolding, rebuilt on resize ------------------------------------------------
-  let refPaths, refLabels, curve, curveFill, underClip, curveLabel, guide, yTickG;
+  let refPaths, refLabels, curve, curveFill, underClip, visUnder, curveLabel, guide, yTickG;
   let handleG, handleDot, focusRing, sliderLabel, endLabels, trackL, trackR;
 
   function build() {
@@ -502,8 +502,10 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
 
     const active = svgEl("g", {"clip-path": `url(#${uid}-plot)`}, svg);
     curveFill = svgEl("path", {fill: "rgba(0,0,0,0.04)"}, active);
-    svgEl("rect", {...visRect, y: plotT, height: plotH, opacity: 0.85, "clip-path": `url(#${uid}-under)`}, active);
-    svgEl("rect", {...visRect, y: plotB - 4, height: 4}, active);
+    // The spectrum is painted only under the active curve. A body too cool to emit visible
+    // light gets none at all, which is the point; the faint full-height tint still marks
+    // where the band is.
+    visUnder = svgEl("rect", {...visRect, y: plotT, height: plotH, opacity: 0.85, "clip-path": `url(#${uid}-under)`}, active);
     curve = svgEl("path", {fill: "none", stroke: "#222", "stroke-width": 2, "stroke-linejoin": "round"}, active);
 
     svgEl("line", {x1: plotL, x2: plotL, y1: plotT, y2: plotB, stroke: "#666"}, svg);
@@ -539,10 +541,17 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
       "text-anchor": "middle", "font-size": labelFont + 1, "font-weight": "bold", fill: "#222", ...halo,
     }, svg);
 
-    const yTitle = svgEl("text", {x: 0, y: 12, "font-size": titleFont, fill: "#555"}, svg);
-    yTitle.textContent = "↑ Spectral radiance (W·m⁻²·sr⁻¹·μm⁻¹)";
-    const xTitle = svgEl("text", {x: plotR, y: plotB + 36, "text-anchor": "end", "font-size": titleFont, fill: "#555"}, svg);
-    xTitle.textContent = `Wavelength (μm${xScale === "log" ? ", log scale" : ""}) →`;
+    // Axis titles, centred on their axes; the radiance title reads bottom to top.
+    const yMid = plotT + plotH / 2;
+    const yTitle = svgEl("text", {
+      x: titleFont, y: yMid, transform: `rotate(-90 ${titleFont} ${yMid})`, "text-anchor": "middle",
+      "font-size": titleFont, fill: "#555",
+    }, svg);
+    yTitle.textContent = "Spectral radiance (W·m⁻²·sr⁻¹·μm⁻¹)";
+    const xTitle = svgEl("text", {
+      x: (plotL + plotR) / 2, y: plotB + 36, "text-anchor": "middle", "font-size": titleFont, fill: "#555",
+    }, svg);
+    xTitle.textContent = `Wavelength (μm${xScale === "log" ? ", log scale" : ""})`;
 
     // Slider: the track, a tick per reference object (each directly under that object's
     // peak), end labels, handle.
@@ -644,6 +653,12 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     const closed = `${d}L${plotR},${plotB}L${plotL},${plotB}Z`;
     curveFill.setAttribute("d", closed);
     underClip.setAttribute("d", closed);
+    // Where the curve is under half a pixel tall across the whole visible band there is
+    // nothing to paint, and the spectrum is removed outright: a clip region that thin can
+    // still leak an anti-aliased hairline of colour along the axis. The curve's tallest point
+    // in the band is its peak if that is inside, else the band edge nearer the peak.
+    const visTop = planck(clamp(peakWavelength(T), VIS_LO, VIS_HI), T) / peakRadiance(Ty);
+    visUnder.style.display = (visTop / Y_SPAN) * plotH >= 0.5 ? "" : "none";
     // On the linear axis a cool body's peak is beyond the right edge. Then there is no peak
     // to point at: the guide goes, and the curve's label waits at the edge with an arrow.
     const onAxis = 1 - smoothstep(plotR - 6, plotR + 6, peakX);
