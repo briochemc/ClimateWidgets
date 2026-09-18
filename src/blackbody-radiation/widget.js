@@ -249,9 +249,47 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   svg.style.touchAction = "pan-y";
   svg.tabIndex = 0;
 
+  // Controls above the figure: a box for typing an exact temperature on the left, the
+  // wavelength-scale toggle on the right; they wrap onto two rows when there is no room.
+  const controls = document.createElement("div");
+  controls.style.cssText =
+    "display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 16px;" +
+    "padding:0 0 6px;font-size:13px;color:#666;";
+  container.appendChild(controls);
+
+  const tempField = document.createElement("label");
+  tempField.style.cssText = "display:flex;align-items:center;gap:6px;";
+  const tempInput = document.createElement("input");
+  tempInput.type = "number";
+  tempInput.min = T_MIN;
+  tempInput.max = T_MAX;
+  tempInput.step = 1;
+  tempInput.inputMode = "numeric";
+  // 16px on purpose: iOS Safari zooms the page when a focused input's text is any smaller.
+  tempInput.style.cssText =
+    "font:16px sans-serif;color:#222;width:5.2em;padding:2px 6px;border:1px solid #ccc;border-radius:6px;" +
+    "box-sizing:border-box;text-align:right;";
+  tempField.append("Temperature", tempInput, "K");
+  controls.appendChild(tempField);
+
+  // Applied when the entry is finished (Enter, or leaving the box), not per keystroke: "57"
+  // on the way to "5772" is not a temperature anyone asked for. Out-of-range entries are
+  // clamped to the slider's range, and an empty or unreadable one puts the current value back.
+  function commitTemperature() {
+    const typed = Number(tempInput.value);
+    if (tempInput.value.trim() !== "" && Number.isFinite(typed)) setTarget(Math.round(typed), "tween");
+    tempInput.value = target;
+  }
+  tempInput.addEventListener("change", commitTemperature);
+  tempInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") { commitTemperature(); tempInput.blur(); }
+  });
+  // The box's own keystroke events stop here; the widget emits "input" itself when the
+  // temperature actually changes.
+  tempInput.addEventListener("input", e => e.stopPropagation());
+
   const scaleBar = document.createElement("div");
-  scaleBar.style.cssText =
-    "display:flex;justify-content:flex-end;align-items:center;gap:6px;padding:0 0 6px;font-size:13px;color:#666;";
+  scaleBar.style.cssText = "display:flex;align-items:center;gap:6px;margin-left:auto;";
   scaleBar.append("Wavelength axis");
   const scaleButtons = ["log", "linear"].map((name, i) => {
     const b = document.createElement("button");
@@ -276,7 +314,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     });
   }
   updateScaleButtons();
-  container.appendChild(scaleBar);
+  controls.appendChild(scaleBar);
 
   // Narrower than MIN_WIDTH the figure stops reflowing and scrolls inside this wrapper
   // rather than pushing a horizontal scrollbar onto the whole page.
@@ -296,9 +334,9 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   const hint = document.createElement("div");
   hint.style.cssText = "padding:8px 0 0;color:#888;font-size:14px;";
   hint.textContent =
-    "Drag the slider, drag the peak itself, or pick an object. With the figure focused, ← and → move the peak by " +
-    "1% (10% with Shift), ↑ and ↓ make it hotter or cooler; Page Up and Page Down step " +
-    "between the objects.";
+    "Drag the slider or the peak itself, pick an object, or type a temperature. With the " +
+    "figure focused, ← and → move the peak by 1% (10% with Shift), ↑ and ↓ make it hotter " +
+    "or cooler; Page Up and Page Down step between the objects.";
   container.appendChild(hint);
 
   function svgEl(tag, attrs = {}, parent) {
@@ -704,6 +742,9 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     const match = OBJECTS.find(o => o.T === T);
     const glowing = glow(T) > 0.02;
 
+    // Kept in step with the slider, except while it is being typed into.
+    if (document.activeElement !== tempInput) tempInput.value = T;
+
     swatchDot.style.background = blackbodyCss(T);
     swatchDot.style.boxShadow = glowing ? `0 0 4px ${blackbodyCss(T)}` : "none";
     statusHead.textContent = `${formatK(T)} (${formatC(T)})${match ? ` — ${match.name}` : ""}. `;
@@ -807,16 +848,13 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   // The plot is a second, taller handle on the same scale: the peak goes where the pointer is.
   const overPlot = (px, py) => py >= plotT && py <= plotB && px >= plotL && px <= plotR;
 
-  // A reference object within a few pixels of the pointer wins, so its exact temperature
-  // can be reached by dragging; otherwise the value is rounded to about three figures.
+  // A plain slider: the value under the pointer, rounded to about three figures. It does not
+  // snap to the objects' ticks (under a finger that made the handle stick and jump); an
+  // object's exact temperature is what its button is for, and any other exact value is what
+  // the temperature box is for.
   function temperatureAt(px) {
-    px = clamp(px, trackL, trackR); // the handle cannot leave the track, so neither can the value
-    let best = null, bestDist = 2.5;
-    for (const o of OBJECTS) {
-      const d = Math.abs(sliderX(o.T) - px);
-      if (d <= bestDist) { best = o; bestDist = d; }
-    }
-    return best ? best.T : roundK(sliderT(px));
+    // The handle cannot leave the track, so neither can the value.
+    return roundK(sliderT(clamp(px, trackL, trackR)));
   }
 
   svg.addEventListener("pointerdown", e => {

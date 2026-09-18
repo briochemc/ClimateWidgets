@@ -2,7 +2,7 @@
 
 Everything warmer than absolute zero glows. How brightly, and in what colours, depends on its temperature alone: that is Planck's law, and it is where the greenhouse effect starts. The Sun, at 5772 K, glows mostly in visible light. The Earth, at 288 K, glows too, but entirely in the infrared, at wavelengths twenty times longer. The atmosphere treats those two kinds of light very differently.
 
-Drag the slider, drag the peak itself, or pick an object. The slider lies along the wavelength axis with its handle directly under the peak of the curve, so moving it left, toward the hot end, carries the peak toward shorter wavelengths, out of the infrared, through the visible band and into the ultraviolet. The radiance axis rescales as you go, because it has to: the peak at the hot end of the slider is seventeen billion times higher than at the cold end.
+Drag the slider or the peak itself, pick an object to jump to its exact temperature, or type a temperature of your own into the box. The slider lies along the wavelength axis with its handle directly under the peak of the curve, so moving it left, toward the hot end, carries the peak toward shorter wavelengths, out of the infrared, through the visible band and into the ultraviolet. The radiance axis rescales as you go, because it has to: the peak at the hot end of the slider is seventeen billion times higher than at the cold end.
 
 ```js
 import {createBlackbodyRadiationWidget} from "./widget.js";
@@ -72,11 +72,11 @@ import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
 ```js
 display(embedSnippets({
   embedPath: "blackbody-radiation/embed",
-  height: 775,
+  height: 780,
   title: "Black-body radiation",
   note: "The figure is a fixed 466&nbsp;px tall; the rest is the read-out and the object " +
     "buttons, which wrap onto more rows as the frame narrows. The height above suits a frame " +
-    "640&nbsp;px wide or more. Allow about 975&nbsp;px for a 320&nbsp;px phone-width frame.",
+    "640&nbsp;px wide or more. Allow about 1010&nbsp;px for a 320&nbsp;px phone-width frame.",
   script: `<div id="blackbody-radiation"></div>
 
 <script type="module">
