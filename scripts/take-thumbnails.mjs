@@ -58,6 +58,7 @@ const WIDGETS = [
   {name: "consensus-studies"},
   {name: "leviston-etal-2013"},
   {name: "probability-words"},
+  {name: "blackbody-radiation"},
 ].map(w => ({figure: `.${w.name}`, ...w}));
 
 // A blank 640x640 capture comes out near 7 kB, a real one 150 kB and up. Playwright waits
