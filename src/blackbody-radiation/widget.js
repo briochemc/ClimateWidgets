@@ -211,7 +211,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   const plotT = 14, plotH = 330, plotB = plotT + plotH;
   const trackY = plotB + 68; // slider centre line, clear of the x-axis ticks and title
   const trackH = 8, handleR = 9;
-  const totalH = trackY + 40;
+  const totalH = trackY + 54; // the slider's labels, then its caption
 
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
   let w, plotL, plotR, plotW, tickFont, labelFont, titleFont, sliderFont, labelMinorTicks;
@@ -619,6 +619,16 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     sliderLabel = svgEl("text", {
       y: trackY + handleR + 17, "text-anchor": "middle", "font-size": sliderFont, "font-weight": "bold", fill: "#222",
     }, svg);
+
+    // What the track's colours mean, on its own line under the slider's labels. Centred on
+    // the track where it fits there, else pulled in so that it stays inside the figure.
+    const CAPTION = "Colour shown is what the eye sees; black means no visible glow.";
+    const captionHalf = labelHalfWidth(CAPTION, tickFont);
+    const caption = svgEl("text", {
+      x: clamp((trackL + trackR) / 2, captionHalf + 2, w - captionHalf - 2).toFixed(1), y: trackY + handleR + 33,
+      "text-anchor": "middle", "font-size": tickFont, "font-style": "italic", fill: "#888",
+    }, svg);
+    caption.textContent = CAPTION;
 
     render();
   }
