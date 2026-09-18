@@ -1,19 +1,29 @@
 // Black-body radiation — Planck's law as one curve of spectral radiance against wavelength,
-// driven by a temperature slider that runs from the surface of Mars to a blue supergiant.
+// driven by a temperature slider that runs from a blue supergiant to the surface of Mars.
 //
-// The frame follows the curve: the x-axis always spans 0 to X_SPAN peak wavelengths and the
-// y-axis 0 to Y_SPAN times the peak radiance. Planck's law is self-similar — B/B_peak depends
-// only on λ/λ_peak — so in that frame the active curve is the same shape at every
-// temperature, and what moves instead is everything around it: the tick marks (Wien's law on
-// the x-axis, the T⁵ growth of the peak on the y-axis), the band of visible light sliding
-// along the wavelength axis, and a family of gray reference curves for familiar objects that
-// swell into the frame, get labelled at their peak while they are legible, and shoot out
-// through the top as the slider passes them.
+// The wavelength axis is fixed and logarithmic, and the slider lies along it. Wien's law puts
+// the peak at λ = b/T, so on a log axis the peak's position is linear in log T: a slider that
+// is linear in log T can be drawn on the wavelength axis itself, with its handle directly
+// under the peak it controls. Dragging the handle drags the peak. The price is direction:
+// wavelength grows to the right, so temperature grows to the left.
 //
-// Nothing here is animated by timers except the temperature itself, which eases toward the
-// slider's value. Tick opacity, label opacity and every position are pure functions of the
-// displayed temperature (see lodTicks), so the axes breathe in and out smoothly under a drag
-// and retrace exactly when the drag reverses.
+// A toggle swaps the log axis for a linear one, 0 to LINEAR_MAX µm, and the slider stays
+// under the peak: it is always the wavelength scale read through Wien's law, whatever that
+// scale is. Linear is the textbook picture and suits the Earth's end of the range; it also
+// shows at once why the default is log, because everything hotter than a filament becomes a
+// spike against the left edge. The switch is a morph, not a cut: the scale is a blend of
+// the two, `mix`, eased from 0 to 1, so every curve, tick and label travels to its new place.
+//
+// Only the radiance axis follows the curve, running from 0 to Y_SPAN times the peak. The
+// peak grows as T⁵, nine orders of magnitude over the slider's range, so its tick marks are
+// level-of-detail (see lodTicks): their opacity and position are pure functions of the
+// displayed temperature, with no timers, so the axis breathes in and out smoothly under a
+// drag and retraces exactly when the drag reverses. Around the active curve sits a family of
+// gray reference curves for familiar objects. On a log wavelength axis every one of them is
+// the same shape, shifted sideways and scaled by T⁵, so as the slider passes them they swell
+// up from the axis, get labelled at their peak while they are legible, and leave through the
+// top. The only thing animated by a timer is the temperature itself, which eases toward the
+// slider's value.
 //
 // Self-contained on purpose — no d3, no other imports — so the script-tag embed on the
 // widget's page is a single ES module import that works from any page. The physics is
@@ -158,9 +168,19 @@ export const OBJECTS = [
 ];
 
 const T_MIN = 180, T_MAX = 20000;
-const X_SPAN = 5;   // x-axis runs from 0 to this many peak wavelengths
+// The fixed wavelength axis, µm. The peak travels from 0.145 µm at T_MAX to 16 µm at T_MIN,
+// and the curve has a short rise on the blue side of its peak and a long tail on the red
+// side, so the axis needs margin at both ends, more on the right. But every decade of
+// margin also shortens the slider, which only spans the stretch the peak can reach, so the
+// margins are no wider than it takes for the curve to be down to about 1% at either edge.
+const LAMBDA_MIN = 0.05, LAMBDA_MAX = 100;
+// The linear alternative runs from 0 to this, µm. Any choice strands one end of the slider:
+// this one keeps the long tail of a 288 K curve in view (it is down to 6% at 40 µm) and
+// gives up on the stars.
+const LINEAR_MAX = 40;
+const MORPH_MS = 650;
 const Y_SPAN = 1.5; // y-axis runs from 0 to this many peak radiances
-const SAMPLES = 360;
+const SAMPLES = 480;
 
 const ACCENT = "#0b57d0"; // the blue a default range slider paints its track and thumb
 const FOLLOW_TAU = 80;    // ms; how closely the displayed temperature trails a drag or a key
@@ -173,7 +193,7 @@ const MIN_WIDTH = 320;
 const SVG_NS = "http://www.w3.org/2000/svg";
 let instances = 0; // gradient and clip-path ids must be unique per page, not per widget
 
-export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGURE_WIDTH} = {}) {
+export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log", width = FIGURE_WIDTH} = {}) {
   const uid = `blackbody-radiation-${++instances}`;
 
   // Vertical layout is constant, so the SVG's height never changes; only horizontal metrics
@@ -184,7 +204,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
   const totalH = trackY + 40;
 
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
-  let w, plotL, plotR, plotW, tickFont, labelFont, titleFont, sliderFont, xTickGap;
+  let w, plotL, plotR, plotW, tickFont, labelFont, titleFont, sliderFont, labelMinorTicks;
 
   function applyLayout(newW) {
     w = newW;
@@ -197,18 +217,21 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
     labelFont = lerp(10, 12);
     titleFont = lerp(10, 12);
     sliderFont = lerp(12, 14);
-    xTickGap = lerp(34, 42); // px between x ticks at which a tick level starts to appear
+    // 2 and 5 are labelled between the decades only where there is room for them.
+    labelMinorTicks = plotW / Math.log10(LAMBDA_MAX / LAMBDA_MIN) >= 110;
   }
   applyLayout(maxW);
 
   // State. `target` is what the slider says; `shown` is what the figure is drawn at, and
-  // eases toward it. Both live in ln T, the scale the slider is linear in and the one in
-  // which a constant speed looks constant on these axes.
-  const lnMin = Math.log(T_MIN), lnMax = Math.log(T_MAX);
+  // eases toward it, in ln T: the scale the slider is linear in, so a glide moves the peak
+  // across the wavelength axis at a steady pace.
   let target = clamp(temperature, T_MIN, T_MAX);
   let shownLn = Math.log(target);
   let dragging = false;
   let raf = null, lastFrame = 0, tween = null;
+  // The wavelength scale: 0 is log, 1 is linear, and in between only during a switch.
+  let xScale = scale === "linear" ? "linear" : "log";
+  let mix = xScale === "linear" ? 1 : 0, morph = null;
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
 
   const container = document.createElement("div");
@@ -222,6 +245,35 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
   svg.style.outline = "none";
   svg.style.touchAction = "pan-y";
   svg.tabIndex = 0;
+
+  const scaleBar = document.createElement("div");
+  scaleBar.style.cssText =
+    "display:flex;justify-content:flex-end;align-items:center;gap:6px;padding:0 0 6px;font-size:13px;color:#666;";
+  scaleBar.append("Wavelength axis");
+  const scaleButtons = ["log", "linear"].map((name, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = name === "log" ? "Log" : "Linear";
+    b.style.cssText =
+      "font:13px sans-serif;padding:3px 10px;cursor:pointer;border:1px solid #ccc;" +
+      `border-radius:${i ? "0 999px 999px 0" : "999px 0 0 999px"};${i ? "margin-left:-7px;" : ""}`;
+    b.addEventListener("click", () => setScale(name));
+    scaleBar.appendChild(b);
+    return b;
+  });
+  function updateScaleButtons() {
+    scaleButtons.forEach((b, i) => {
+      const on = (i ? "linear" : "log") === xScale;
+      b.style.background = on ? hexToRgba(ACCENT, 0.08) : "#fff";
+      b.style.borderColor = on ? ACCENT : "#ccc";
+      b.style.color = on ? ACCENT : "#333";
+      b.style.position = "relative";
+      b.style.zIndex = on ? 1 : 0;
+      b.setAttribute("aria-pressed", on);
+    });
+  }
+  updateScaleButtons();
+  container.appendChild(scaleBar);
 
   // Narrower than MIN_WIDTH the figure stops reflowing and scrolls inside this wrapper
   // rather than pushing a horizontal scrollbar onto the whole page.
@@ -241,8 +293,9 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
   const hint = document.createElement("div");
   hint.style.cssText = "padding:8px 0 0;color:#888;font-size:14px;";
   hint.textContent =
-    "Drag the slider or pick an object. With the figure focused, ← and → change the " +
-    "temperature by 1% (10% with Shift); Page Up and Page Down step between the objects.";
+    "Drag the slider, drag the peak itself, or pick an object. With the figure focused, ← and → move the peak by " +
+    "1% (10% with Shift), ↑ and ↓ make it hotter or cooler; Page Up and Page Down step " +
+    "between the objects.";
   container.appendChild(hint);
 
   function svgEl(tag, attrs = {}, parent) {
@@ -253,91 +306,173 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
   }
 
   // ---- scales -------------------------------------------------------------------------------
-  // u = λ/λ_peak and v = B/B_peak of the displayed temperature: the frame's own coordinates.
-  const ux = u => plotL + (u / X_SPAN) * plotW;
-  const vy = v => plotB - (v / Y_SPAN) * plotH;
-  const sliderX = T => plotL + ((Math.log(T) - lnMin) / (lnMax - lnMin)) * plotW;
-  const sliderT = px => Math.exp(lnMin + clamp((px - plotL) / plotW, 0, 1) * (lnMax - lnMin));
-
-  // Sample positions in u, squared so they crowd toward the origin: that is where a hotter
-  // reference curve has its whole rising limb, compressed into a few pixels.
-  const US = Array.from({length: SAMPLES + 1}, (_, i) => X_SPAN * (i / SAMPLES) ** 2);
-
-  // Path of the black body at Tref, in the frame of the displayed temperature T.
-  function curvePath(Tref, T, close) {
-    const lamPeak = peakWavelength(T), bPeak = peakRadiance(T);
-    let d = "";
-    for (let i = 0; i <= SAMPLES; i++) {
-      const v = Math.min(1e3, planck(US[i] * lamPeak, Tref) / bPeak); // clipped far above the frame
-      d += `${i ? "L" : "M"}${ux(US[i]).toFixed(1)},${vy(v).toFixed(1)}`;
+  // x is wavelength (µm in): log, linear, or mid-switch a blend of the two, which is still
+  // monotonic, so still a scale. y is B/B_peak of the displayed temperature.
+  const DECADES = Math.log10(LAMBDA_MAX / LAMBDA_MIN);
+  const lx = um => {
+    const asLog = mix < 1 ? Math.log10(Math.max(um, 1e-9) / LAMBDA_MIN) / DECADES : 0;
+    return plotL + ((1 - mix) * asLog + mix * (um / LINEAR_MAX)) * plotW;
+  };
+  // Pixel to wavelength. Closed-form at rest; the blend has no inverse, so bisect.
+  const lxInvert = px => {
+    const f = (px - plotL) / plotW;
+    if (mix === 0) return LAMBDA_MIN * 10 ** (f * DECADES);
+    if (mix === 1) return Math.max(0, f * LINEAR_MAX);
+    let lo = -6, hi = 4; // log10 µm
+    for (let i = 0; i < 48; i++) {
+      const mid = (lo + hi) / 2;
+      if (lx(10 ** mid) < px) lo = mid; else hi = mid;
     }
-    return close ? `${d}L${plotR},${plotB}L${plotL},${plotB}Z` : d;
+    return 10 ** lo;
+  };
+  const vy = v => plotB - (v / Y_SPAN) * plotH;
+  // The slider is the same scale read through Wien's law: a temperature sits at its peak.
+  const sliderX = T => lx(peakWavelength(T) * 1e6);
+  const sliderT = px => clamp(WIEN_B * 1e6 / Math.max(lxInvert(px), 1e-9), T_MIN, T_MAX);
+
+  // One sample per pixel column or so, with its wavelength; rebuilt with the layout.
+  let xs, lams;
+
+  // Path of the black body at Tref, in the frame of the displayed temperature T. Its own peak
+  // is added to the samples: on the linear axis a star's whole curve is a few pixels wide,
+  // and the columns either side of the peak would otherwise clip the top off it.
+  function curvePath(Tref, T) {
+    const bPeak = peakRadiance(T), lamRef = peakWavelength(Tref) * 1e6;
+    let d = "", peakDone = false;
+    const add = (x, v) => { d += `${d ? "L" : "M"}${x},${vy(Math.min(1e3, v)).toFixed(1)}`; }; // clipped far above the frame
+    for (let i = 0; i <= SAMPLES; i++) {
+      if (!peakDone && lams[i] > lamRef) {
+        add(lx(lamRef).toFixed(1), peakRadiance(Tref) / bPeak);
+        peakDone = true;
+      }
+      add(xs[i], planck(lams[i] * 1e-6, Tref) / bPeak);
+    }
+    return d;
   }
 
   // ---- static scaffolding, rebuilt on resize ------------------------------------------------
-  let refPaths, refLabels, curve, curveFill, curveLabel, visTint, visUnder, visStrip, visGrad;
-  let visLabelIn, visLabelOut, uvLabel, irLabel, xTickG, yTickG;
-  let handleG, handleDot, focusRing, sliderLabel, endLabels;
+  let refPaths, refLabels, curve, curveFill, underClip, curveLabel, guide, yTickG;
+  let handleG, handleDot, focusRing, sliderLabel, endLabels, trackL, trackR;
 
   function build() {
     svg.setAttribute("width", w);
     svg.setAttribute("height", totalH);
     svg.replaceChildren();
+    xs = [];
+    lams = [];
+    for (let i = 0; i <= SAMPLES; i++) {
+      const px = plotL + (i / SAMPLES) * plotW;
+      xs.push(px.toFixed(1));
+      lams.push(lxInvert(px));
+    }
+    trackL = sliderX(T_MAX);
+    trackR = sliderX(T_MIN);
+    const visL = lx(VIS_LO * 1e6), visR = lx(VIS_HI * 1e6);
 
     const defs = svgEl("defs", {}, svg);
     svgEl("rect", {x: plotL, y: plotT, width: plotW, height: plotH},
       svgEl("clipPath", {id: `${uid}-plot`}, defs));
-    // The active curve never moves in this frame, so the region under it is a fixed clip.
-    svgEl("path", {d: curvePath(1000, 1000, true)}, svgEl("clipPath", {id: `${uid}-under`}, defs));
+    // The region under the active curve, which the spectrum is painted into.
+    underClip = svgEl("path", {}, svgEl("clipPath", {id: `${uid}-under`}, defs));
 
-    // The spectrum, one stop per 10 nm. Hue from the colour-matching functions; the ends
-    // fade to transparent the way the eye's sensitivity does, instead of to black.
-    visGrad = svgEl("linearGradient", {id: `${uid}-vis`, gradientUnits: "userSpaceOnUse", y1: 0, y2: 0}, defs);
+    // The spectrum, one stop per 10 nm, placed by log wavelength like everything else. Hue
+    // from the colour-matching functions; the ends fade to transparent the way the eye's
+    // sensitivity does, instead of to black.
+    const visGrad = svgEl("linearGradient", {
+      id: `${uid}-vis`, gradientUnits: "userSpaceOnUse", x1: visL, x2: visR, y1: 0, y2: 0,
+    }, defs);
     for (let nm = 380; nm <= 750; nm += 10) {
       const [r, g, b] = xyzToUnitRgb(cieXYZ(nm), true).map(v => Math.round(255 * srgbEncode(v)));
       const a = Math.min(smoothstep(380, 430, nm), 1 - smoothstep(670, 750, nm));
       svgEl("stop", {
-        offset: (nm - 380) / 370, "stop-color": `rgb(${r},${g},${b})`, "stop-opacity": a.toFixed(3),
+        offset: ((lx(nm / 1000) - visL) / (visR - visL)).toFixed(4),
+        "stop-color": `rgb(${r},${g},${b})`, "stop-opacity": a.toFixed(3),
       }, visGrad);
     }
 
-    // The slider track is the black-body colour scale itself.
+    // The slider track is the black-body colour scale itself, hottest at the left.
     const trackGrad = svgEl("linearGradient", {
-      id: `${uid}-track`, gradientUnits: "userSpaceOnUse", x1: plotL, x2: plotR, y1: 0, y2: 0,
+      id: `${uid}-track`, gradientUnits: "userSpaceOnUse", x1: trackL, x2: trackR, y1: 0, y2: 0,
     }, defs);
+    // Stops are evenly spaced in log T and placed wherever the scale puts them, which on
+    // the linear axis crowds the hot colours into the track's first few pixels.
     for (let i = 0; i <= 48; i++) {
-      svgEl("stop", {offset: i / 48, "stop-color": blackbodyCss(sliderT(plotL + (i / 48) * plotW))}, trackGrad);
+      const T = T_MAX * (T_MIN / T_MAX) ** (i / 48);
+      svgEl("stop", {offset: ((sliderX(T) - trackL) / (trackR - trackL)).toFixed(4), "stop-color": blackbodyCss(T)}, trackGrad);
     }
 
     // Plot contents, bottom to top: visible band, gridlines, references, active curve, labels.
-    const plot = svgEl("g", {"clip-path": `url(#${uid}-plot)`}, svg);
-    visTint = svgEl("rect", {y: plotT, height: plotH, fill: `url(#${uid}-vis)`, opacity: 0.1}, plot);
+    const visRect = {x: visL.toFixed(1), width: (visR - visL).toFixed(1), fill: `url(#${uid}-vis)`};
+    svgEl("rect", {...visRect, y: plotT, height: plotH, opacity: 0.1}, svg);
     yTickG = svgEl("g", {}, svg);
-    xTickG = svgEl("g", {}, svg);
+
+    // The peak-to-handle guide goes under the tick labels, whose halo then keeps them legible
+    // where it crosses one.
+    guide = svgEl("line", {y2: trackY - handleR - 2, stroke: "#999", "stroke-width": 1, "stroke-dasharray": "2 3"}, svg);
+
+    const halo = {stroke: "#fff", "stroke-width": 3, "paint-order": "stroke", "stroke-linejoin": "round"};
+
+    // Wavelength ticks. They only move during a switch of scale, so they are drawn here and
+    // not per frame. Log: a long labelled tick per decade, short ones at 2 to 9 between
+    // them. Linear: a labelled tick every 5 or 10 µm and a short one every 1. Mid-switch both
+    // sets are drawn on the blended scale, cross-faded.
+    const xTick = (um, major, label, labelFill, opacity) => {
+      const px = lx(um);
+      if (px < plotL - 0.5 || px > plotR + 0.5) return;
+      const x = px.toFixed(1);
+      const g = svgEl("g", {opacity: opacity.toFixed(3)}, svg);
+      if (major) svgEl("line", {x1: x, x2: x, y1: plotT, y2: plotB, stroke: "#000", "stroke-opacity": 0.07}, g);
+      svgEl("line", {x1: x, x2: x, y1: plotB, y2: plotB + (major ? 6 : 3), stroke: "#666"}, g);
+      if (!label) return;
+      const t = svgEl("text", {x, y: plotB + 18, "text-anchor": "middle", "font-size": tickFont, fill: labelFill, ...halo}, g);
+      t.textContent = String(um);
+    };
+    if (mix < 1) {
+      for (let n = Math.floor(Math.log10(LAMBDA_MIN)); n <= Math.ceil(Math.log10(LAMBDA_MAX)); n++) {
+        for (let m = 1; m <= 9; m++) {
+          const um = Number((m * 10 ** n).toPrecision(12));
+          if (um < LAMBDA_MIN * 0.999 || um > LAMBDA_MAX * 1.001) continue;
+          xTick(um, m === 1, m === 1 || (labelMinorTicks && (m === 2 || m === 5)), m === 1 ? "#444" : "#888", 1 - mix);
+        }
+      }
+    }
+    if (mix > 0) {
+      const step = plotW / (LINEAR_MAX / 5) >= 44 ? 5 : 10;
+      for (let um = 0; um <= LINEAR_MAX; um++) xTick(um, um % step === 0, um % step === 0, "#444", mix);
+    }
 
     const refs = svgEl("g", {"clip-path": `url(#${uid}-plot)`, fill: "none", "stroke-width": 1}, svg);
     refPaths = OBJECTS.map(() => svgEl("path", {}, refs));
 
     const active = svgEl("g", {"clip-path": `url(#${uid}-plot)`}, svg);
-    curveFill = svgEl("path", {d: curvePath(1000, 1000, true), fill: "rgba(0,0,0,0.04)"}, active);
-    visUnder = svgEl("rect", {
-      y: plotT, height: plotH, fill: `url(#${uid}-vis)`, opacity: 0.85, "clip-path": `url(#${uid}-under)`,
-    }, active);
-    visStrip = svgEl("rect", {y: plotB - 4, height: 4, fill: `url(#${uid}-vis)`}, active);
-    curve = svgEl("path", {
-      d: curvePath(1000, 1000, false), fill: "none", stroke: "#222", "stroke-width": 2, "stroke-linejoin": "round",
-    }, active);
+    curveFill = svgEl("path", {fill: "rgba(0,0,0,0.04)"}, active);
+    svgEl("rect", {...visRect, y: plotT, height: plotH, opacity: 0.85, "clip-path": `url(#${uid}-under)`}, active);
+    svgEl("rect", {...visRect, y: plotB - 4, height: 4}, active);
+    curve = svgEl("path", {fill: "none", stroke: "#222", "stroke-width": 2, "stroke-linejoin": "round"}, active);
 
     svgEl("line", {x1: plotL, x2: plotL, y1: plotT, y2: plotB, stroke: "#666"}, svg);
     svgEl("line", {x1: plotL, x2: plotR, y1: plotB, y2: plotB, stroke: "#666"}, svg);
 
-    const halo = {stroke: "#fff", "stroke-width": 3, "paint-order": "stroke", "stroke-linejoin": "round"};
-    const bandLabel = () => svgEl("text", {y: plotT + 13, "font-size": tickFont, fill: "#777", ...halo}, svg);
-    uvLabel = bandLabel(); uvLabel.textContent = "ultraviolet";
-    irLabel = bandLabel(); irLabel.textContent = "infrared";
-    visLabelIn = bandLabel(); visLabelIn.textContent = "visible";
-    visLabelOut = bandLabel(); visLabelOut.textContent = "← visible";
-    for (const el of [uvLabel, irLabel, visLabelIn]) el.setAttribute("text-anchor", "middle");
+    // Band names along the top, each centred on its stretch of the axis while it fits there.
+    // "visible" may overhang its band a little (it does at phone widths) but once the band
+    // is a sliver, as on the linear axis, it steps out to the right behind an arrow, and
+    // "infrared" makes room. All by smooth functions of the room available, so the labels
+    // cross-fade during a switch of scale.
+    const bandLabel = (text, x, anchor, opacity) => {
+      if (opacity < 0.01) return;
+      const t = svgEl("text", {
+        x: x.toFixed(1), y: plotT + 13, "text-anchor": anchor, "font-size": tickFont, fill: "#777",
+        opacity: opacity.toFixed(3), ...halo,
+      }, svg);
+      t.textContent = text;
+    };
+    const textW = text => 2 * labelHalfWidth(text, tickFont);
+    const inBand = smoothstep(0.45, 0.6, (visR - visL) / textW("visible"));
+    const irFrom = visR + (1 - inBand) * (textW("← visible") + 10);
+    bandLabel("ultraviolet", (plotL + visL) / 2, "middle", smoothstep(1, 1.3, (visL - plotL) / textW("ultraviolet")));
+    bandLabel("visible", (visL + visR) / 2, "middle", inBand);
+    bandLabel("← visible", visR + 4, "start", 1 - inBand);
+    bandLabel("infrared", (irFrom + plotR) / 2, "middle", smoothstep(1, 1.3, (plotR - irFrom) / textW("infrared")));
 
     refLabels = OBJECTS.map(o => {
       const t = svgEl("text", {"text-anchor": "middle", "font-size": labelFont, fill: "#555", ...halo}, svg);
@@ -351,18 +486,19 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
     const yTitle = svgEl("text", {x: 0, y: 12, "font-size": titleFont, fill: "#555"}, svg);
     yTitle.textContent = "↑ Spectral radiance (W·m⁻²·sr⁻¹·µm⁻¹)";
     const xTitle = svgEl("text", {x: plotR, y: plotB + 36, "text-anchor": "end", "font-size": titleFont, fill: "#555"}, svg);
-    xTitle.textContent = "Wavelength (µm) →";
+    xTitle.textContent = `Wavelength (µm${xScale === "log" ? ", log scale" : ""}) →`;
 
-    // Slider: the track, a tick per reference object, end labels, handle.
+    // Slider: the track, a tick per reference object (each directly under that object's
+    // peak), end labels, handle.
     svgEl("rect", {
-      x: plotL - trackH / 2, y: trackY - trackH / 2, width: plotW + trackH, height: trackH, rx: trackH / 2,
+      x: trackL - trackH / 2, y: trackY - trackH / 2, width: trackR - trackL + trackH, height: trackH, rx: trackH / 2,
       fill: `url(#${uid}-track)`, stroke: "#888", "stroke-width": 0.75,
     }, svg);
     for (const o of OBJECTS) {
       const px = sliderX(o.T);
       svgEl("line", {x1: px, x2: px, y1: trackY - 13, y2: trackY - 8, stroke: "#888", "stroke-width": 1}, svg);
     }
-    endLabels = [[plotL, "start", T_MIN], [plotR, "end", T_MAX]].map(([x, anchor, T]) => {
+    endLabels = [[trackL, "start", T_MAX], [trackR, "end", T_MIN]].map(([x, anchor, T]) => {
       const t = svgEl("text", {x, y: trackY + handleR + 16, "text-anchor": anchor, "font-size": tickFont, fill: "#888"}, svg);
       t.textContent = formatK(T);
       return t;
@@ -437,37 +573,19 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
     text.textContent = formatRadiance(t.value);
   }
 
-  function placeX(grid, tick, text, t) {
-    const x = (plotL + t.pos).toFixed(1);
-    setAttrs(grid, {x1: x, x2: x, y1: plotT, y2: plotB, "stroke-opacity": t.value ? 0.06 : 0});
-    setAttrs(tick, {x1: x, x2: x, y1: plotB, y2: plotB + 5});
-    setAttrs(text, {x, y: plotB + 18, "text-anchor": "middle"});
-    text.textContent = String(t.value);
-  }
-
   // ---- per-frame drawing: everything that depends on the displayed temperature --------------
   function render() {
     const T = Math.exp(shownLn);
-    const lamPeakUm = peakWavelength(T) * 1e6;
+    const peakX = sliderX(T);
 
     drawTicks(yTickG, lodTicks(Y_SPAN * peakRadiance(T) * 1e-6, plotH, 24), placeY);
-    drawTicks(xTickG, lodTicks(X_SPAN * lamPeakUm, plotW, xTickGap), placeX);
 
-    // Visible band, in pixels. Unclamped on purpose: the gradient must keep its true extent
-    // even when part of the band is outside the frame, and the plot clip trims the rest.
-    const v0 = ux(VIS_LO * 1e6 / lamPeakUm), v1 = ux(VIS_HI * 1e6 / lamPeakUm);
-    setAttrs(visGrad, {x1: v0.toFixed(1), x2: v1.toFixed(1)});
-    for (const r of [visTint, visUnder, visStrip]) setAttrs(r, {x: v0.toFixed(1), width: (v1 - v0).toFixed(1)});
-
-    // Band names along the top. "visible" sits inside its band while it fits, and steps out
-    // to the right with an arrow when the band is a sliver; the two cross-fade on band width.
-    const bandW = v1 - v0, fits = smoothstep(40, 56, bandW);
-    const visRight = Math.min(v1, plotR), visLeft = Math.max(v0, plotL);
-    setAttrs(visLabelIn, {x: ((visLeft + visRight) / 2).toFixed(1), opacity: (fits * smoothstep(40, 56, visRight - visLeft)).toFixed(3)});
-    setAttrs(visLabelOut, {x: (v1 + 4).toFixed(1), opacity: (1 - fits).toFixed(3)});
-    setAttrs(uvLabel, {x: ((plotL + v0) / 2).toFixed(1), opacity: smoothstep(64, 96, v0 - plotL).toFixed(3)});
-    const irFrom = v1 + (1 - fits) * 56; // leave room for "← visible" when it is showing
-    setAttrs(irLabel, {x: ((irFrom + plotR) / 2).toFixed(1), opacity: smoothstep(60, 90, plotR - irFrom).toFixed(3)});
+    const d = curvePath(T, T);
+    curve.setAttribute("d", d);
+    const closed = `${d}L${plotR},${plotB}L${plotL},${plotB}Z`;
+    curveFill.setAttribute("d", closed);
+    underClip.setAttribute("d", closed);
+    setAttrs(guide, {x1: peakX.toFixed(1), x2: peakX.toFixed(1), y1: vy(1).toFixed(1)});
 
     // The active curve's own label: the temperature, and the object's name when it is one.
     // Set first, because the reference labels below are laid out around it.
@@ -477,24 +595,23 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
     const match = OBJECTS.find(o => Math.abs(o.T - T) < 0.5);
     curveLabel.textContent = match ? `${match.name} · ${formatK(match.T)}` : formatK(Tround);
     const ownHalf = labelHalfWidth(curveLabel.textContent, labelFont + 1);
-    const ownX = clamp(ux(1), plotL + ownHalf + 3, plotR - ownHalf - 3), ownY = vy(1) - 8;
+    const ownX = clamp(peakX, plotL + ownHalf + 3, plotR - ownHalf - 3), ownY = vy(1) - 8;
     setAttrs(curveLabel, {x: ownX.toFixed(1), y: ownY.toFixed(1)});
 
-    // Reference curves and their labels. p is a reference's peak height and 1/r its peak
-    // position, both in units of the active curve's.
+    // Reference curves and their labels. p is a reference's peak height in units of the
+    // active curve's; its peak's x is fixed, directly above its tick on the slider.
     const placed = [{x: ownX, y: ownY, half: ownHalf}];
     const order = OBJECTS.map((o, i) => ({o, i, r: o.T / T})).sort((a, b) => Math.abs(Math.log(a.r)) - Math.abs(Math.log(b.r)));
     for (const {o, i, r} of order) {
       const p = r ** 5;
-      // Flatter than a pixel, or so hot that even its tail clears the top of the frame.
-      const visible = p * plotH / Y_SPAN > 0.5 && r < 40;
+      const visible = p * plotH / Y_SPAN > 0.5; // else flatter than a pixel
       refPaths[i].style.display = visible ? "" : "none";
       let opacity = 0;
       if (visible) {
         // Legible means the peak is inside the frame and the curve is not pressed flat.
         opacity = smoothstep(0.05, 0.11, p) * (1 - smoothstep(1.22, 1.4, p));
         const half = labelHalfWidth(o.name, labelFont);
-        const x = clamp(ux(1 / r), plotL + half + 3, plotR - half - 3), y = vy(p) - 7;
+        const x = clamp(sliderX(o.T), plotL + half + 3, plotR - half - 3), y = vy(p) - 7;
         // Closest-in-temperature labels are placed first; a later one that would overprint
         // an earlier one fades out in proportion to how much they overlap vertically.
         for (const q of placed) {
@@ -502,7 +619,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
         }
         if (opacity > 0.01) placed.push({x, y, half});
         setAttrs(refLabels[i], {x: x.toFixed(1), y: y.toFixed(1)});
-        refPaths[i].setAttribute("d", curvePath(o.T, T, false));
+        refPaths[i].setAttribute("d", curvePath(o.T, T));
         // Unlabelled curves stay in view but recede, so a fan of hotter objects crossing the
         // frame reads as background and the one or two labelled neighbours stand out.
         refPaths[i].setAttribute("stroke", mixGray(0xd0, 0x80, opacity));
@@ -514,11 +631,11 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
     const hx = sliderX(dragging ? target : T);
     handleG.setAttribute("transform", `translate(${hx.toFixed(1)},${trackY})`);
     handleDot.setAttribute("fill", blackbodyCss(dragging ? target : T));
-    const lx = clamp(hx, plotL + 24, plotR - 24);
-    sliderLabel.setAttribute("x", lx.toFixed(1));
+    const labelX = clamp(hx, plotL + 24, plotR - 24);
+    sliderLabel.setAttribute("x", labelX.toFixed(1));
     sliderLabel.textContent = formatK(dragging ? target : Tround);
-    endLabels[0].setAttribute("opacity", smoothstep(70, 100, lx - plotL).toFixed(3));
-    endLabels[1].setAttribute("opacity", smoothstep(80, 110, plotR - lx).toFixed(3));
+    endLabels[0].setAttribute("opacity", smoothstep(80, 110, labelX - trackL).toFixed(3));
+    endLabels[1].setAttribute("opacity", smoothstep(70, 100, trackR - labelX).toFixed(3));
   }
 
   // ---- status line and chips: depend on the target only, so they do not flicker mid-glide ---
@@ -572,7 +689,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
     statusBody.textContent = text;
     svg.setAttribute("aria-label",
       `Black-body spectrum at ${formatK(T)}${match ? `, ${match.name}` : ""}. ${text} ` +
-      "Arrow keys change the temperature; Page Up and Page Down step between reference objects.");
+      "Left and right arrows move the peak, up and down arrows change the temperature; Page Up and Page Down step between reference objects.");
 
     chips.forEach((b, i) => {
       const on = OBJECTS[i].T === T;
@@ -610,10 +727,37 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
     if (dragging) render(); // the handle must not wait for the next frame
   }
 
+  // Switching scale eases `mix` across; each frame of that rebuilds the scaffolding on the
+  // blended scale (build, which ends by calling render), a few hundred cheap elements.
+  function setScale(next) {
+    if (next === xScale) return;
+    xScale = next;
+    updateScaleButtons();
+    emit();
+    const to = xScale === "linear" ? 1 : 0;
+    if (reduceMotion) {
+      mix = to;
+      morph = null;
+      build();
+      return;
+    }
+    morph = {from: mix, to, start: performance.now()};
+    if (raf === null) {
+      lastFrame = performance.now();
+      raf = requestAnimationFrame(frame);
+    }
+  }
+
   function frame(now) {
     raf = null;
     // A cell that re-runs leaves the previous widget detached; do not keep animating it.
     if (container.isConnected === false) return;
+    const morphing = morph !== null;
+    if (morph) {
+      const s = clamp((now - morph.start) / MORPH_MS, 0, 1);
+      mix = morph.from + (morph.to - morph.from) * easeInOutCubic(s);
+      if (s >= 1) { mix = morph.to; morph = null; }
+    }
     const to = Math.log(target);
     if (tween) {
       const s = clamp((now - tween.start) / tween.duration, 0, 1);
@@ -625,8 +769,8 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
     lastFrame = now;
     const settled = !tween && Math.abs(to - shownLn) < 2e-4;
     if (settled) shownLn = to;
-    render();
-    if (!settled) raf = requestAnimationFrame(frame);
+    if (morphing) build(); else render();
+    if (!settled || morph) raf = requestAnimationFrame(frame);
   }
 
   // ---- input --------------------------------------------------------------------------------
@@ -635,6 +779,8 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
     return {px: (e.clientX - r.left) * (w / r.width), py: (e.clientY - r.top) * (totalH / r.height)};
   }
   const overSlider = py => Math.abs(py - trackY) <= 20;
+  // The plot is a second, taller handle on the same scale: the peak goes where the pointer is.
+  const overPlot = (px, py) => py >= plotT && py <= plotB && px >= plotL && px <= plotR;
 
   // A reference object within a few pixels of the pointer wins, so its exact temperature
   // can be reached by dragging; otherwise the value is rounded to about three figures.
@@ -649,7 +795,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
 
   svg.addEventListener("pointerdown", e => {
     const {px, py} = pointerAt(e);
-    if (!overSlider(py)) return;
+    if (morph || (!overSlider(py) && !overPlot(px, py))) return; // mid-switch the scale is moving
     dragging = true;
     svg.setPointerCapture(e.pointerId);
     svg.focus();
@@ -661,7 +807,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
   svg.addEventListener("pointermove", e => {
     const {px, py} = pointerAt(e);
     if (!dragging) {
-      svg.style.cursor = overSlider(py) ? "ew-resize" : "default";
+      svg.style.cursor = overSlider(py) || overPlot(px, py) ? "ew-resize" : "default";
       return;
     }
     setTarget(temperatureAt(px), "follow");
@@ -679,12 +825,14 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
   svg.addEventListener("keydown", e => {
     const factor = e.shiftKey ? 1.1 : 1.01;
     let T = target;
-    if (e.key === "ArrowLeft" || e.key === "ArrowDown") T = roundK(target / factor, target, -1);
-    else if (e.key === "ArrowRight" || e.key === "ArrowUp") T = roundK(target * factor, target, 1);
+    // ← and → move the handle (and the peak) the way they point, so → is cooler; ↑ and ↓ are
+    // hotter and cooler.
+    if (e.key === "ArrowLeft" || e.key === "ArrowUp") T = roundK(target * factor, target, 1);
+    else if (e.key === "ArrowRight" || e.key === "ArrowDown") T = roundK(target / factor, target, -1);
     else if (e.key === "PageDown") T = [...OBJECTS].reverse().find(o => o.T < target)?.T ?? T_MIN;
     else if (e.key === "PageUp") T = OBJECTS.find(o => o.T > target)?.T ?? T_MAX;
-    else if (e.key === "Home") T = T_MIN;
-    else if (e.key === "End") T = T_MAX;
+    else if (e.key === "Home") T = T_MAX; // the left end of the track
+    else if (e.key === "End") T = T_MIN;
     else return;
     e.preventDefault();
     setTarget(T, e.key.startsWith("Page") || e.key === "Home" || e.key === "End" ? "tween" : "follow");
@@ -697,6 +845,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, width = FIGU
     const s = bandShares(target);
     return {
       temperature: target,
+      scale: xScale,
       object: OBJECTS.find(o => o.T === target)?.name ?? null,
       peakWavelength: peakWavelength(target),   // m
       peakRadiance: peakRadiance(target),       // W·m⁻²·sr⁻¹·m⁻¹
