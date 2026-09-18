@@ -72,11 +72,11 @@ import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
 ```js
 display(embedSnippets({
   embedPath: "blackbody-radiation/embed",
-  height: 780,
+  height: 770,
   title: "Black-body radiation",
-  note: "The figure is a fixed 466&nbsp;px tall; the rest is the read-out and the object " +
+  note: "The figure is a fixed 452&nbsp;px tall; the rest is the read-out and the object " +
     "buttons, which wrap onto more rows as the frame narrows. The height above suits a frame " +
-    "640&nbsp;px wide or more. Allow about 1010&nbsp;px for a 320&nbsp;px phone-width frame.",
+    "640&nbsp;px wide or more. Allow about 1000&nbsp;px for a 320&nbsp;px phone-width frame.",
   script: `<div id="blackbody-radiation"></div>
 
 <script type="module">
