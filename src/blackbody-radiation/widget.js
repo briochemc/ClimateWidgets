@@ -1,5 +1,6 @@
 // Black-body radiation — Planck's law as one curve of spectral radiance against wavelength,
-// driven by a temperature slider that runs from a blue supergiant to the surface of Mars.
+// driven by a temperature slider that runs from 20,000 K, twice as hot as Sirius, down to
+// 180 K, colder than the surface of Mars.
 //
 // The wavelength axis is fixed and logarithmic, and the slider lies along it. Wien's law puts
 // the peak at λ = b/T, so on a log axis the peak's position is linear in log T: a slider that
@@ -158,20 +159,20 @@ export function blackbodyCss(T) {
 export const OBJECTS = [
   {name: "Mars", T: 210},
   {name: "Earth from space", T: 255},
-  {name: "Ice", T: 273},
+  {name: "Ice (0 °C)", T: 273},
   {name: "Earth's surface", T: 288, emphasis: true},
   {name: "Human body", T: 306},
-  {name: "Kettle", T: 373},
-  {name: "Oven", T: 523},
+  {name: "Boiling water (100 °C)", T: 373},
+  {name: "Oven (250 °C)", T: 523},
   {name: "First red glow", T: 798},
   {name: "Cigarette", T: 1100},
   {name: "Lava", T: 1450},
   {name: "Molten iron", T: 1811},
   {name: "Light bulb", T: 2700},
-  {name: "Betelgeuse", T: 3600},
+  // {name: "Betelgeuse", T: 3600}, // red supergiant; dropped to keep the list to the familiar
   {name: "Sun", T: 5772, emphasis: true},
   {name: "Sirius", T: 9940},
-  {name: "Rigel", T: 12100},
+  // {name: "Rigel", T: 12100},    // blue supergiant; likewise
 ];
 
 const T_MIN = 180, T_MAX = 20000;
@@ -220,7 +221,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     w = newW;
     const t = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
     const lerp = (a, b) => Math.round(a + (b - a) * t);
-    plotL = lerp(62, 74); // the rotated radiance title, then tick labels as wide as "3.5×10⁷"
+    plotL = lerp(76, 88); // the two-line rotated title, then tick labels as wide as "3.5×10⁷"
     plotR = w - lerp(12, 18);
     plotW = plotR - plotL;
     tickFont = lerp(9, 11);
@@ -355,8 +356,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   hint.style.cssText = "padding:8px 0 0;color:#888;font-size:14px;";
   const HINT_IDLE =
     "Drag the slider or the peak itself, pick an object (its button, or its label on a curve), " +
-    "or type a temperature. With the figure focused, ← and → move the peak by 1% (10% with " +
-    "Shift), ↑ and ↓ make it hotter or cooler; Page Up and Page Down step between the objects.";
+    "or type a temperature. With the figure focused, ← and → move the peak by 1% (10% with Shift).";
   const HINT_TOUR =
     "Touring the objects — drag the slider, pick an object or press a key to take over; " +
     "Play tour starts it again.";
@@ -558,7 +558,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     // "infrared" makes room. All by smooth functions of the room available, so the labels
     // cross-fade during a switch of scale.
     const bandLabel = (text, x, anchor, opacity) => {
-      if (opacity < 0.01) return;
+      if (opacity < 0.05) return; // a ghost of a label is worse than none
       const t = svgEl("text", {
         x: x.toFixed(1), y: plotT + 13, "text-anchor": anchor, "font-size": tickFont, fill: "#777",
         opacity: opacity.toFixed(3), ...halo,
@@ -568,7 +568,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     const textW = text => 2 * labelHalfWidth(text, tickFont);
     const inBand = smoothstep(0.45, 0.6, (visR - visL) / textW("visible"));
     const irFrom = visR + (1 - inBand) * (textW("← visible") + 10);
-    bandLabel("ultraviolet", (plotL + visL) / 2, "middle", smoothstep(1, 1.3, (visL - plotL) / textW("ultraviolet")));
+    bandLabel("ultraviolet", (plotL + visL) / 2, "middle", smoothstep(0.85, 1.05, (visL - plotL) / textW("ultraviolet")));
     bandLabel("visible", (visL + visR) / 2, "middle", inBand);
     bandLabel("← visible", visR + 4, "start", 1 - inBand);
     bandLabel("infrared", (irFrom + plotR) / 2, "middle", smoothstep(1, 1.3, (plotR - irFrom) / textW("infrared")));
@@ -585,22 +585,29 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
       "text-anchor": "middle", "font-size": labelFont + 1, "font-weight": "bold", fill: "#222", ...halo,
     }, svg);
 
-    // Axis titles, centred on their axes; the radiance title reads bottom to top.
+    // Axis titles, centred on their axes; the vertical one reads bottom to top, in two lines.
+    // The first is for the audience this was built for, a broad non-quantitative course:
+    // "brightness" is the everyday word for what radiance is, and "at each wavelength" is
+    // what "spectral" means. The proper name and its units follow in smaller, lighter text
+    // for anyone who wants them.
     const yMid = plotT + plotH / 2;
-    const yTitle = svgEl("text", {
-      x: titleFont, y: yMid, transform: `rotate(-90 ${titleFont} ${yMid})`, "text-anchor": "middle",
-      "font-size": titleFont, fill: "#555",
+    const rotated = (x, attrs) => svgEl("text", {
+      x, y: yMid, transform: `rotate(-90 ${x} ${yMid})`, "text-anchor": "middle", ...attrs,
     }, svg);
+    rotated(titleFont, {"font-size": titleFont, "font-weight": "bold", fill: "#333"})
+      .textContent = "Brightness at each wavelength";
+    const unitFont = titleFont - 1;
+    const yUnits = rotated(titleFont + unitFont + 5, {"font-size": unitFont, fill: "#888"});
     // The exponents are set as real superscripts with a true minus sign (U+2212). Unicode's
     // ready-made superscript minus, U+207B, would be less work, but Helvetica and its kin
     // draw it as a short hyphen. Each run is a tspan; a raised one is smaller and shifted up
     // by `rise`, and the run after it shifts back down by the same amount.
-    const rise = 0.36 * titleFont;
+    const rise = 0.36 * unitFont;
     // Units are separated by a thin space (U+2009), the other SI-sanctioned form, not a dot.
-    const runs = ["Spectral radiance (W\u2009m", "^−2", "\u2009sr", "^−1", "\u2009μm", "^−1", ")"];
+    const runs = ["spectral radiance (W\u2009m", "^−2", "\u2009sr", "^−1", "\u2009μm", "^−1", ")"];
     runs.forEach((run, i) => {
       const raised = run.startsWith("^"), afterRaised = i > 0 && runs[i - 1].startsWith("^");
-      const t = svgEl("tspan", raised ? {dy: -rise, "font-size": 0.72 * titleFont} : afterRaised ? {dy: rise} : {}, yTitle);
+      const t = svgEl("tspan", raised ? {dy: -rise, "font-size": 0.72 * unitFont} : afterRaised ? {dy: rise} : {}, yUnits);
       t.textContent = raised ? run.slice(1) : run;
     });
     const xTitle = svgEl("text", {
@@ -618,6 +625,16 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
       const px = sliderX(o.T);
       if (px > trackR + 0.5) continue;
       svgEl("line", {x1: px, x2: px, y1: trackY - 13, y2: trackY - 8, stroke: "#888", "stroke-width": 1}, svg);
+    }
+    // Which way is hot: the slider runs backwards from what a temperature slider usually
+    // does, because it is laid on the wavelength axis. Said at the ends of the track, level
+    // with it, so the words travel with the track when the scale changes.
+    for (const [text, x, anchor] of [["← hot", trackL - trackH / 2 - 8, "end"], ["cold →", trackR + trackH / 2 + 8, "start"]]) {
+      const t = svgEl("text", {
+        x: x.toFixed(1), y: trackY, "dominant-baseline": "central", "text-anchor": anchor,
+        "font-size": tickFont + 1, fill: "#666",
+      }, svg);
+      t.textContent = text;
     }
     endLabels = [[trackL, "start", T_MAX], [trackR, "end", roundK(coldest)]].map(([x, anchor, T]) => {
       const t = svgEl("text", {x, y: trackY + handleR + 16, "text-anchor": anchor, "font-size": tickFont, fill: "#888"}, svg);
@@ -772,7 +789,8 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
         // Closest-in-temperature labels are placed first; a later one that would overprint
         // an earlier one fades out in proportion to how much they overlap vertically.
         for (const q of placed) {
-          if (Math.abs(q.x - x) < q.half + half + 4) opacity *= smoothstep(9, 15, Math.abs(q.y - y));
+          // Gone while the two lines of text would touch, back once there is clear air between.
+          if (Math.abs(q.x - x) < q.half + half + 4) opacity *= smoothstep(labelFont + 1, labelFont + 7, Math.abs(q.y - y));
         }
         if (opacity > 0.01) placed.push({x, y, half});
         if (opacity > 0.4) labelHits.push({i, x, y, half}); // legible enough to be a target
@@ -853,7 +871,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     statusBody.textContent = text;
     svg.setAttribute("aria-label",
       `Black-body spectrum at ${formatK(T)}${match ? `, approximately ${match.name}` : ""}. ${text} ` +
-      "Left and right arrows move the peak, up and down arrows change the temperature; Page Up and Page Down step between reference objects.");
+      "Left and right arrows move the peak: left is hotter, right is cooler.");
 
     chips.forEach((b, i) => {
       const on = OBJECTS[i].T === T;
@@ -1004,18 +1022,17 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   svg.addEventListener("keydown", e => {
     const factor = e.shiftKey ? 1.1 : 1.01;
     let T = target;
-    // ← and → move the handle (and the peak) the way they point, so → is cooler; ↑ and ↓ are
-    // hotter and cooler.
-    if (e.key === "ArrowLeft" || e.key === "ArrowUp") T = roundK(target * factor, target, 1);
-    else if (e.key === "ArrowRight" || e.key === "ArrowDown") T = roundK(target / factor, target, -1);
-    else if (e.key === "PageDown") T = [...OBJECTS].reverse().find(o => o.T < target)?.T ?? T_MIN;
-    else if (e.key === "PageUp") T = OBJECTS.find(o => o.T > target)?.T ?? T_MAX;
+    // ← and → move the handle (and the peak) the way they point, so → is cooler. Those two
+    // are the whole keyboard interface for a horizontal slider, plus Home and End for its
+    // ends; an object's exact temperature is what its button is for.
+    if (e.key === "ArrowLeft") T = roundK(target * factor, target, 1);
+    else if (e.key === "ArrowRight") T = roundK(target / factor, target, -1);
     else if (e.key === "Home") T = T_MAX; // the left end of the track
     else if (e.key === "End") T = T_MIN;
     else return;
     stopTour();
     e.preventDefault();
-    setTarget(T, e.key.startsWith("Page") || e.key === "Home" || e.key === "End" ? "tween" : "follow");
+    setTarget(T, e.key === "Home" || e.key === "End" ? "tween" : "follow");
   });
 
   svg.addEventListener("focus", () => { focusRing.style.display = ""; });
