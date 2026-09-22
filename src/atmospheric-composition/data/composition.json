@@ -1,0 +1,132 @@
+{
+  "asOf": "2024",
+  "notes": [
+    "Mole fractions of dry air in ppm. The widget computes every grid from this file, so updating a value is a one-line edit.",
+    "Nitrogen is marked as the remainder: the Wikipedia table's 780,840 ppm dates from when CO2 was about 330 ppm, and its twelve entries sum to 1,000,091 ppm. Taking N2 as 1,000,000 minus everything else moves only N2, by 91 ppm, which is 0.009 of a square in the first grid.",
+    "ppm1750 is the pre-industrial value from IPCC AR6 WG1 Chapter 2 (278.3 ppm CO2, 729.2 ppb CH4, 270.1 ppb N2O), rounded to three figures.",
+    "Ozone is the near-surface value; Wikipedia gives 0.02 (winter) to 0.07 (summer) ppm. Averaged over the whole atmosphere, a 300 Dobson unit column is about 0.37 ppm, nearly all of it above 15 km."
+  ],
+  "waterVapour": {
+    "id": "H2O",
+    "name": "Water vapour",
+    "formula": "H₂O",
+    "ppm": 4000,
+    "greenhouse": true,
+    "note": "Left out of every table of dry air because it varies so much: near zero over the poles, up to 4% in the tropics, about 0.4% over the whole atmosphere. It is the largest greenhouse gas, and it follows temperature rather than driving it: warmer air holds more of it.",
+    "source": "Global mean of about 0.4% by volume: Wikipedia, Atmosphere of Earth"
+  },
+  "gases": [
+    {
+      "id": "N2",
+      "name": "Nitrogen",
+      "formula": "N₂",
+      "remainder": true,
+      "greenhouse": false,
+      "note": "Inert filler: its two atoms are bound so tightly that it takes lightning, or a bacterium with the right enzyme, to make it react.",
+      "source": "Remainder: 1,000,000 ppm minus every other gas (Wikipedia gives 780,840)"
+    },
+    {
+      "id": "O2",
+      "name": "Oxygen",
+      "formula": "O₂",
+      "ppm": 209460,
+      "greenhouse": false,
+      "note": "Almost all of it was put there by photosynthesis. Burning fossil fuels uses a little of it up, about 4 ppm a decade, which the figure ignores.",
+      "source": "Wikipedia, Atmosphere of Earth (Allen's Astrophysical Quantities, 2002)"
+    },
+    {
+      "id": "Ar",
+      "name": "Argon",
+      "formula": "Ar",
+      "ppm": 9340,
+      "greenhouse": false,
+      "note": "Nearly all of it is argon-40, made by the decay of potassium-40 in rocks over the age of the Earth and let out into the air.",
+      "source": "Wikipedia, Atmosphere of Earth (Allen's Astrophysical Quantities, 2002)"
+    },
+    {
+      "id": "CO2",
+      "name": "Carbon dioxide",
+      "formula": "CO₂",
+      "ppm": 423.9,
+      "ppm1750": 278,
+      "greenhouse": true,
+      "note": "Rising by 2 to 3 ppm a year as fossil fuels are burned, and staying up for centuries.",
+      "source": "Wikipedia, Atmosphere of Earth (2024 value); 1750 value from IPCC AR6 WG1 Chapter 2"
+    },
+    {
+      "id": "Ne",
+      "name": "Neon",
+      "formula": "Ne",
+      "ppm": 18.2,
+      "greenhouse": false,
+      "note": "Primordial: trapped when the Earth formed, and too inert to have done anything since.",
+      "source": "Wikipedia, Atmosphere of Earth (Allen's Astrophysical Quantities, 2002)"
+    },
+    {
+      "id": "He",
+      "name": "Helium",
+      "formula": "He",
+      "ppm": 5.24,
+      "greenhouse": false,
+      "note": "From the alpha decay of uranium and thorium in rocks. Light enough to leak away into space, so it never accumulates.",
+      "source": "Wikipedia, Atmosphere of Earth (Allen's Astrophysical Quantities, 2002)"
+    },
+    {
+      "id": "CH4",
+      "name": "Methane",
+      "formula": "CH₄",
+      "ppm": 1.94,
+      "ppm1750": 0.729,
+      "greenhouse": true,
+      "note": "From wetlands, cattle, rice paddies, landfills and leaking gas wells. Per kilogram it warms about 30 times more than CO₂ over a century, but lasts only a decade or so.",
+      "source": "Wikipedia, Atmosphere of Earth (2024 value); 1750 value from IPCC AR6 WG1 Chapter 2"
+    },
+    {
+      "id": "Kr",
+      "name": "Krypton",
+      "formula": "Kr",
+      "ppm": 1.14,
+      "greenhouse": false,
+      "note": "A primordial noble gas, like neon and xenon.",
+      "source": "Wikipedia, Atmosphere of Earth (Allen's Astrophysical Quantities, 2002)"
+    },
+    {
+      "id": "H2",
+      "name": "Hydrogen",
+      "formula": "H₂",
+      "ppm": 0.53,
+      "greenhouse": false,
+      "note": "Mostly made in the air itself, as methane and other hydrocarbons break down; the lightest gas of all, and it escapes to space.",
+      "source": "Wikipedia, Atmospheric chemistry"
+    },
+    {
+      "id": "N2O",
+      "name": "Nitrous oxide",
+      "formula": "N₂O",
+      "ppm": 0.34,
+      "ppm1750": 0.27,
+      "greenhouse": true,
+      "note": "From fertilised soils above all. The third long-lived greenhouse gas, and today the main threat to the ozone layer.",
+      "source": "Wikipedia, Atmospheric chemistry; 1750 value from IPCC AR6 WG1 Chapter 2"
+    },
+    {
+      "id": "Xe",
+      "name": "Xenon",
+      "formula": "Xe",
+      "ppm": 0.087,
+      "greenhouse": false,
+      "note": "The rarest of the stable gases in the air, and four and a half times denser than air itself.",
+      "source": "Wikipedia, Atmospheric chemistry"
+    },
+    {
+      "id": "O3",
+      "name": "Ozone",
+      "formula": "O₃",
+      "ppm": 0.03,
+      "approximate": true,
+      "greenhouse": true,
+      "note": "Near the surface, where it is 0.02 ppm in winter and 0.07 in summer. Nearly all of the ozone is 15 to 35 km up; averaged over the whole atmosphere it would be about 0.37 ppm, more than nitrous oxide.",
+      "source": "Wikipedia, Atmospheric chemistry"
+    }
+  ]
+}

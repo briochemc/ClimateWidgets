@@ -16,6 +16,7 @@ export default {
     {name: "Actual vs. perceived opinion on climate change", path: "/leviston-etal-2013/"},
     {name: "What a probability word means", path: "/probability-words/"},
     {name: "Black-body radiation", path: "/blackbody-radiation/"},
+    {name: "What the air is made of", path: "/atmospheric-composition/"},
   ],
   head: "",
   // Embed pages disable the footer themselves, so this only shows on the regular pages.

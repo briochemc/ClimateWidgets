@@ -47,6 +47,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Black-body radiation</h2>
     <img class="thumb" src="./assets/thumbnails/blackbody-radiation.png" alt="Planck's curve of spectral radiance against a logarithmic wavelength axis for the Sun at 5772 K, with the band of visible light coloured in under its peak, fainter gray curves for cooler and hotter objects, and beneath the axis a temperature slider, running from blue-white through orange to black, whose handle sits directly under the peak">
   </a>
+  <a class="card" href="./atmospheric-composition/">
+    <h2>What the air is made of</h2>
+    <img class="thumb" src="./assets/thumbnails/atmospheric-composition.png" alt="A 10-by-10 grid of blue-grey argon squares with a small orange block of carbon dioxide in the bottom row, zoomed into from a strip of much larger oxygen squares visible above and to the left; each square is 100 parts per million of the air">
+  </a>
 </div>
 
 <style>
