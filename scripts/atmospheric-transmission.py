@@ -10,7 +10,8 @@ to 3 decimals. CO2 is done at three amounts (pre-industrial, today, doubled), wh
 rescaling of the same optical depth. Two things HITRAN lines do not cover are added: the
 ozone Hartley, Huggins and Chappuis bands, from the Serdyuchenko et al. (2014) cross-sections
 at 223 K (213 to 1100 nm); and, as a rule, everything below 0.2 um is opaque (O2's
-Schumann-Runge bands and continuum). Rayleigh scattering is the Bodhaine et al. (1999) formula.
+Schumann-Runge bands and continuum). Rayleigh scattering is the Bodhaine et al. (1999) formula
+down to 0.2 um and lambda^-4 below that.
 
 Profiles. Temperature and pressure are the US Standard Atmosphere 1976. The water vapour
 and ozone mixing-ratio profiles approximate the AFGL US Standard tables (Anderson et al.
@@ -190,10 +191,19 @@ def ozone_uv(T_o3):
     T[bin_centres < nm[0] / 1000] = 0.0   # the Hartley band goes on below 213 nm
     return T
 
+RAYLEIGH_FIT_MIN = 0.2   # um; the fit below is for the near-UV to the near-IR
+
 def rayleigh():
-    """Bodhaine et al. (1999) eq. 30: vertical optical depth at sea level, lambda in um."""
+    """Bodhaine et al. (1999) eq. 30: vertical optical depth at sea level, lambda in um.
+
+    The fit is a ratio of two quadratics in 1/lambda^2 whose denominator has a pole at
+    0.118 um: below it the ratio goes negative, so used as it stands it makes the air
+    transparent again in the far ultraviolet. Below RAYLEIGH_FIT_MIN the fit is replaced by
+    Rayleigh's own lambda^-4 law, continued from the fit's value there."""
     l = bin_centres
-    tau = 0.0021520 * (1.0455996 - 341.29061 / l**2 - 0.90230850 * l**2) / (1 + 0.0027059889 / l**2 - 85.968563 * l**2)
+    def fit(l):
+        return 0.0021520 * (1.0455996 - 341.29061 / l**2 - 0.90230850 * l**2) / (1 + 0.0027059889 / l**2 - 85.968563 * l**2)
+    tau = np.where(l >= RAYLEIGH_FIT_MIN, fit(np.maximum(l, RAYLEIGH_FIT_MIN)), fit(RAYLEIGH_FIT_MIN) * (RAYLEIGH_FIT_MIN / l) ** 4)
     return np.exp(-np.maximum(tau, 0))
 
 # ---- main -------------------------------------------------------------------------------------
@@ -253,7 +263,7 @@ def main():
                           f"CH₄ {CH4_TODAY*1e9:.0f} ppb, N₂O {N2O_TODAY*1e9:.0f} ppb",
             "ultraviolet": "O₃ Hartley, Huggins and Chappuis bands from Serdyuchenko et al. (2014) "
                            "cross-sections at 223 K; below 0.2 μm O₂ and O₃ are set opaque",
-            "rayleigh": "Bodhaine et al. (1999), vertical column at sea level",
+            "rayleigh": f"Bodhaine et al. (1999) eq. 30 for a vertical column at sea level, extrapolated as λ⁻⁴ below {RAYLEIGH_FIT_MIN} μm",
             "binning": f"mean transmittance over {BINS} log-spaced wavelength bins, "
                        f"{LAMBDA_MIN} to {LAMBDA_MAX} μm, 3 decimals",
             "path": "vertical, clear sky, no re-emission",

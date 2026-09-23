@@ -53,7 +53,7 @@ Small, self-contained interactive figures for teaching climate science. Each wid
   </a>
   <a class="card" href="./atmospheric-transmission/">
     <h2>Atmospheric transmission</h2>
-    <img class="thumb" src="./assets/thumbnails/atmospheric-transmission.png" alt="Three panels on a logarithmic wavelength axis: the Sun's and the Earth's glow curves with the part that gets through the atmosphere filled in gold and red, below them the atmosphere's total transmittance as a grey area full of gaps, and below that one coloured row per gas showing where each one absorbs">
+    <img class="thumb" src="./assets/thumbnails/atmospheric-transmission.png" alt="Three panels on a logarithmic wavelength axis: the Sun's and the Earth's glow curves in faint gold and red, filled solidly where the light gets through the atmosphere, below them the fraction the atmosphere absorbs as a grey area with a wide gap in the visible and a narrower one near 10 micrometres, and below that one coloured row per gas showing where each one absorbs">
   </a>
 </div>
 
