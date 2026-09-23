@@ -6,8 +6,8 @@ depth tau_g(nu) of a layered atmosphere (0 to 60 km, 26 layers) is summed from t
 line list, broadened for each layer's pressure and temperature by RADIS (Voigt lines, no
 continuum, no line mixing). The transmittance exp(-tau_g) is then averaged over 3,000
 wavelength bins, log-spaced from 0.05 to 100 um (the black-body widget's axis), and written
-to 3 decimals. CO2 is done at three amounts (pre-industrial, today, doubled), which is a
-rescaling of the same optical depth. Two things HITRAN lines do not cover are added: the
+to 3 decimals. CO2, CH4 and N2O are each done at three amounts (1750, today, doubled), which
+is a rescaling of the same optical depth. Two things HITRAN lines do not cover are added: the
 ozone Hartley, Huggins and Chappuis bands, from the Serdyuchenko et al. (2014) cross-sections
 at 223 K (213 to 1100 nm); and, as a rule, everything below 0.2 um is opaque (O2's
 Schumann-Runge bands and continuum). Rayleigh scattering is the Bodhaine et al. (1999) formula
@@ -58,7 +58,8 @@ bin_centres = LAMBDA_MIN * np.exp((np.arange(BINS) + 0.5) / BINS * LOG_SPAN)
 # ---- the line-by-line grid -----------------------------------------------------------------
 NU_MIN = 1e4 / LAMBDA_MAX * 0.99      # just past the long-wavelength edge of the axis
 WSTEP = 0.01                          # cm^-1; surface Voigt widths are ~0.05-0.1 cm^-1
-CHUNK = 2000.0                        # cm^-1 per RADIS call, to bound memory
+CHUNK = 500.0                         # cm^-1 per RADIS call, to bound memory (ozone's line
+                                      # list is dense: 2000 cm^-1 chunks took 6 GB and swapped)
 # Where each gas's HITRAN2020 line list ends (cm^-1). Beyond it the gas is transparent, bar the
 # ozone cross-sections and the sub-0.2 um rule.
 LINE_LIMIT = {"H2O": 25711, "CO2": 14076, "O3": 6997, "N2O": 7797, "CH4": 11502, "O2": 17273}
@@ -98,7 +99,14 @@ def profile(table, z):
 
 # Today's global means (NOAA GML, 2025), dry-air mole fractions.
 CO2_TODAY, CH4_TODAY, N2O_TODAY = 428e-6, 1939e-9, 340e-9
-CO2_LEVELS = [(278, "1750"), (428, "today"), (856, "doubled")]
+# The three amounts each long-lived greenhouse gas is offered at: 1750 (IPCC AR6, the same
+# values as the composition widget), today, and twice today. The line-by-line run is done
+# at today's amount and the optical depth rescaled, since it is linear in the amount.
+LEVELS = {
+    "CO2": ("ppm", CO2_TODAY * 1e6, [(278, "1750"), (428, "today"), (856, "doubled")]),
+    "CH4": ("ppb", CH4_TODAY * 1e9, [(729, "1750"), (1939, "today"), (3878, "doubled")]),
+    "N2O": ("ppb", N2O_TODAY * 1e9, [(270, "1750"), (340, "today"), (680, "doubled")]),
+}
 O2 = 0.20946
 H2O_COLUMN_KG = 25.0    # kg per m^2, the global mean
 O3_COLUMN_DU = 300.0
@@ -134,11 +142,16 @@ def build_layers():
 
 # ---- line-by-line ---------------------------------------------------------------------------
 def column_transmittance(molecule, layers):
-    """Bin-averaged transmittance (and, for CO2, the binned tau so it can be rescaled)."""
+    """Bin-averaged transmittance, or for a gas in LEVELS one per amount (the optical depth
+    rescaled before averaging)."""
     from radis import SpectrumFactory
     from radis.misc.warning import EmptyDatabaseError
     sums = np.zeros(BINS); counts = np.zeros(BINS)
-    tau_sums = {lvl: np.zeros(BINS) for lvl, _ in CO2_LEVELS} if molecule == "CO2" else None
+    if molecule in LEVELS:
+        _, today, amounts = LEVELS[molecule]
+        tau_sums = {lvl: np.zeros(BINS) for lvl, _ in amounts}
+    else:
+        tau_sums = None
     lo = NU_MIN
     while lo < LINE_LIMIT[molecule]:
         hi = min(lo + CHUNK, LINE_LIMIT[molecule] + 50)
@@ -162,8 +175,8 @@ def column_transmittance(molecule, layers):
         ok = (idx >= 0) & (idx < BINS)
         idx = idx[ok]; tau = tau[ok]
         if tau_sums is not None:
-            for lvl, _ in CO2_LEVELS:
-                tau_sums[lvl] += np.bincount(idx, weights=np.exp(-tau * lvl / (CO2_TODAY * 1e6)), minlength=BINS)
+            for lvl in tau_sums:
+                tau_sums[lvl] += np.bincount(idx, weights=np.exp(-tau * lvl / today), minlength=BINS)
         sums += np.bincount(idx, weights=np.exp(-tau), minlength=BINS)
         counts += np.bincount(idx, minlength=BINS)
         print(f"  {molecule} {lo:.0f}-{hi:.0f} cm-1: {len(nu)} points, {time.time() - t0:.1f} s", flush=True)
@@ -172,12 +185,13 @@ def column_transmittance(molecule, layers):
         T = np.where(counts > 0, sums / np.maximum(counts, 1), 1.0)
         if tau_sums is None:
             return T
-        return {lvl: np.where(counts > 0, tau_sums[lvl] / np.maximum(counts, 1), 1.0) for lvl, _ in CO2_LEVELS}
+        return {lvl: np.where(counts > 0, tau_sums[lvl] / np.maximum(counts, 1), 1.0) for lvl in tau_sums}
 
 def ozone_uv(T_o3):
     """Multiply in the Hartley, Huggins and Chappuis bands from the cross-sections."""
     if not os.path.exists(O3_XSEC_FILE):
         print("downloading the ozone cross-sections", flush=True)
+        os.makedirs(os.path.dirname(O3_XSEC_FILE), exist_ok=True)
         urllib.request.urlretrieve(O3_XSEC_URL, O3_XSEC_FILE)
     nm, sigma = np.loadtxt(O3_XSEC_FILE, unpack=True)   # nm, cm^2 per molecule
     N = O3_COLUMN_DU * DU
@@ -215,8 +229,8 @@ def main():
         ("H2O", "h2o", "Water vapour", "H₂O", f"{H2O_COLUMN_KG:.0f} kg m⁻² column (global mean)"),
         ("CO2", "co2", "Carbon dioxide", "CO₂", None),
         ("O3", "o3", "Ozone", "O₃", f"{O3_COLUMN_DU:.0f} Dobson units, mostly at 15–35 km"),
-        ("CH4", "ch4", "Methane", "CH₄", f"{CH4_TODAY * 1e9:.0f} ppb"),
-        ("N2O", "n2o", "Nitrous oxide", "N₂O", f"{N2O_TODAY * 1e9:.0f} ppb"),
+        ("CH4", "ch4", "Methane", "CH₄", None),
+        ("N2O", "n2o", "Nitrous oxide", "N₂O", None),
         ("O2", "o2", "Oxygen", "O₂", "20.9%"),
     ]
     t_all = time.time()
@@ -225,9 +239,10 @@ def main():
         t0 = time.time()
         result = column_transmittance(molecule, layers)
         entry = {"key": key, "name": name, "formula": formula}
-        if molecule == "CO2":
+        if molecule in LEVELS:
+            unit, _, amounts = LEVELS[molecule]
             entry["variants"] = [
-                {"label": f"{lvl} ppm", "note": note, "transmittance": result[lvl]} for lvl, note in CO2_LEVELS
+                {"label": f"{lvl} {unit}", "note": note, "transmittance": result[lvl]} for lvl, note in amounts
             ]
             entry["default"] = 1
         else:
