@@ -51,6 +51,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>What the air is made of</h2>
     <img class="thumb" src="./assets/thumbnails/atmospheric-composition.png" alt="A 10-by-10 grid of blue-grey argon squares with a small orange block of carbon dioxide in the bottom row, zoomed into from a strip of much larger oxygen squares visible above and to the left; each square is 100 parts per million of the air">
   </a>
+  <a class="card" href="./atmospheric-transmission/">
+    <h2>Atmospheric transmission</h2>
+    <img class="thumb" src="./assets/thumbnails/atmospheric-transmission.png" alt="Three panels on a logarithmic wavelength axis: the Sun's and the Earth's glow curves with the part that gets through the atmosphere filled in gold and red, below them the atmosphere's total transmittance as a grey area full of gaps, and below that one coloured row per gas showing where each one absorbs">
+  </a>
 </div>
 
 <style>
