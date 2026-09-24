@@ -31,11 +31,12 @@ import {createAtmosphericCompositionWidget} from "./widget.js";
 
 const data = await FileAttachment("data/composition.json").json();
 
-// ?level=2 opens zoomed in to that grid (the thumbnail capture uses it), ?water=1 with
-// water vapour mixed in.
+// ?level=2 opens zoomed in to that grid (the thumbnail capture uses it); ?water=0.4, 1 or 4
+// opens with that percentage of water vapour mixed in (the amounts the data file offers).
 const params = new URLSearchParams(location.search);
 const level = Number(params.get("level")) || 1;
-const waterVapour = ["1", "true", "yes"].includes(params.get("water") ?? "");
+const waterParam = params.get("water") ?? "";
+const waterVapour = ["true", "yes", "on"].includes(waterParam) ? true : Math.round(Number(waterParam) * 1e4) || 0;
 ```
 
 ```js

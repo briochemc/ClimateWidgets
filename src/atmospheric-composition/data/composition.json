@@ -10,10 +10,13 @@
     "id": "H2O",
     "name": "Water vapour",
     "formula": "H₂O",
-    "ppm": 4000,
     "greenhouse": true,
     "note": "Left out of every table of dry air because it varies so much: near zero over the poles, up to 4% in the tropics, about 0.4% over the whole atmosphere. It is the largest greenhouse gas, and it follows temperature rather than driving it: warmer air holds more of it.",
-    "source": "Global mean of about 0.4% by volume: Wikipedia, Atmosphere of Earth"
+    "amounts": [
+      {"ppm": 4000, "short": "atmospheric mean", "label": "the mean over the whole atmosphere", "source": "Wikipedia, Atmosphere of Earth: 0.4% over the entire atmosphere"},
+      {"ppm": 10000, "short": "sea-level mean", "label": "the mean at sea level", "source": "Wikipedia, Atmosphere of Earth: around 1% at sea level"},
+      {"ppm": 40000, "short": "tropics", "label": "humid tropical air", "source": "Wikipedia, Water vapor: 4.24% in surface air at a dew point of 30 °C"}
+    ]
   },
   "gases": [
     {

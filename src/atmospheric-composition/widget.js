@@ -41,7 +41,8 @@
 // Every number comes from data/composition.json: the dry-air mole fractions, with nitrogen
 // as the remainder so that the total is exactly a million ppm, the 1750 values that split the
 // CO₂, CH₄ and N₂O blocks into a pre-industrial part and a darker part added since, and the
-// global-mean water vapour that the toggle mixes in. The geometry is computed from those
+// amounts of water vapour the toggle can mix in: the global mean, the mean at sea level, and
+// humid tropical air. The geometry is computed from those
 // (composition, gridLevels), and both are exported so the page can print the same numbers
 // the figure is drawn with.
 //
@@ -90,14 +91,15 @@ const FALLBACK_FILL = "#c0c8d0";
 // The gases in descending order of abundance, each with its mole fraction in ppm and its
 // [start, end) position in the fill of the whole atmosphere, which runs from 0 to a million
 // ppm. The remainder gas (nitrogen) is whatever the others leave, so the total is exact. With
-// water vapour the dry fractions are scaled down by (1 − w) and water is inserted where its
-// abundance puts it, so the total is still a million.
-export function composition(data, {waterVapour = false} = {}) {
+// water vapour (`waterVapour` ppm of it; 0 is dry air) the dry fractions are scaled down by
+// (1 − w) and water is inserted where its abundance puts it, so the total is still a million.
+export function composition(data, {waterVapour = 0} = {}) {
   const gases = data.gases.map(g => ({...g}));
   const known = gases.filter(g => !g.remainder).reduce((s, g) => s + g.ppm, 0);
   for (const g of gases) if (g.remainder) g.ppm = PPM - known;
-  if (waterVapour && data.waterVapour) {
-    const w = data.waterVapour.ppm, k = 1 - w / PPM;
+  const w = waterVapour > 0 && data.waterVapour ? waterVapour : 0;
+  if (w > 0) {
+    const k = 1 - w / PPM;
     for (const g of gases) {
       g.ppm *= k;
       if (g.ppm1750 != null) g.ppm1750 *= k;
@@ -112,7 +114,7 @@ export function composition(data, {waterVapour = false} = {}) {
     g.end = pos;
   }
   gases[gases.length - 1].end = PPM; // the sum is a million by construction; drop the rounding
-  return {gases, waterVapour: !!(waterVapour && data.waterVapour), asOf: data.asOf};
+  return {gases, waterVapour: w, asOf: data.asOf};
 }
 
 // Grid k is the last square of grid k − 1 blown up a hundred times: a square is
@@ -260,13 +262,17 @@ function labelSpot(rects, rowMajor) {
 const SVG_NS = "http://www.w3.org/2000/svg";
 let instances = 0;
 
-export function createAtmosphericCompositionWidget({data, width = FIGURE_WIDTH, waterVapour = false, level = 1} = {}) {
+// `waterVapour` is an amount in ppm (0 for dry air), or true for the first amount the data
+// file offers, the global mean.
+export function createAtmosphericCompositionWidget({data, width = FIGURE_WIDTH, waterVapour = 0, level = 1} = {}) {
   if (!data?.gases) throw new Error("createAtmosphericCompositionWidget needs {data}: the contents of data/composition.json");
   const uid = `atmospheric-composition-${++instances}`;
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
 
   // ---- state ------------------------------------------------------------------------------------
-  let water = !!waterVapour;
+  const AMOUNTS = data.waterVapour?.amounts ?? [];
+  const waterAmount = ppm => AMOUNTS.find(a => a.ppm === ppm) ?? null;
+  let water = waterVapour === true ? (AMOUNTS[0]?.ppm ?? 0) : waterAmount(Number(waterVapour))?.ppm ?? 0;
   let comp, levels;
   function recompute() {
     comp = composition(data, {waterVapour: water});
@@ -311,19 +317,37 @@ export function createAtmosphericCompositionWidget({data, width = FIGURE_WIDTH, 
     "padding:0 0 8px;font-size:13px;";
   container.appendChild(controls);
 
-  const waterField = document.createElement("label");
-  waterField.style.cssText = "display:flex;align-items:center;gap:6px;cursor:pointer;color:#333;";
-  const waterInput = document.createElement("input");
-  waterInput.type = "checkbox";
-  waterInput.checked = water;
-  waterInput.style.cssText = "margin:0;accent-color:" + ACCENT + ";";
-  const waterText = document.createElement("span");
-  waterText.textContent = `Add water vapour (${formatShort(data.waterVapour?.ppm ?? 0)}, the global mean)`;
-  waterField.append(waterInput, waterText);
-  waterInput.addEventListener("change", () => { stopTour(); setWater(waterInput.checked); });
-  // The box's own event stops here; the widget emits "input" itself when the state changes.
-  waterInput.addEventListener("input", e => e.stopPropagation());
-  controls.appendChild(waterField);
+  // Water vapour: dry air, or one of the amounts the data file offers, as a row of joined
+  // buttons like the blackbody widget's axis toggle.
+  const waterBar = document.createElement("div");
+  waterBar.style.cssText = "display:flex;align-items:center;gap:6px;color:#666;";
+  waterBar.append("Water vapour");
+  const waterChoices = [{ppm: 0, label: "dry air"}, ...AMOUNTS];
+  const waterButtons = waterChoices.map((choice, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = choice.ppm ? formatShort(choice.ppm) : "None";
+    b.title = choice.ppm ? `${formatShort(choice.ppm)} water vapour: ${choice.label}` : "Dry air";
+    const first = i === 0, last = i === waterChoices.length - 1;
+    b.style.cssText =
+      "font:13px sans-serif;padding:3px 10px;cursor:pointer;border:1px solid #ccc;position:relative;" +
+      `border-radius:${first ? "999px 0 0 999px" : last ? "0 999px 999px 0" : "0"};${first ? "" : "margin-left:-1px;"}`;
+    b.addEventListener("click", () => { stopTour(); setWater(choice.ppm); });
+    waterBar.appendChild(b);
+    return b;
+  });
+  function updateWaterButtons() {
+    waterButtons.forEach((b, i) => {
+      const on = waterChoices[i].ppm === water;
+      b.style.background = on ? hexToRgba(ACCENT, 0.08) : "#fff";
+      b.style.borderColor = on ? ACCENT : "#ccc";
+      b.style.color = on ? ACCENT : "#333";
+      b.style.zIndex = on ? 1 : 0;
+      b.setAttribute("aria-pressed", on);
+    });
+  }
+  updateWaterButtons();
+  controls.appendChild(waterBar);
 
   const buttonCss =
     "font:13px sans-serif;color:#333;background:#fff;border:1px solid #ccc;border-radius:999px;" +
@@ -620,12 +644,14 @@ export function createAtmosphericCompositionWidget({data, width = FIGURE_WIDTH, 
   }
 
   // ---- selection and read-out ---------------------------------------------------------------
-  const airWord = () => (water ? "the air, water vapour included" : "dry air");
+  // "air with 1% water vapour (sea-level mean)": the amount, then the data file's short word
+  // for where that amount is found.
+  const airWord = () => (water ? `air with ${formatShort(water)} water vapour (${waterAmount(water)?.short ?? ""})` : "dry air");
 
   function describe(id) {
     if (id === null) {
       return {
-        head: water ? "The air, water vapour included. " : `Dry air, ${comp.asOf}. `,
+        head: water ? `${capitalise(airWord())}. ` : `Dry air, ${comp.asOf}. `,
         body: "Shares by number of molecules. Each grid is the last square of the one before, blown up a hundred times.",
       };
     }
@@ -664,15 +690,15 @@ export function createAtmosphericCompositionWidget({data, width = FIGURE_WIDTH, 
   }
 
   // ---- water vapour -------------------------------------------------------------------------
-  function setWater(on) {
-    on = !!on;
-    if (on === water) return;
-    water = on;
-    waterInput.checked = on;
+  function setWater(ppm) {
+    ppm = waterAmount(ppm)?.ppm ?? 0;
+    if (ppm === water) return;
+    water = ppm;
+    updateWaterButtons();
     recompute();
     zTarget = clamp(zTarget, 1, levels.length);
     if (!zoom) z = zTarget;
-    if (selected === data.waterVapour?.id && !on) selected = null;
+    if (selected === data.waterVapour?.id && !ppm) selected = null;
     build();
     emit();
   }
@@ -732,7 +758,7 @@ export function createAtmosphericCompositionWidget({data, width = FIGURE_WIDTH, 
   // Left alone, the figure zooms in a level at a time, resting on the greenhouse gas each
   // level reveals, then zooms all the way back out and goes round again. It stops at the
   // first click, because a figure that keeps moving under your cursor is maddening, and the
-  // Play tour button brings it back. Same manners as the black-body widget's tour.
+  // Play tour button brings it back. Same manners as the blackbody widget's tour.
   const TOUR_HOLD = 2600;
   let touring = false, tourTimer = null, tourWatcher = null;
 
@@ -847,6 +873,10 @@ function formatPpm(v) {
   return Number(v.toPrecision(2)).toLocaleString("en-US", {maximumFractionDigits: 6});
 }
 
+function capitalise(s) {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
 function tidy(v) {
   return Number(v.toPrecision(6)).toLocaleString("en-US", {maximumFractionDigits: 6});
 }
@@ -860,6 +890,11 @@ function labelHalfWidth(text, fontSize) {
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
+}
+
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
 
 function easeInOutCubic(s) {
