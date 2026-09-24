@@ -1,4 +1,4 @@
-// Black-body radiation — Planck's law as one curve of spectral radiance against wavelength,
+// Blackbody radiation — Planck's law as one curve of spectral radiance against wavelength,
 // driven by a temperature slider that runs from 20,000 K, twice as hot as Sirius, down to
 // 180 K, colder than the surface of Mars.
 //
@@ -63,7 +63,7 @@ export const peakWavelength = T => WIEN_B / T;         // m
 export const peakRadiance = T => planck(WIEN_B / T, T); // ∝ T⁵
 export const radiantExitance = T => SIGMA * T ** 4;     // W·m⁻², all wavelengths, whole hemisphere
 
-// Fraction of a black body's total power emitted at wavelengths shorter than λ. The integral
+// Fraction of a blackbody's total power emitted at wavelengths shorter than λ. The integral
 // of Planck's law from 0 to λ has no closed form, but with x = hc/λkT it is the rapidly
 // converging series (15/π⁴) Σₙ e^(−nx) (x³/n + 3x²/n² + 6x/n³ + 6/n⁴).
 export function fractionBelow(lambda, T) {
@@ -104,7 +104,7 @@ function cieXYZ(nm) {
 }
 
 // XYZ to linear sRGB (D65), with the largest channel scaled to 1. A negative channel means a
-// colour more saturated than the screen can show. For a black body that only happens below
+// colour more saturated than the screen can show. For a blackbody that only happens below
 // about 1900 K, by a hair, and the channel is clipped to 0. A pure spectral colour is far
 // outside the gamut, and clipping would flatten the spectrum into three slabs of blue, green
 // and red; `desaturate` instead adds just enough white to lift the lowest channel to 0,
@@ -123,7 +123,7 @@ function xyzToUnitRgb([X, Y, Z], desaturate = false) {
 
 const srgbEncode = v => (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055);
 
-// The hue of a black body at temperature T, at full brightness: Planck's law weighted by the
+// The hue of a blackbody at temperature T, at full brightness: Planck's law weighted by the
 // colour-matching functions and integrated across the visible. Returns [r, g, b] in 0–255.
 export function blackbodyRgb(T) {
   const xyz = [0, 0, 0];
@@ -149,8 +149,8 @@ export function blackbodyCss(T) {
 }
 
 // Reference objects, coldest first. Temperatures are sourced on the widget's page. Real
-// objects are not perfect black bodies — a flame or a gas least of all — so each gray curve
-// is the black body at that object's temperature, which is an upper bound on what the
+// objects are not perfect blackbodies — a flame or a gas least of all — so each gray curve
+// is the blackbody at that object's temperature, which is an upper bound on what the
 // object itself emits.
 //
 // `emphasis` marks the two this site is about, the Sun and the Earth's surface: what arrives
@@ -409,7 +409,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
   const Y_HOLD_LN = Math.log((WIEN_B * 1e6) / (LINEAR_MAX / 2));
   const yScaleT = lnT => Math.exp(lnT + mix * Math.max(0, Y_HOLD_LN - lnT));
 
-  // Where the black body at Tref falls back through the radiance `level` on the long side of
+  // Where the blackbody at Tref falls back through the radiance `level` on the long side of
   // its peak, in μm: where an emphasised curve's label goes once the peak is out of the frame.
   // Planck's law only falls beyond its peak, so bisect, in log wavelength.
   const LIMB_V = 1.3;
@@ -422,7 +422,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
     return Math.exp(lo) * 1e6;
   }
 
-  // Path of the black body at Tref, in a frame sized for the black body at Ty. Its own peak
+  // Path of the blackbody at Tref, in a frame sized for the blackbody at Ty. Its own peak
   // is added to the samples: on the linear axis a star's whole curve is a few pixels wide,
   // and the columns either side of the peak would otherwise clip the top off it.
   function curvePath(Tref, Ty) {
@@ -483,7 +483,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
       }, visGrad);
     }
 
-    // The slider track is the black-body colour scale itself, hottest at the left.
+    // The slider track is the blackbody colour scale itself, hottest at the left.
     const trackGrad = svgEl("linearGradient", {
       id: `${uid}-track`, gradientUnits: "userSpaceOnUse", x1: trackL, x2: trackR, y1: 0, y2: 0,
     }, defs);
@@ -870,7 +870,7 @@ export function createBlackbodyRadiationWidget({temperature = 5772, scale = "log
       `${formatShare(s.infrared)} infrared.` + (glowing ? "" : " No visible glow: too cold to see by its own light.");
     statusBody.textContent = text;
     svg.setAttribute("aria-label",
-      `Black-body spectrum at ${formatK(T)}${match ? `, approximately ${match.name}` : ""}. ${text} ` +
+      `Blackbody spectrum at ${formatK(T)}${match ? `, approximately ${match.name}` : ""}. ${text} ` +
       "Left and right arrows move the peak: left is hotter, right is cooler.");
 
     chips.forEach((b, i) => {

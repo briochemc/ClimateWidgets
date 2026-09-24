@@ -4,7 +4,7 @@ Small, self-contained interactive figures for teaching climate science, built wi
 
 Each widget is one page. The page explains the figure, says where its numbers come from, and ends with a copy-pastable snippet for dropping the widget into your own site or LMS, either as an `<iframe>` or as a `<script type="module">` tag that renders it inline (the module is served from jsDelivr straight out of this repository).
 
-Widgets so far: drawing your own future CO₂ emissions, global temperature trends, daily sea surface temperature, several surveys of what people believe about climate change and what a probability word means to them, black-body radiation, what the air is made of, and what the atmosphere lets through at each wavelength.
+Widgets so far: drawing your own future CO₂ emissions, global temperature trends, daily sea surface temperature, several surveys of what people believe about climate change and what a probability word means to them, blackbody radiation, what the air is made of, and what the atmosphere lets through at each wavelength.
 
 ## Running the site locally
 

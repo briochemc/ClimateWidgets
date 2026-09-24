@@ -1,5 +1,5 @@
 ---
-title: Black-body radiation (embed)
+title: Blackbody radiation (embed)
 header: false
 footer: false
 sidebar: false

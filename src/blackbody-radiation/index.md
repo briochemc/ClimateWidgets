@@ -1,4 +1,4 @@
-# Black-body radiation
+# Blackbody radiation
 
 Everything warmer than absolute zero glows. How brightly, and in what colours, depends on its temperature alone: that is Planck's law, and it is where the greenhouse effect starts. The Sun, at 5772 K, glows mostly in visible light. The Earth, at 288 K, glows too, but entirely in the infrared, at wavelengths twenty times longer. The atmosphere treats those two kinds of light very differently.
 
@@ -14,7 +14,7 @@ const blackbody = view(createBlackbodyRadiationWidget());
 
 ## What to look for
 
-**The slider is Wien's law.** The curve shows how brightly something glows at each wavelength, which physicists call its *spectral radiance*. Planck's law gives it for a perfect absorber and emitter, a *black body*, at wavelength ${tex`\lambda`} and temperature ${tex`T`}:
+**The slider is Wien's law.** The curve shows how brightly something glows at each wavelength, which physicists call its *spectral radiance*. Planck's law gives it for a perfect absorber and emitter, a *blackbody*, at wavelength ${tex`\lambda`} and temperature ${tex`T`}:
 
 ```tex
 B_\lambda(\lambda, T) = \frac{2hc^2}{\lambda^5}\,\frac{1}{e^{hc/\lambda k_\mathrm{B} T} - 1}
@@ -28,7 +28,7 @@ Its peak sits at ${tex`\lambda_\text{peak} = b/T`} with ${tex`b = 2898`} μm K
 
 **Try the linear axis.** The *Linear* button redraws the same curves against a plain wavelength axis from 0 to 20 μm. At the Earth's end of the slider this is the picture in the textbooks: a steep rise, a peak at 10 μm in the middle of the axis, and a long tail. It is also the honest one for judging power by eye, since on a linear axis the area under the curve *is* the power. Then click *Sun*. The whole solar spectrum becomes a spike against the left edge, its peak a fortieth of the way along, and the hot third of the slider is squeezed into a few pixels with it. No linear axis can show sunlight and earthlight together, which is the reason the default here is logarithmic, and it is a fair picture of how far apart the two are. One more thing changes on this axis. Below 290 K the peak is past the middle of the axis and the curve is increasingly cut off by the right edge, which makes it a poor thing to size the frame by, so from there down the brightness axis stops following and the curves simply sink, as the fifth power says they should.
 
-**Sunlight and earthlight barely overlap.** 98% of the power of a 5772 K black body lies between 0.25 and 4.0 μm. 98% of a 288 K one lies between 5.0 and 80 μm. Click *Sun* and then *Earth's surface* and watch the curve cross the axis from one side of 4 μm to the other. Gases such as water vapour and CO₂ are largely transparent across the first range and absorb strongly in parts of the second, so energy arrives more easily than it leaves. The two Earth entries are the result: seen from space the Earth radiates like a 255 K body, 240 W per m², which balances the sunlight it absorbs, while the surface underneath is at 288 K and radiates 390 W per m².
+**Sunlight and earthlight barely overlap.** 98% of the power of a 5772 K blackbody lies between 0.25 and 4.0 μm. 98% of a 288 K one lies between 5.0 and 80 μm. Click *Sun* and then *Earth's surface* and watch the curve cross the axis from one side of 4 μm to the other. Gases such as water vapour and CO₂ are largely transparent across the first range and absorb strongly in parts of the second, so energy arrives more easily than it leaves. The two Earth entries are the result: seen from space the Earth radiates like a 255 K body, 240 W per m², which balances the sunlight it absorbs, while the surface underneath is at 288 K and radiates 390 W per m².
 
 **Only a quarter of the power is on the short side of the peak.** Against wavelength itself (the linear view) the curve rises steeply and falls slowly, so the peak is not the middle: 25% of the power is at shorter wavelengths and 75% at longer ones, at any temperature. Half lies beyond 1.42 peak wavelengths.
 
@@ -38,9 +38,9 @@ The constants are the exact SI values of ${tex`h`}, ${tex`c`} and ${tex`k_\mathr
 
 The wavelength axis is fixed: 0.05 to 100 μm on the logarithmic scale, 0 to 20 μm on the linear one, and switching between them morphs one scale into the other so that each curve can be followed across. The brightness axis runs to 1.5 times the current peak, except on the linear scale below 290 K, where it holds at 1.5 times the peak of the 290 K curve, the last one whose peak is in the left half of the axis. Its tick marks come from the 1–2–5 sequence and fade in and out according to how far apart they are on screen, so the axis rescales continuously instead of jumping. A reference curve is labelled while its peak is inside the frame and tall enough to read, and unlabelled otherwise. The two exceptions are the Sun and the Earth's surface, the pair this whole site is about: their curves are drawn thicker and darker, and when either one's peak is out through the top of the frame its name moves down onto the side of the curve instead of disappearing. Every label is also a button: click *Sun* on its curve and the black curve goes there, just as it does from the buttons under the figure. One caution about the logarithmic view: equal widths on a log axis are not equal ranges of wavelength, so there the area under the curve is not proportional to power. The percentages under the figure are computed from the integral, not read off the picture.
 
-**Colour.** The swatch, the slider track and the dots on the buttons show the colour of a black body at that temperature: Planck's law weighted by the CIE 1931 colour-matching functions (in the analytic fit of [Wyman, Sloan & Shirley, 2013](https://jcgt.org/published/0002/02/01/)), converted to sRGB. The results agree with Mitchell Charity's widely used [black-body colour table](http://www.vendian.org/mncharity/dir3/blackbody/) to within a few units per channel. Hue is physics; brightness is not. A screen cannot show the many orders of magnitude between a dull red glow and a filament, so the swatch simply fades to black below the [Draper point](https://en.wikipedia.org/wiki/Draper_point), 798 K, where a solid first becomes visible by its own light in a dark room. Note that the Sun comes out nearly white, not yellow, which is correct.
+**Colour.** The swatch, the slider track and the dots on the buttons show the colour of a blackbody at that temperature: Planck's law weighted by the CIE 1931 colour-matching functions (in the analytic fit of [Wyman, Sloan & Shirley, 2013](https://jcgt.org/published/0002/02/01/)), converted to sRGB. The results agree with Mitchell Charity's widely used [blackbody colour table](http://www.vendian.org/mncharity/dir3/blackbody/) to within a few units per channel. Hue is physics; brightness is not. A screen cannot show the many orders of magnitude between a dull red glow and a filament, so the swatch simply fades to black below the [Draper point](https://en.wikipedia.org/wiki/Draper_point), 798 K, where a solid first becomes visible by its own light in a dark room. Note that the Sun comes out nearly white, not yellow, which is correct.
 
-**The objects.** Real objects are not perfect black bodies. Skin, water, ice, rock and soot come close in the infrared (emissivity above 0.9); a polished metal, a gas or a clean flame does not. Each gray curve is the black body at the object's temperature, the most that object could emit.
+**The objects.** Real objects are not perfect blackbodies. Skin, water, ice, rock and soot come close in the infrared (emissivity above 0.9); a polished metal, a gas or a clean flame does not. Each gray curve is the blackbody at the object's temperature, the most that object could emit.
 
 | Object | Temperature | Note |
 |---|---|---|
@@ -59,7 +59,7 @@ The wavelength axis is fixed: 0.05 to 100 μm on the logarithmic scale, 0 to 20 
 | Sun | 5772 K | The IAU's nominal solar effective temperature |
 | Sirius | 9940 K | Sirius A, the brightest star in the night sky |
 
-The two stellar values, for the Sun and Sirius, are effective temperatures: the temperature of the black body that would radiate the same total power per unit area. All the temperatures here are representative and rounded, which is why the figure pairs each object with its temperature by ≈ and not =.
+The two stellar values, for the Sun and Sirius, are effective temperatures: the temperature of the blackbody that would radiate the same total power per unit area. All the temperatures here are representative and rounded, which is why the figure pairs each object with its temperature by ≈ and not =.
 
 ## Embed this widget
 
@@ -71,7 +71,7 @@ import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
 display(embedSnippets({
   embedPath: "blackbody-radiation/embed",
   height: 785,
-  title: "Black-body radiation",
+  title: "Blackbody radiation",
   note: "The figure is a fixed 466&nbsp;px tall; the rest is the read-out and the object " +
     "buttons, which wrap onto more rows as the frame narrows. The height above suits a frame " +
     "640&nbsp;px wide or more. Allow about 1015&nbsp;px for a 320&nbsp;px phone-width frame.",
@@ -94,6 +94,6 @@ display(embedSnippets({
 Sources and credits:
 
 - The idea of a slider-driven Planck curve, and the first version of the maths this one was checked against, come from David Ward's [Blackbody Radiation interactive](https://space-charts.vercel.app/) ([source](https://github.com/gendelbendel/space-charts)).
-- Wikipedia, [Planck's law](https://en.wikipedia.org/wiki/Planck%27s_law) and [Black-body radiation](https://en.wikipedia.org/wiki/Black-body_radiation), for the formula, the percentile table, the skin temperature and the Draper point.
+- Wikipedia, [Planck's law](https://en.wikipedia.org/wiki/Planck%27s_law) and [Blackbody radiation](https://en.wikipedia.org/wiki/Black-body_radiation), for the formula, the percentile table, the skin temperature and the Draper point.
 - Prša, A. et al. (2016), ["Nominal values for selected solar and planetary quantities: IAU 2015 Resolution B3"](https://doi.org/10.3847/0004-6256/152/2/41), *The Astronomical Journal* 152, 41, for the Sun's 5772 K.
 - Wyman, C., Sloan, P.-P. & Shirley, P. (2013), ["Simple analytic approximations to the CIE XYZ color matching functions"](https://jcgt.org/published/0002/02/01/), *Journal of Computer Graphics Techniques* 2(2), 1–11.
