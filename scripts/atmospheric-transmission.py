@@ -30,6 +30,10 @@ Run once, offline (it takes a few minutes and downloads the HITRAN lines on firs
     uv pip install --python .venv-radis/bin/python "numba==0.60.0" "llvmlite==0.43.0" "numpy<2.1" radis
     .venv-radis/bin/python scripts/atmospheric-transmission.py
 
+Naming gases (HITRAN names) recomputes only those and keeps the rest of the data file:
+
+    .venv-radis/bin/python scripts/atmospheric-transmission.py H2O
+
 (The numba pin is for an Intel Mac, where newer llvmlite has no prebuilt wheel.)
 """
 
@@ -108,13 +112,20 @@ LEVELS = {
     "N2O": ("ppb", N2O_TODAY * 1e9, [(270, "1750"), (340, "today"), (680, "doubled")]),
 }
 O2 = 0.20946
-H2O_COLUMN_KG = 25.0    # kg per m^2, the global mean
+# Water vapour is offered at three columns, kg per m^2: a polar or subarctic winter (the AFGL
+# subarctic-winter profile holds 4.2), the global mean, and the humid tropics (AFGL tropical:
+# 41.6). Unlike the long-lived gases these are three separate line-by-line runs, because
+# water broadens its own lines (self-broadening is five times air broadening) and its optical
+# depth is therefore not quite linear in the amount. The profile shape is the same for all
+# three, scaled.
+H2O_COLUMNS = [(4, "dry"), (25, "mean"), (42, "tropical")]
+H2O_COLUMN_KG = 25.0    # the default, the global mean
 O3_COLUMN_DU = 300.0
 
 # Layer edges, km: 1 km steps in the troposphere, 2 km to 30 km, coarser above.
 EDGES = list(range(0, 13)) + list(range(14, 31, 2)) + [35, 40, 45, 50, 60]
 
-def build_layers():
+def build_layers(h2o_column=H2O_COLUMN_KG, verbose=True):
     layers = []
     for lo, hi in zip(EDGES[:-1], EDGES[1:]):
         z = (lo + hi) / 2
@@ -134,10 +145,11 @@ def build_layers():
     h2o = sum(L["x"]["H2O"] * L["n_dz"] for L in layers) * M_H2O
     o3 = sum(L["x"]["O3"] * L["n_dz"] for L in layers) * 1e-4 / DU
     for L in layers:
-        L["x"]["H2O"] *= H2O_COLUMN_KG / h2o
+        L["x"]["H2O"] *= h2o_column / h2o
         L["x"]["O3"] *= O3_COLUMN_DU / o3
-    print(f"{len(layers)} layers; unscaled columns: H2O {h2o:.1f} kg/m2, O3 {o3:.0f} DU; "
-          f"surface H2O now {layers[0]['x']['H2O'] * 1e6:.0f} ppmv", flush=True)
+    if verbose:
+        print(f"{len(layers)} layers; unscaled columns: H2O {h2o:.1f} kg/m2, O3 {o3:.0f} DU; "
+              f"H2O scaled to {h2o_column} kg/m2, {layers[0]['x']['H2O'] * 1e6:.0f} ppmv at the surface", flush=True)
     return layers
 
 # ---- line-by-line ---------------------------------------------------------------------------
@@ -221,24 +233,43 @@ def rayleigh():
     return np.exp(-np.maximum(tau, 0))
 
 # ---- main -------------------------------------------------------------------------------------
-def main():
+def main(only=()):
+    """Computes every gas, or with `only` (HITRAN names, e.g. H2O) just those, taking the
+    rest from the data file as it stands."""
     import radis
     layers = build_layers()
     gases = []
     order = [
-        ("H2O", "h2o", "Water vapour", "H₂O", f"{H2O_COLUMN_KG:.0f} kg m⁻² column (global mean)"),
+        ("H2O", "h2o", "Water vapour", "H₂O", None),
         ("CO2", "co2", "Carbon dioxide", "CO₂", None),
-        ("O3", "o3", "Ozone", "O₃", f"{O3_COLUMN_DU:.0f} Dobson units, mostly at 15–35 km"),
+        ("O3", "o3", "Ozone", "O₃", f"{O3_COLUMN_DU:.0f} DU"),
         ("CH4", "ch4", "Methane", "CH₄", None),
         ("N2O", "n2o", "Nitrous oxide", "N₂O", None),
         ("O2", "o2", "Oxygen", "O₂", "20.9%"),
     ]
+    previous = {}
+    if only:
+        with open(OUT) as f:
+            previous = {g["key"]: g for g in json.load(f)["gases"]}
     t_all = time.time()
     for molecule, key, name, formula, amount in order:
+        if only and molecule not in only:
+            gases.append(previous[key])
+            continue
         print(f"{molecule}:", flush=True)
         t0 = time.time()
-        result = column_transmittance(molecule, layers)
         entry = {"key": key, "name": name, "formula": formula}
+        if molecule == "H2O":
+            entry["variants"] = []
+            for column, note in H2O_COLUMNS:
+                print(f"  {column} kg/m2 ({note}):", flush=True)
+                T = column_transmittance(molecule, build_layers(column, verbose=False))
+                entry["variants"].append({"label": f"{column} kg m⁻²", "note": note, "transmittance": T})
+            entry["default"] = [c for c, _ in H2O_COLUMNS].index(H2O_COLUMN_KG)
+            gases.append(entry)
+            print(f"  done in {time.time() - t0:.0f} s", flush=True)
+            continue
+        result = column_transmittance(molecule, layers)
         if molecule in LEVELS:
             unit, _, amounts = LEVELS[molecule]
             entry["variants"] = [
@@ -255,8 +286,9 @@ def main():
             entry["transmittance"] = T
         gases.append(entry)
         print(f"  done in {time.time() - t0:.0f} s", flush=True)
-    gases.append({"key": "rayleigh", "name": "Rayleigh scattering", "formula": "Rayleigh",
-                  "amount": "sea-level column, all molecules", "transmittance": rayleigh()})
+    gases.append(previous["rayleigh"] if only and "rayleigh" in previous else
+                 {"key": "rayleigh", "name": "Rayleigh scattering", "formula": "Rayleigh",
+                  "amount": "", "transmittance": rayleigh()})
 
     def rounded(a):
         return [float(f"{v:.3f}") for v in a]
@@ -274,7 +306,7 @@ def main():
                      f"{WSTEP} cm⁻¹ grid, no continuum, no line mixing",
             "atmosphere": f"US Standard Atmosphere 1976, {len(layers)} layers from 0 to {EDGES[-1]} km; "
                           f"water vapour and ozone profiles after AFGL US Standard, scaled to "
-                          f"{H2O_COLUMN_KG:.0f} kg m⁻² and {O3_COLUMN_DU:.0f} DU; CO₂ {CO2_TODAY*1e6:.0f} ppm, "
+                          f"{', '.join(f'{c} ({n})' for c, n in H2O_COLUMNS)} kg m⁻² and {O3_COLUMN_DU:.0f} DU; CO₂ {CO2_TODAY*1e6:.0f} ppm, "
                           f"CH₄ {CH4_TODAY*1e9:.0f} ppb, N₂O {N2O_TODAY*1e9:.0f} ppb",
             "ultraviolet": "O₃ Hartley, Huggins and Chappuis bands from Serdyuchenko et al. (2014) "
                            "cross-sections at 223 K; below 0.2 μm O₂ and O₃ are set opaque",
@@ -292,4 +324,4 @@ def main():
     print(f"wrote {OUT} ({os.path.getsize(OUT) / 1e3:.0f} kB) in {time.time() - t_all:.0f} s")
 
 if __name__ == "__main__":
-    main()
+    main(only=tuple(sys.argv[1:]))

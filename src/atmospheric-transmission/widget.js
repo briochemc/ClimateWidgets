@@ -3,17 +3,18 @@
 // atmosphere, gas by gas, and what that does to sunlight on its way down and to the
 // Earth's own glow on its way out.
 //
-// Three panels share one logarithmic wavelength axis, the black-body widget's, 0.05 to
+// Three panels share one logarithmic wavelength axis, the blackbody widget's, 0.05 to
 // 100 μm. The top panel draws the Planck curves of the Sun (5772 K) and of the Earth's
 // surface (288 K by default; a slider moves it between 210 and 310 K), each scaled to its
 // own peak, as faint fills, and fills in solidly the part of each that the atmosphere lets
 // through: the curve times the total transmittance. The middle panel is the fraction the
-// whole atmosphere absorbs, 0 to 100%. The bottom panel is one row per constituent, each
-// row the fraction that constituent alone absorbs (1 − T_g), with a box to include it or
-// not; the total transmittance is the product of the included rows. Carbon dioxide,
-// methane and nitrous oxide each have three amounts to choose from (1750, today, doubled),
-// which is the cleanest way to see that a band widens as there is more of the gas rather
-// than "saturating".
+// whole atmosphere absorbs, 0 to 100%. The bottom panel is one row per constituent, in two
+// groups (what mostly stops sunlight on the way in; the greenhouse gases, which mostly stop
+// the Earth's glow on the way out), each row the fraction that constituent alone absorbs
+// (1 − T_g), with a box to include it or not; the total transmittance is the product of the
+// included rows. Carbon dioxide, methane and nitrous oxide each have three amounts to
+// choose from (1750, today, doubled), which is the cleanest way to see that a band widens
+// as there is more of the gas rather than "saturating".
 //
 // Every spectrum comes from data/transmission.json, precomputed offline by
 // scripts/atmospheric-transmission.py from the HITRAN line list through a layered
@@ -27,9 +28,9 @@
 // Self-contained on purpose — no d3, no other imports — so the script-tag embed on the
 // widget's page is a single ES module import that works from any page. The gas colours
 // and the spectrum under the visible band are copied from the atmospheric-composition and
-// black-body widgets rather than imported, for the same reason.
+// blackbody widgets rather than imported, for the same reason.
 
-// Exact SI values (2019 redefinition); the same Planck function as the black-body widget.
+// Exact SI values (2019 redefinition); the same Planck function as the blackbody widget.
 const H = 6.62607015e-34, C = 299792458, KB = 1.380649e-23;
 const C2 = (H * C) / KB;
 export function planck(lambda, T) {
@@ -81,7 +82,7 @@ export function transmittedFraction(lam, dlam, total, T) {
   return den > 0 ? num / den : 0;
 }
 
-// The colours of the visible band, as in the black-body widget: the CIE 1931 2° colour-
+// The colours of the visible band, as in the blackbody widget: the CIE 1931 2° colour-
 // matching functions (the multi-lobe Gaussian fit of Wyman, Sloan & Shirley 2013) to XYZ,
 // then linear sRGB with just enough white added to lift the lowest channel to 0, which
 // keeps the hue (clipping would flatten the spectrum into three slabs), scaled to full
@@ -98,10 +99,15 @@ function spectralRgb(nm) {
   return rgb.map(v => v / m).map(v => Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055)));
 }
 
-// The tour adds the constituents in this order, the two that are not greenhouse gases
-// first, then the greenhouse gases one by one, water vapour last because it does the most.
-// Any constituent the data has that is not listed here is added after these.
-const TOUR_ORDER = ["o2", "rayleigh", "co2", "ch4", "n2o", "o3", "h2o"];
+// The rows, in two groups: what mostly stops sunlight on its way in (oxygen, ozone and the
+// scattering by the air itself), then the greenhouse gases, which mostly stop the Earth's
+// glow on its way out, strongest first. The tour starts from the first group alone and adds
+// the second one gas at a time. Any constituent the data has that is not listed here goes
+// at the end of the second group.
+const GROUPS = [
+  {title: "Mostly the incoming sunlight", keys: ["o2", "o3", "rayleigh"]},
+  {title: "Greenhouse gases: mostly the outgoing glow", keys: ["h2o", "co2", "ch4", "n2o"]},
+];
 
 // `amounts` picks a variant for each gas that has them, by key: {co2: 278, ch4: "today"},
 // an index, a label prefix or a note. (`co2` alone is accepted too, for old embeds.)
@@ -130,7 +136,15 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     line: lineColour(FILLS[g.key] ?? "#c0c8d0"),
     on: true, w: 1, from: g.default ?? 0, to: g.default ?? 0, s: 1,
     cur: new Float64Array(N),
+    group: 0,
   }));
+  // Rows in GROUPS order; a constituent GROUPS does not name keeps the data's order, last.
+  const RANK = new Map(GROUPS.flatMap(G => G.keys).map((k, i) => [k, i]));
+  for (const g of GASES) {
+    const i = GROUPS.findIndex(G => G.keys.includes(g.key));
+    g.group = i < 0 ? GROUPS.length - 1 : i;
+  }
+  GASES.sort((a, b) => (RANK.get(a.key) ?? RANK.size) - (RANK.get(b.key) ?? RANK.size));
   const VARIANT = GASES.filter(g => g.columns.length > 1); // the gases with an amount to choose
   if (gases) for (const g of GASES) { g.on = gases.includes(g.key); g.w = g.on ? 1 : 0; }
   for (const g of VARIANT) {
@@ -149,26 +163,26 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
   const blend = (a, b, s) => (s >= 1 ? b : s <= 0 ? a : Math.max(a, T_FLOOR) ** (1 - s) * Math.max(b, T_FLOOR) ** s);
   const applied = (t, w) => (w >= 1 ? t : w <= 0 ? 1 : Math.max(t, T_FLOOR) ** w);
 
-  // The presets, from no atmosphere to all of it, each one's complement at the mirrored
-  // position. They are also the tour's steps, in this order.
-  const ALL = GASES.map(g => g.key);
-  const PRESETS = [
-    {label: "None", keys: []},
-    {label: "CO₂ only", keys: ["co2"]},
-    {label: "Water only", keys: ["h2o"]},
-    {label: "All but water", keys: ALL.filter(k => k !== "h2o")},
-    {label: "All but CO₂", keys: ALL.filter(k => k !== "co2")},
-    {label: "All", keys: ALL},
-  ];
-
   // Layout: constant vertically; horizontal metrics recomputed on resize (applyLayout).
+  // The rows sit in their groups, each group under a caption of its own.
   const bandY = 12;
   const pA = {t: 18, h: 210}; pA.b = pA.t + pA.h;
   const pB = {t: pA.b + 14, h: 70}; pB.b = pB.t + pB.h;
-  const ROW_H = 28, ROW_GAP = 6;
-  const pC = {t: pB.b + 14}; pC.b = pC.t + GASES.length * (ROW_H + ROW_GAP) - ROW_GAP;
+  const ROW_H = 28, ROW_GAP = 6, GROUP_HEAD = 20;
+  const rowTops = [];
+  const groupSpans = GROUPS.map(() => null); // [top of first row, bottom of last] per group
+  {
+    let y = pB.b + 8, prev = -1;
+    GASES.forEach((g, i) => {
+      if (g.group !== prev) { y += GROUP_HEAD; prev = g.group; }
+      rowTops.push(y);
+      groupSpans[g.group] = [groupSpans[g.group]?.[0] ?? y, y + ROW_H];
+      y += ROW_H + ROW_GAP;
+    });
+  }
+  const pC = {t: rowTops[0], b: rowTops[rowTops.length - 1] + ROW_H};
   const totalH = pC.b + 42;
-  const rowTop = i => pC.t + i * (ROW_H + ROW_GAP);
+  const rowTop = i => rowTops[i];
 
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
   let w, plotL, plotR, plotW, tickFont, labelFont, titleFont, labelMinorTicks;
@@ -176,7 +190,7 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     w = newW;
     const t = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
     const lerp = (a, b) => Math.round(a + (b - a) * t);
-    plotL = lerp(78, 92); // room for a row's box and formula, for "100%", and for the rotated title
+    plotL = lerp(46, 58); // room for the rotated title, for "100%", and for a row's box
     plotR = w - lerp(12, 18);
     plotW = plotR - plotL;
     tickFont = lerp(9, 11);
@@ -203,44 +217,10 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     "font:13px sans-serif;color:#333;background:#fff;border:1px solid #ccc;border-radius:999px;" +
     "padding:3px 12px;cursor:pointer;";
 
-  // Presets on the left, the tour button on the right.
-  const presets = document.createElement("div");
-  presets.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;";
-  presets.append("Include");
-  const presetButtons = PRESETS.map(p => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = p.label;
-    b.style.cssText = buttonCss;
-    b.addEventListener("click", () => { stopTour(); setGases(p.keys); });
-    presets.appendChild(b);
-    return b;
-  });
-  controls.appendChild(presets);
-  // The preset that matches what is included, if one does, shows as pressed: that is how the
-  // tour, which walks the presets, says where it is.
-  function updatePresetButtons() {
-    const on = new Set(GASES.filter(g => g.on).map(g => g.key));
-    presetButtons.forEach((b, i) => {
-      const keys = PRESETS[i].keys;
-      const active = keys.length === on.size && keys.every(k => on.has(k));
-      b.style.background = active ? hexToRgba(ACCENT, 0.08) : "#fff";
-      b.style.borderColor = active ? ACCENT : "#ccc";
-      b.style.color = active ? ACCENT : "#333";
-      b.setAttribute("aria-pressed", active);
-    });
-  }
-
-  const tourButton = document.createElement("button");
-  tourButton.type = "button";
-  tourButton.textContent = "Play tour";
-  tourButton.style.cssText = buttonCss;
-  tourButton.addEventListener("click", () => (touring ? stopTour() : startTour(0)));
-  controls.appendChild(tourButton);
-
-  // The amounts, one segmented control per gas that has them, together on a row of the
-  // controls (they wrap when there is no room). The buttons say when (1750, today,
-  // doubled); the amount itself is in the button's tooltip and on the gas's chip.
+  // The amounts on the first row of the controls, one segmented control per gas that has
+  // them (they wrap when there is no room). The buttons say when (1750, today, doubled);
+  // the amount itself is in the button's tooltip and in the gas's row. The second row is
+  // the surface temperature slider, with the tour button at its right.
   const amountButtons = new Map(); // gas -> its buttons
   if (VARIANT.length) {
     const bar = document.createElement("div");
@@ -287,7 +267,7 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
   // The Earth's surface temperature, a slider on the last row of the controls: it moves the
   // Earth's curve along the axis (Wien's law) under the fixed bands, which is the point.
   const earthField = document.createElement("label");
-  earthField.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;flex-basis:100%;cursor:pointer;";
+  earthField.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;flex:1 1 auto;cursor:pointer;";
   const earthSlider = document.createElement("input");
   earthSlider.type = "range";
   earthSlider.min = EARTH_MIN;
@@ -301,6 +281,13 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
   earthField.append("Earth's surface", earthSlider, earthOut);
   earthSlider.addEventListener("input", e => { e.stopPropagation(); stopTour(); setEarth(Number(earthSlider.value)); });
   controls.appendChild(earthField);
+
+  const tourButton = document.createElement("button");
+  tourButton.type = "button";
+  tourButton.textContent = "Play tour";
+  tourButton.style.cssText = buttonCss;
+  tourButton.addEventListener("click", () => (touring ? stopTour() : startTour(0)));
+  controls.appendChild(tourButton);
 
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "atmospheric-transmission");
@@ -316,35 +303,14 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
   status.style.cssText = "padding:8px 0 0;color:#555;min-height:4.2em;line-height:1.4;";
   container.appendChild(status);
 
-  // One toggle per constituent under the figure, the accessible twin of the boxes in the
-  // figure's margin: real buttons, with the gas's name and how much of it there is.
-  const chipBar = document.createElement("div");
-  chipBar.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 0;";
-  container.appendChild(chipBar);
-  const chips = GASES.map(g => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.style.cssText =
-      "font:13px sans-serif;color:#333;background:#fff;border:1px solid #ccc;border-radius:999px;" +
-      "padding:3px 10px 3px 6px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;";
-    const dot = document.createElement("span");
-    dot.style.cssText = `width:12px;height:12px;border-radius:3px;background:${g.fill};border:1.5px solid ${g.line};box-sizing:border-box;`;
-    const amount = document.createElement("span");
-    amount.style.cssText = "color:#888;font-size:12px;";
-    b.append(dot, g.name, amount);
-    b.addEventListener("click", () => { stopTour(); toggle(g); });
-    chipBar.appendChild(b);
-    return {button: b, dot, amount};
-  });
-
   const hint = document.createElement("div");
   hint.style.cssText = "padding:8px 0 0;color:#888;font-size:14px;";
   const HINT_IDLE =
-    "Tick a gas in the figure or press its button to include it or leave it out; hover or touch " +
-    "the figure to read the absorption at any wavelength.";
+    "Tick a row to include that constituent or leave it out (each row is a checkbox, so Tab and " +
+    "Space work too); hover or touch the figure to read the absorption at any wavelength.";
   const HINT_TOUR =
-    "Touring: no atmosphere, then the constituents added one at a time, the greenhouse gases " +
-    "last — press anything to take over; Play tour starts it again.";
+    "Touring: oxygen, ozone and the air's own scattering first, then the greenhouse gases added " +
+    "one at a time, strongest first — press anything to take over; Play tour starts it again.";
   hint.textContent = HINT_IDLE;
   container.appendChild(hint);
 
@@ -413,7 +379,7 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
 
   // ---- static scaffolding, rebuilt on resize -----------------------------------------------------
   let sunFull, earthFull, sunFill, earthFill, sunLine, earthLine, sunClip, totalFill, totalLine;
-  let rowFills, rowLines, rowBoxes, rowChecks, rowLabels;
+  let rowFills, rowLines, rowBoxes, rowChecks, rowLabels, rowRings;
   let sunLabel, earthLabel, sunLabel2, earthLabel2, rule, ruleLabel, ruleDots;
 
   function build() {
@@ -430,7 +396,7 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     sunClip = svgEl("path", {}, svgEl("clipPath", {id: `${uid}-sun`}, defs));
 
     // The spectrum, one stop per 10 nm, placed by log wavelength like everything else; the
-    // ends fade to transparent the way the eye's sensitivity does. As in the black-body widget.
+    // ends fade to transparent the way the eye's sensitivity does. As in the blackbody widget.
     const visL = lx(VIS_LO), visR = lx(VIS_HI);
     const visGrad = svgEl("linearGradient", {
       id: `${uid}-vis`, gradientUnits: "userSpaceOnUse", x1: visL, x2: visR, y1: 0, y2: 0,
@@ -457,8 +423,9 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     bandLabel("visible", (visL + visR) / 2, "middle", 1);
     bandLabel("infrared", (visR + plotR) / 2, "middle", 1);
 
-    // Gridlines at the decades, through every panel, and the wavelength ticks under the last row.
-    const gridRanges = [[pA.t, pA.b], [pB.t, pB.b], [pC.t, pC.b]];
+    // Gridlines at the decades, through every panel and each group of rows, and the
+    // wavelength ticks under the last row.
+    const gridRanges = [[pA.t, pA.b], [pB.t, pB.b], ...groupSpans.filter(Boolean)];
     for (let n = Math.floor(Math.log10(LAMBDA_MIN)); n <= Math.ceil(Math.log10(LAMBDA_MAX)); n++) {
       for (let m = 1; m <= 9; m++) {
         const um = Number((m * 10 ** n).toPrecision(12));
@@ -478,17 +445,18 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     const xTitle = svgEl("text", {x: (plotL + plotR) / 2, y: pC.b + 36, "text-anchor": "middle", "font-size": titleFont, fill: "#555"}, svg);
     xTitle.textContent = "Wavelength (μm)";
 
-    // The top panel's axis title, the black-body widget's, reading bottom to top in two
+    // The top panel's axis title, the blackbody widget's, reading bottom to top in two
     // lines: the everyday words, then the proper name. No units: each curve is drawn
-    // relative to its own peak.
+    // relative to its own peak. Rotated text hangs to the left of its baseline, so the
+    // inner line's baseline sits just off the axis and the outer line's one line further out.
     const yMid = pA.t + pA.h / 2;
     const rotated = (x, attrs) => svgEl("text", {
       x, y: yMid, transform: `rotate(-90 ${x} ${yMid})`, "text-anchor": "middle", ...attrs,
     }, svg);
-    rotated(titleFont, {"font-size": titleFont, "font-weight": "bold", fill: "#333"})
-      .textContent = "Brightness at each wavelength";
     const unitFont = titleFont - 1;
-    rotated(titleFont + unitFont + 5, {"font-size": unitFont, fill: "#888"})
+    rotated(plotL - 6 - unitFont - 4, {"font-size": titleFont, "font-weight": "bold", fill: "#333"})
+      .textContent = "Brightness at each wavelength";
+    rotated(plotL - 6, {"font-size": unitFont, fill: "#888"})
       .textContent = "spectral radiance (peak = 1)";
 
     // Panel A: each curve as a faint fill, the part of it that gets through as a solid one
@@ -528,32 +496,51 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     }, svg);
     bTitle.textContent = 2 * labelHalfWidth(bTitleLong, titleFont) <= plotW - 12 ? bTitleLong : bTitleShort;
 
-    // Panel C: one row per gas. The row's shape is fixed (it is what the gas alone absorbs),
-    // except carbon dioxide's, which follows the chosen amount; being included or not only
-    // changes how the row is painted. The margin holds a box and the formula; the whole row
-    // is the box's hit area.
-    rowFills = []; rowLines = []; rowBoxes = []; rowChecks = []; rowLabels = [];
+    // Panel C: the rows, in their groups, each group captioned. A row's shape is fixed (it
+    // is what the gas alone absorbs) except for a gas with amounts, whose row follows the
+    // chosen amount; being included or not only changes how the row is painted. The margin
+    // holds the box; the gas's name and amount are inside the row, haloed like the middle
+    // panel's title; and the whole row is the box, a checkbox to the keyboard as well.
+    GROUPS.forEach((G, k) => {
+      if (!groupSpans[k]) return;
+      const t = svgEl("text", {x: plotL, y: groupSpans[k][0] - 6, "font-size": tickFont, fill: "#777", ...halo}, svg);
+      t.textContent = G.title;
+    });
+    rowFills = []; rowLines = []; rowBoxes = []; rowChecks = []; rowLabels = []; rowRings = [];
     GASES.forEach((g, i) => {
       const t = rowTop(i), b = t + ROW_H;
-      const grp = svgEl("g", {}, svg);
+      const grp = svgEl("g", {tabindex: 0, role: "checkbox", "aria-label": g.name}, svg);
       grp.style.cursor = "pointer";
+      grp.style.outline = "none";
       svgEl("rect", {x: 0, y: t - ROW_GAP / 2, width: w, height: ROW_H + ROW_GAP, fill: "transparent"}, grp);
       svgEl("line", {x1: plotL, x2: plotR, y1: b, y2: b, stroke: "#999", "stroke-width": 0.75}, grp);
       rowFills.push(svgEl("path", {fill: g.fill}, grp));
       rowLines.push(svgEl("path", {fill: "none", stroke: g.line, "stroke-width": 1, "stroke-linejoin": "round"}, grp));
-      const bx = 10, by = t + ROW_H / 2 - 7;
+      const bx = plotL - 24, by = t + ROW_H / 2 - 7;
+      const ring = svgEl("rect", {x: bx - 3, y: by - 3, width: 20, height: 20, rx: 5, fill: "none", stroke: hexToRgba(ACCENT, 0.5), "stroke-width": 2.5}, grp);
+      ring.style.display = "none";
+      rowRings.push(ring);
       rowBoxes.push(svgEl("rect", {x: bx, y: by, width: 14, height: 14, rx: 3, fill: "#fff", stroke: "#555", "stroke-width": 1.2}, grp));
       rowChecks.push(svgEl("path", {d: `M${bx + 3},${by + 7.5}l3,3l5.5,-6.5`, fill: "none", stroke: "#fff", "stroke-width": 2.2, "stroke-linecap": "round", "stroke-linejoin": "round"}, grp));
-      const label = svgEl("text", {x: bx + 21, y: t + ROW_H / 2, "dominant-baseline": "central", "font-size": labelFont, "font-weight": 600, fill: "#333"}, grp);
-      label.textContent = g.formula;
-      rowLabels.push(label);
+      rowLabels.push(svgEl("text", {
+        x: plotL + 6, y: t + labelFont + 3, "font-size": labelFont, "font-weight": 600, fill: "#222", ...halo, "stroke-width": 4,
+      }, grp));
       grp.addEventListener("click", () => { stopTour(); toggle(g); });
+      grp.addEventListener("keydown", e => {
+        if (e.key !== " " && e.key !== "Enter") return;
+        e.preventDefault();
+        stopTour();
+        toggle(g);
+      });
+      grp.addEventListener("focus", () => { ring.style.display = ""; });
+      grp.addEventListener("blur", () => { ring.style.display = "none"; });
       if (g.columns.length === 1) {
         const value = rowValue(g);
         rowFills[i].setAttribute("d", areaPath(value, b, ROW_H));
         rowLines[i].setAttribute("d", linePath(value, b, ROW_H));
       }
     });
+    updateRowLabels();
 
     // The frames.
     for (const p of [pA, pB]) {
@@ -628,6 +615,17 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     });
   }
 
+  // Each row's label: the formula and the amount, no more ("CO₂, 428 ppm"); the full name
+  // is what the row announces to assistive technology.
+  function updateRowLabels() {
+    GASES.forEach((g, i) => {
+      const amount = g.labels ? g.labels[g.to].split(" (")[0] : g.amount;
+      rowLabels[i].textContent = amount ? `${g.formula}, ${amount}` : g.formula;
+      rowLabels[i].parentNode.setAttribute("aria-checked", g.on);
+      rowLabels[i].parentNode.setAttribute("aria-label", `${g.name}${amount ? `, ${amount}` : ""}`);
+    });
+  }
+
   // The read-outs sit above their curves, "Sunlight" over the Sun's peak and "Earth's glow"
   // over the Earth's, unless the two would collide, in which case they go to the two ends.
   function placeReadouts() {
@@ -644,17 +642,18 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     setAttrs(earthLabel, {x: xe.toFixed(1), y: y1}); setAttrs(earthLabel2, {x: xe.toFixed(1), y: y2});
   }
 
-  // ---- status line and chips: depend on the targets only --------------------------------------------
+  // ---- status line, row labels and buttons: depend on the targets only -------------------------------
   function updateStatus() {
     const off = GASES.filter(g => !g.on).map(g => g.name.toLowerCase());
     const on = GASES.filter(g => g.on);
-    // The amounts of the variant gases that are included: one phrase when they are all at
-    // the same time's amount, else each on its own.
+    // The amounts of the variant gases that are included, the gases at the same amount's
+    // note (today, doubled, mean…) gathered into one phrase.
     const shown = VARIANT.filter(g => g.on);
-    const sameNote = shown.length > 1 && shown.every(g => g.notes[g.to] === shown[0].notes[shown[0].to]);
-    const amountText = shown.length === 0 ? "" : sameNote ?
-      ` ${shown.map(g => g.formula).join(", ")} at ${shown.map(g => g.labels[g.to].split(" (")[0]).join(", ")} (${shown[0].notes[shown[0].to]}).` :
-      ` ${shown.map(g => `${g.formula} at ${g.labels[g.to]}`).join(", ")}.`;
+    const notes = [...new Set(shown.map(g => g.notes[g.to]))];
+    const amountText = notes.map(note => {
+      const these = shown.filter(g => g.notes[g.to] === note);
+      return ` ${these.map(g => g.formula).join(", ")} at ${these.map(g => g.labels[g.to].split(" (")[0]).join(", ")} (${note}).`;
+    }).join("");
     const gasText = on.length === 0 ? "No atmosphere at all." :
       off.length === 0 ? `All ${GASES.length} constituents included.${amountText}` :
       on.length <= 2 ? `Only ${on.map(g => g.name.toLowerCase()).join(" and ")}.${amountText}` :
@@ -664,15 +663,7 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     svg.setAttribute("aria-label",
       `Atmospheric absorption by wavelength, 0.05 to 100 micrometres. ${status.textContent}`);
     earthOut.textContent = `${earthT} K`;
-    chips.forEach(({button, amount}, i) => {
-      const g = GASES[i];
-      button.style.borderColor = g.on ? ACCENT : "#ccc";
-      button.style.background = g.on ? hexToRgba(ACCENT, 0.08) : "#fff";
-      button.style.color = g.on ? "#222" : "#777";
-      button.setAttribute("aria-pressed", g.on);
-      amount.textContent = g.labels ? g.labels[g.to] : g.amount;
-    });
-    updatePresetButtons();
+    updateRowLabels();
     updateAmountButtons();
   }
 
@@ -803,15 +794,13 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
   }
 
   // ---- tour ----------------------------------------------------------------------------------------
-  // One way only: no atmosphere, then one constituent added per step in TOUR_ORDER until all
-  // are in, then round again from nothing. The amounts and the surface temperature stay as
-  // they are. Same manners as the other widgets' tours: it loops until the reader touches
-  // anything, and Play tour brings it back.
+  // One way only: the first group alone (what mostly stops sunlight), then one greenhouse gas
+  // added per step, strongest first, until all are in, then round again. The amounts and the
+  // surface temperature stay as they are. Same manners as the other widgets' tours: it loops
+  // until the reader touches anything, and Play tour brings it back.
   const TOUR_HOLD = 2600;
-  const STEPS = [[]];
-  for (const key of [...TOUR_ORDER, ...ALL.filter(k => !TOUR_ORDER.includes(k))]) {
-    if (ALL.includes(key)) STEPS.push([...STEPS[STEPS.length - 1], key]);
-  }
+  const STEPS = [GASES.filter(g => g.group === 0).map(g => g.key)];
+  for (const g of GASES) if (g.group !== 0) STEPS.push([...STEPS[STEPS.length - 1], g.key]);
   let touring = false, tourTimer = null, tourWatcher = null;
   function showTouring() {
     tourButton.textContent = touring ? "Stop tour" : "Play tour";
