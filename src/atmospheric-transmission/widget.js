@@ -218,14 +218,14 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     "padding:3px 12px;cursor:pointer;";
 
   // The amounts on the first row of the controls, one segmented control per gas that has
-  // them (they wrap when there is no room). The buttons say when (1750, today, doubled);
-  // the amount itself is in the button's tooltip and in the gas's row. The second row is
-  // the surface temperature slider, with the tour button at its right.
+  // them, each headed by the gas's formula (they wrap when there is no room). The buttons
+  // say when or where (1750, today, doubled; dry, mean, tropical); the amount itself is in
+  // the button's tooltip and in the gas's row. The second row is the surface temperature
+  // slider, with the tour button at its right.
   const amountButtons = new Map(); // gas -> its buttons
   if (VARIANT.length) {
     const bar = document.createElement("div");
     bar.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;flex-basis:100%;";
-    bar.append("Amounts");
     for (const g of VARIANT) {
       const group = document.createElement("div");
       group.style.cssText = "display:inline-flex;align-items:center;gap:6px;";
