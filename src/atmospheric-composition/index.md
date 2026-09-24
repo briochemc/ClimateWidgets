@@ -22,7 +22,7 @@ const air = view(createAtmosphericCompositionWidget({data}));
 
 **The darker part is ours.** The blocks for CO₂, CH₄ and N₂O are split at their 1750 amounts: the lighter part is what the air held before industry, the darker part is what has been added since. A third of the carbon dioxide, three-fifths of the methane and a fifth of the nitrous oxide are the darker shade. Because the addition is drawn at the end of each block, grid 3 opens on seventy-two squares of it: every molecule of CO₂ in that tail is one that was not there in 1750.
 
-**Add water vapour.** Every table of the air is a table of *dry* air, because water vapour varies from almost nothing over Antarctica to 4% of the molecules in the tropics. The toggle mixes in its global mean, 0.4%, and shrinks everything else to make room. The surprise is where it lands: 0.4% is less than argon's 0.93%, so in the first grid it stays inside the last square, while argon, pushed forward, comes out of that square into view. In grid 2 the water is forty squares, ten times the carbon dioxide, and it is the largest greenhouse gas of all. It does not drive the warming, though: it follows the temperature, condensing out in days, and amplifies whatever the long-lived gases do.
+**Add water vapour.** Every table of the air is a table of *dry* air, because water vapour varies from almost nothing over Antarctica to several percent of the molecules in the tropics. The toggle mixes in one of three amounts and shrinks everything else to make room. The global mean, 0.4% over the whole atmosphere, is less than argon's 0.93%, so in the first grid it stays inside the last square, while argon, pushed forward, comes out of that square into view; in grid 2 the water is forty squares, ten times the carbon dioxide. The mean at sea level, 1%, is more than argon, and water takes a square of the first grid for itself. In humid tropical air, 4%, it takes four, more than everything else put together apart from nitrogen and oxygen. Whatever the amount, it is the largest greenhouse gas of all. It does not drive the warming, though: it follows the temperature, condensing out in days, and amplifies whatever the long-lived gases do.
 
 ## The numbers
 
@@ -68,7 +68,7 @@ The layout is the one xkcd used for its [Money](https://xkcd.com/980/) chart: a 
 
 **Frozen, not live.** The values are Wikipedia's, with the 2024 figures for carbon dioxide and methane, and the 1750 values are the IPCC's. NOAA's monthly means for 2026 (CO₂ near 428 ppm, CH₄ near 1.94 ppm, N₂O near 0.34 ppm) differ by less than the rounding of a square, and the file is easier to update than a fetch is to keep working. The "as of" year is stored with the data and printed in the read-out.
 
-**Water vapour** is 0.4% of the molecules over the whole atmosphere, from about 25 kg of precipitable water per square metre against 10,330 kg of air (0.24% by mass, times the ratio of the molar masses, 28.97⁄18.02). The toggle multiplies every dry fraction by 0.996 and inserts water where its abundance puts it in the descending order, after argon.
+**Water vapour** is 0.4% of the molecules over the whole atmosphere, from about 25 kg of precipitable water per square metre against 10,330 kg of air (0.24% by mass, times the ratio of the molar masses, 28.97⁄18.02); around 1% in the air at sea level, where most of it is; and 4.24% in surface air at a dew point of 30 °C, which is the humid tropics on a warm day, rounded here to 4%. The toggle multiplies every dry fraction by one minus the chosen amount and inserts water where its abundance puts it in the descending order: after argon at 0.4%, before it at 1% and 4%.
 
 ## Embed this widget
 
@@ -84,7 +84,8 @@ display(embedSnippets({
   note: "The grid is 480&nbsp;px square in a frame 480&nbsp;px wide or more and shrinks with the " +
     "frame below that, so the height above suits a frame 640&nbsp;px wide; allow about " +
     "550&nbsp;px at phone width. The embed page accepts <code>?level=2</code> to open zoomed in " +
-    "to that grid and <code>?water=1</code> to start with water vapour mixed in.",
+    "to that grid and <code>?water=0.4</code>, <code>?water=1</code> or <code>?water=4</code> to start " +
+    "with that percentage of water vapour mixed in.",
   script: `<div id="atmospheric-composition"></div>
 
 <script type="module">
@@ -94,8 +95,8 @@ display(embedSnippets({
   const data = await fetch("${cdnUrl("atmospheric-composition/data/composition.json")}")
     .then(r => r.json());
 
-  // Options: {level: 2} opens zoomed in to the second grid, {waterVapour: true} with
-  // water vapour mixed in.
+  // Options: {level: 2} opens zoomed in to the second grid, {waterVapour: 10000} with
+  // that many ppm of water vapour mixed in (4000, 10000 or 40000).
   document.getElementById("atmospheric-composition")
     .appendChild(createAtmosphericCompositionWidget({data}));
 <\/script>`
@@ -107,5 +108,5 @@ display(embedSnippets({
 Sources and credits:
 
 - The nested-grid idea is from Randall Munroe's [Money](https://xkcd.com/980/) (xkcd 980). The nested pie chart it replaces is Wikipedia's [Atmosphere gas proportions](https://en.wikipedia.org/wiki/File:Atmosphere_gas_proportions.svg).
-- Wikipedia, [Atmosphere of Earth](https://en.wikipedia.org/wiki/Atmosphere_of_Earth#Composition), for the main gases (after Allen's *Astrophysical Quantities*, 2002, with carbon dioxide and methane updated to 2024) and the global-mean water vapour; [Atmospheric chemistry](https://en.wikipedia.org/wiki/Atmospheric_chemistry) for hydrogen, nitrous oxide, xenon and ozone.
+- Wikipedia, [Atmosphere of Earth](https://en.wikipedia.org/wiki/Atmosphere_of_Earth#Composition), for the main gases (after Allen's *Astrophysical Quantities*, 2002, with carbon dioxide and methane updated to 2024) and the water vapour over the whole atmosphere and at sea level; [Water vapor](https://en.wikipedia.org/wiki/Water_vapor) for the humid-tropics value; [Atmospheric chemistry](https://en.wikipedia.org/wiki/Atmospheric_chemistry) for hydrogen, nitrous oxide, xenon and ozone.
 - IPCC (2021), [Chapter 2](https://www.ipcc.ch/report/ar6/wg1/chapter/chapter-2/) of *Climate Change 2021: The Physical Science Basis*, for the 1750 concentrations: 278.3 ppm CO₂, 729.2 ppb CH₄ and 270.1 ppb N₂O.
