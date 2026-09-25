@@ -5,16 +5,18 @@
 //
 // Three panels share one logarithmic wavelength axis, the blackbody widget's, 0.05 to
 // 100 μm. The top panel draws the Planck curves of the Sun (5772 K) and of the Earth's
-// surface (288 K by default; a slider moves it between 210 and 310 K), each scaled to its
-// own peak, as faint fills, and fills in solidly the part of each that the atmosphere lets
-// through: the curve times the total transmittance. The middle panel is the fraction the
-// whole atmosphere absorbs, 0 to 100%. The bottom panel is one row per constituent, in two
-// groups (what mostly stops sunlight on the way in; the greenhouse gases, which mostly stop
-// the Earth's glow on the way out), each row the fraction that constituent alone absorbs
-// (1 − T_g), with a box to include it or not; the total transmittance is the product of the
-// included rows. Carbon dioxide, methane and nitrous oxide each have three amounts to
-// choose from (1750, today, doubled), which is the cleanest way to see that a band widens
-// as there is more of the gas rather than "saturating".
+// surface (15 °C by default; a slider moves it over the range the real surface spans), each
+// scaled to its own peak, as faint fills, and fills in solidly the part of each that the
+// atmosphere lets through: the curve times the total transmittance. The middle panel is the
+// fraction the whole atmosphere absorbs, 0 to 100%; hovering reads it off at one wavelength.
+// The bottom panel is one row per constituent, in two groups (what mostly stops sunlight on
+// the way in; the greenhouse gases, which mostly stop the Earth's glow on the way out), each
+// row the fraction that constituent alone absorbs (1 − T_g), with a box to include it or
+// not; the total transmittance is the product of the included rows. Water vapour, carbon
+// dioxide, methane and nitrous oxide each have three amounts to choose from (dry, mean,
+// tropical; 1750, today, doubled), under a "More controls" section that starts collapsed:
+// it is the cleanest way to see that a band widens as there is more of the gas rather than
+// "saturating".
 //
 // Every spectrum comes from data/transmission.json, precomputed offline by
 // scripts/atmospheric-transmission.py from the HITRAN line list through a layered
@@ -42,8 +44,12 @@ export function planck(lambda, T) {
 export const WIEN_B = C2 / 4.965114231744276; // Wien's displacement constant, m·K
 export const peakWavelength = T => WIEN_B / T; // m
 
-export const T_SUN = 5772, T_EARTH = 288;
-export const EARTH_MIN = 210, EARTH_MAX = 310; // the surface temperature slider's range, K
+// Temperatures are kelvin inside and degrees Celsius on the face of the widget. The surface
+// slider spans the temperatures the Earth's surface actually reaches, from the Antarctic
+// plateau's record low to the hottest desert afternoon.
+export const T_SUN = 5772, T_EARTH = 288.15; // K
+export const EARTH_MIN_C = -90, EARTH_MAX_C = 60; // the surface temperature slider's range, °C
+const K0 = 273.15;
 const VIS_LO = 0.38, VIS_HI = 0.75; // μm
 
 // The fills are the atmospheric-composition widget's palette (COLOURS there), so that a gas
@@ -111,7 +117,8 @@ const GROUPS = [
 
 // `amounts` picks a variant for each gas that has them, by key: {co2: 278, ch4: "today"},
 // an index, a label prefix or a note. (`co2` alone is accepted too, for old embeds.)
-export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH, co2, amounts = {}, gases, earthTemperature = T_EARTH, tour = true} = {}) {
+// `earthTemperature` is the surface temperature in °C.
+export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH, co2, amounts = {}, gases, earthTemperature = T_EARTH - K0, tour = true} = {}) {
   if (!data?.gases) throw new Error("createAtmosphericTransmissionWidget needs {data}: the contents of data/transmission.json");
   const uid = `atmospheric-transmission-${++instances}`;
 
@@ -155,7 +162,10 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     if (i >= 0) g.from = g.to = i;
   }
   const total = new Float64Array(N);
-  let earthT = clamp(Math.round(Number(earthTemperature)) || T_EARTH, EARTH_MIN, EARTH_MAX);
+  // The surface temperature, kept in whole degrees Celsius (what the slider steps in).
+  let earthC = clamp(Math.round(Number(earthTemperature)), EARTH_MIN_C, EARTH_MAX_C);
+  if (!Number.isFinite(earthC)) earthC = Math.round(T_EARTH - K0);
+  const earthK = () => earthC + K0;
 
   // The transmittance of a gas at blend s between two of its columns, and at a fraction w of
   // its full amount: T^w, the optical depth scaled. Floored (T_FLOOR) so that a saturated
@@ -207,21 +217,18 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
   const container = document.createElement("div");
   container.style.cssText = "font:16px sans-serif;color:#333;";
 
+  // The controls live under the figure, in a "More controls" section that starts collapsed
+  // (details, below): the figure with its checkbox rows is the whole interface until the
+  // reader asks for more. While the section is open the rows also show their amounts.
   const controls = document.createElement("div");
   controls.style.cssText =
-    "display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 16px;" +
-    "padding:0 0 6px;font-size:13px;color:#666;";
-  container.appendChild(controls);
-
-  const buttonCss =
-    "font:13px sans-serif;color:#333;background:#fff;border:1px solid #ccc;border-radius:999px;" +
-    "padding:3px 12px;cursor:pointer;";
+    "display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:8px 0 2px;font-size:13px;color:#666;";
 
   // The amounts on the first row of the controls, one segmented control per gas that has
   // them, each headed by the gas's formula (they wrap when there is no room). The buttons
   // say when or where (1750, today, doubled; dry, mean, tropical); the amount itself is in
-  // the button's tooltip and in the gas's row. The second row is the surface temperature
-  // slider, with the tour button at its right.
+  // the button's tooltip and, while the section is open, in the gas's row. The second row
+  // is the surface temperature slider.
   const amountButtons = new Map(); // gas -> its buttons
   if (VARIANT.length) {
     const bar = document.createElement("div");
@@ -267,27 +274,20 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
   // The Earth's surface temperature, a slider on the last row of the controls: it moves the
   // Earth's curve along the axis (Wien's law) under the fixed bands, which is the point.
   const earthField = document.createElement("label");
-  earthField.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;flex:1 1 auto;cursor:pointer;";
+  earthField.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;flex-basis:100%;cursor:pointer;";
   const earthSlider = document.createElement("input");
   earthSlider.type = "range";
-  earthSlider.min = EARTH_MIN;
-  earthSlider.max = EARTH_MAX;
+  earthSlider.min = EARTH_MIN_C;
+  earthSlider.max = EARTH_MAX_C;
   earthSlider.step = 1;
-  earthSlider.value = earthT;
+  earthSlider.value = earthC;
   earthSlider.style.cssText = `flex:1 1 120px;max-width:260px;margin:0;accent-color:${ACCENT};cursor:pointer;`;
-  earthSlider.setAttribute("aria-label", "Earth's surface temperature, kelvin");
+  earthSlider.setAttribute("aria-label", "Earth's surface temperature, degrees Celsius");
   const earthOut = document.createElement("span");
   earthOut.style.cssText = "color:#333;min-width:3.6em;";
   earthField.append("Earth's surface", earthSlider, earthOut);
   earthSlider.addEventListener("input", e => { e.stopPropagation(); stopTour(); setEarth(Number(earthSlider.value)); });
   controls.appendChild(earthField);
-
-  const tourButton = document.createElement("button");
-  tourButton.type = "button";
-  tourButton.textContent = "Play tour";
-  tourButton.style.cssText = buttonCss;
-  tourButton.addEventListener("click", () => (touring ? stopTour() : startTour(0)));
-  controls.appendChild(tourButton);
 
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "atmospheric-transmission");
@@ -299,10 +299,6 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
   scroller.appendChild(svg);
   container.appendChild(scroller);
 
-  const status = document.createElement("div");
-  status.style.cssText = "padding:8px 0 0;color:#555;min-height:4.2em;line-height:1.4;";
-  container.appendChild(status);
-
   const hint = document.createElement("div");
   hint.style.cssText = "padding:8px 0 0;color:#888;font-size:14px;";
   const HINT_IDLE =
@@ -310,9 +306,20 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     "Space work too); hover or touch the figure to read the absorption at any wavelength.";
   const HINT_TOUR =
     "Touring: oxygen, ozone and the air's own scattering first, then the greenhouse gases added " +
-    "one at a time, strongest first — press anything to take over; Play tour starts it again.";
+    "one at a time, strongest first — press anything to take over (reload the page to see it again).";
   hint.textContent = HINT_IDLE;
   container.appendChild(hint);
+
+  // The controls, collapsed until asked for. Opening the section also puts the amounts on
+  // the rows, since that is when the reader can change them.
+  const details = document.createElement("details");
+  details.style.cssText = "margin-top:6px;font-size:13px;color:#666;";
+  const summary = document.createElement("summary");
+  summary.textContent = "More controls";
+  summary.style.cssText = "cursor:pointer;color:#333;font-size:14px;user-select:none;";
+  details.append(summary, controls);
+  details.addEventListener("toggle", () => updateRowLabels());
+  container.appendChild(details);
 
   function svgEl(tag, attrs = {}, parent) {
     const el = document.createElementNS(SVG_NS, tag);
@@ -375,12 +382,12 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     for (let i = 0; i < N; i++) out[i] /= m;
   }
   normalisedPlanck(sunB, T_SUN);
-  normalisedPlanck(earthB, earthT);
+  normalisedPlanck(earthB, earthK());
 
   // ---- static scaffolding, rebuilt on resize -----------------------------------------------------
   let sunFull, earthFull, sunFill, earthFill, sunLine, earthLine, sunClip, totalFill, totalLine;
   let rowFills, rowLines, rowBoxes, rowChecks, rowLabels, rowRings;
-  let sunLabel, earthLabel, sunLabel2, earthLabel2, rule, ruleLabel, ruleDots;
+  let sunLabel, earthLabel, sunLabel2, earthLabel2, rule, ruleLabel, ruleDot, ruleText;
 
   function build() {
     svg.setAttribute("width", w);
@@ -477,7 +484,7 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     };
     [sunLabel, sunLabel2] = label2(SUN_TEXT);
     [earthLabel, earthLabel2] = label2(EARTH_TEXT);
-    sunLabel.textContent = `Sunlight (${T_SUN} K)`;
+    sunLabel.textContent = `Sunlight (${formatC(T_SUN - K0)})`;
 
     // Panel B: what the whole atmosphere absorbs, with 0, 50 and 100% marked and its title
     // inside the frame, haloed so that it reads over the fill.
@@ -550,13 +557,14 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     svgEl("line", {x1: plotL, x2: plotR, y1: pC.b, y2: pC.b, stroke: "#666"}, svg);
 
     // The hover rule, through every panel, with the wavelength read out on the axis under it
-    // (its halo covers whatever tick label is there) and a dot on each row where the rule
-    // crosses the gas's absorption.
+    // (its halo covers whatever tick label is there) and one dot where it crosses the
+    // absorbed-fraction curve, labelled with that fraction.
     rule = svgEl("g", {opacity: 0}, svg);
     rule.style.pointerEvents = "none";
     svgEl("line", {y1: pA.t, y2: pC.b + 6, stroke: "#222", "stroke-width": 1, "stroke-dasharray": "3 3"}, rule);
     ruleLabel = svgEl("text", {y: pC.b + 18, "text-anchor": "middle", "font-size": tickFont + 1, "font-weight": "bold", fill: "#222", ...halo, "stroke-width": 4}, rule);
-    ruleDots = GASES.map(() => svgEl("circle", {r: 3.5, fill: "#fff", stroke: "#222", "stroke-width": 1.2}, rule));
+    ruleDot = svgEl("circle", {r: 4, fill: "#fff", stroke: "#222", "stroke-width": 1.5}, rule);
+    ruleText = svgEl("text", {"dominant-baseline": "middle", "font-size": labelFont, "font-weight": "bold", fill: "#222", ...halo, "stroke-width": 4}, rule);
 
     render(true);
   }
@@ -576,7 +584,7 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
       total.fill(1);
       for (const g of GASES) if (g.w > 0) for (let i = 0; i < N; i++) total[i] *= g.cur[i];
       sunFrac = transmittedFraction(lam, dlam, total, T_SUN);
-      earthFrac = transmittedFraction(lam, dlam, total, earthT);
+      earthFrac = transmittedFraction(lam, dlam, total, earthK());
 
       const scaleA = pA.h / Y_SPAN;
       sunFull.setAttribute("d", areaPath(s => sampled(sunB, s), pA.b, scaleA));
@@ -600,6 +608,7 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
         }
       });
       placeReadouts();
+      placeRuleDot();
     }
     GASES.forEach((g, i) => {
       // Paint follows the applied amount, so a row fades in or out as its band deepens.
@@ -615,12 +624,12 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     });
   }
 
-  // Each row's label: the formula and the amount, no more ("CO₂, 428 ppm"); the full name
-  // is what the row announces to assistive technology.
+  // Each row's label: the formula, and while the controls are open the amount after it, no
+  // more ("CO₂, 428 ppm"); the full name is what the row announces to assistive technology.
   function updateRowLabels() {
     GASES.forEach((g, i) => {
       const amount = g.labels ? g.labels[g.to].split(" (")[0] : g.amount;
-      rowLabels[i].textContent = amount ? `${g.formula}, ${amount}` : g.formula;
+      rowLabels[i].textContent = amount && details.open ? `${g.formula}, ${amount}` : g.formula;
       rowLabels[i].parentNode.setAttribute("aria-checked", g.on);
       rowLabels[i].parentNode.setAttribute("aria-label", `${g.name}${amount ? `, ${amount}` : ""}`);
     });
@@ -629,20 +638,20 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
   // The read-outs sit above their curves, "Sunlight" over the Sun's peak and "Earth's glow"
   // over the Earth's, unless the two would collide, in which case they go to the two ends.
   function placeReadouts() {
-    earthLabel.textContent = `Earth's glow (${earthT} K)`;
+    earthLabel.textContent = `Earth's glow (${formatC(earthC)})`;
     sunLabel2.textContent = `${formatShare(sunFrac)} reaches the ground`;
     earthLabel2.textContent = `${formatShare(earthFrac)} escapes to space`;
     const halfS = Math.max(labelHalfWidth(sunLabel.textContent, labelFont), labelHalfWidth(sunLabel2.textContent, labelFont));
     const halfE = Math.max(labelHalfWidth(earthLabel.textContent, labelFont), labelHalfWidth(earthLabel2.textContent, labelFont));
     let xs = clamp(lx(peakWavelength(T_SUN) * 1e6), plotL + halfS + 2, plotR - halfS - 2);
-    let xe = clamp(lx(peakWavelength(earthT) * 1e6), plotL + halfE + 2, plotR - halfE - 2);
+    let xe = clamp(lx(peakWavelength(earthK()) * 1e6), plotL + halfE + 2, plotR - halfE - 2);
     if (xe - halfE < xs + halfS + 8) { xs = plotL + halfS + 2; xe = plotR - halfE - 2; }
     const y1 = pA.t + labelFont + 2, y2 = y1 + labelFont + 3;
     setAttrs(sunLabel, {x: xs.toFixed(1), y: y1}); setAttrs(sunLabel2, {x: xs.toFixed(1), y: y2});
     setAttrs(earthLabel, {x: xe.toFixed(1), y: y1}); setAttrs(earthLabel2, {x: xe.toFixed(1), y: y2});
   }
 
-  // ---- status line, row labels and buttons: depend on the targets only -------------------------------
+  // ---- aria label, row labels and buttons: depend on the targets only --------------------------------
   function updateStatus() {
     const off = GASES.filter(g => !g.on).map(g => g.name.toLowerCase());
     const on = GASES.filter(g => g.on);
@@ -658,11 +667,12 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
       off.length === 0 ? `All ${GASES.length} constituents included.${amountText}` :
       on.length <= 2 ? `Only ${on.map(g => g.name.toLowerCase()).join(" and ")}.${amountText}` :
       `Without ${off.join(", ")}.${amountText}`;
-    status.textContent = `${gasText} ${formatShare(sunFrac)} of the sunlight reaches the ground, and ` +
-      `${formatShare(earthFrac)} of the glow of the ${earthT} K surface escapes straight to space.`;
+    // Said only to assistive technology: the figure's own labels carry the two numbers.
     svg.setAttribute("aria-label",
-      `Atmospheric absorption by wavelength, 0.05 to 100 micrometres. ${status.textContent}`);
-    earthOut.textContent = `${earthT} K`;
+      `Atmospheric absorption by wavelength, 0.05 to 100 micrometres. ${gasText} ` +
+      `${formatShare(sunFrac)} of the sunlight reaches the ground, and ${formatShare(earthFrac)} of the ` +
+      `glow of the surface at ${formatC(earthC)} escapes straight to space.`);
+    earthOut.textContent = formatC(earthC);
     updateRowLabels();
     updateAmountButtons();
   }
@@ -715,44 +725,49 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     animate();
   }
   // The slider drives the Earth's curve directly, with no easing: it is under the finger.
-  function setEarth(T) {
-    T = clamp(Math.round(T), EARTH_MIN, EARTH_MAX);
-    if (T === earthT) return;
-    earthT = T;
-    earthSlider.value = T;
-    normalisedPlanck(earthB, earthT);
+  function setEarth(C) {
+    C = clamp(Math.round(C), EARTH_MIN_C, EARTH_MAX_C);
+    if (C === earthC) return;
+    earthC = C;
+    earthSlider.value = C;
+    normalisedPlanck(earthB, earthK());
     render(true);
     updateStatus();
     emit();
   }
 
   // ---- hover ---------------------------------------------------------------------------------------
+  // The rule's x is remembered while it shows, so that the dot and its label can follow the
+  // absorbed-fraction curve as it moves (placeRuleDot, called from each frame of a change).
+  let ruleX = null;
   function showRule(px) {
-    const um = lxInvert(clamp(px, plotL, plotR));
-    const i = clamp(Math.floor((Math.log(um / LAMBDA_MIN) / LOG_SPAN) * N), 0, N - 1);
-    const x = clamp(px, plotL, plotR).toFixed(1);
+    ruleX = clamp(px, plotL, plotR);
+    const um = lxInvert(ruleX);
+    const x = ruleX.toFixed(1);
     rule.setAttribute("opacity", 1);
     rule.setAttribute("transform", `translate(${x},0)`);
     ruleLabel.textContent = formatWavelength(um);
     // Keep the label inside the figure: shift it, not the rule.
     const half = labelHalfWidth(ruleLabel.textContent, tickFont + 1);
-    ruleLabel.setAttribute("x", (clamp(Number(x), plotL + half, plotR - half) - Number(x)).toFixed(1));
-    const parts = [];
-    GASES.forEach((g, k) => {
-      const a = g.columns[g.to][i]; // the gas at full strength, at the chosen amount
-      ruleDots[k].setAttribute("cy", (rowTop(k) + ROW_H - ROW_H * (1 - a)).toFixed(1));
-      ruleDots[k].setAttribute("stroke", g.on ? g.line : "#999");
-      if (1 - a >= 0.005) parts.push({g, absorbed: 1 - a});
-    });
-    parts.sort((p, q) => q.absorbed - p.absorbed);
-    const who = parts.length === 0 ? "nothing here absorbs" :
-      parts.map(({g, absorbed}) => `${g.name.toLowerCase()} ${formatShare(absorbed)}${g.on ? "" : " (left out)"}`).join(", ");
-    status.textContent = `At ${formatWavelength(um)}: ${formatShare(1 - total[i])} absorbed, ${formatShare(total[i])} gets through. ` +
-      `Absorbed by each on its own: ${who}.`;
+    ruleLabel.setAttribute("x", (clamp(ruleX, plotL + half, plotR - half) - ruleX).toFixed(1));
+    placeRuleDot();
+  }
+  // The dot sits on the drawn curve, so it takes the same per-column average the curve does;
+  // its label goes to the right unless that would run off the frame.
+  function placeRuleDot() {
+    if (ruleX === null) return;
+    const s = clamp(Math.round(((ruleX - plotL) / plotW) * (S - 1)), 0, S - 1);
+    const absorbed = 1 - sampled(total, s);
+    const cy = pB.b - pB.h * absorbed;
+    ruleDot.setAttribute("cy", cy.toFixed(1));
+    ruleText.textContent = `${formatShare(absorbed)} absorbed`;
+    const textW = 2 * labelHalfWidth(ruleText.textContent, labelFont);
+    const right = ruleX + 10 + textW <= plotR;
+    setAttrs(ruleText, {x: right ? 9 : -9, y: cy.toFixed(1), "text-anchor": right ? "start" : "end"});
   }
   function hideRule() {
+    ruleX = null;
     rule.setAttribute("opacity", 0);
-    updateStatus();
   }
   function pointerAt(e) {
     const r = svg.getBoundingClientRect();
@@ -769,7 +784,7 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     return {
       gases: Object.fromEntries(GASES.map(g => [g.key, g.on])),
       amounts: Object.fromEntries(VARIANT.map(g => [g.key, g.labels[g.to]])),
-      earthTemperature: earthT,
+      earthTemperature: earthC, // °C
       sunlightToGround: sunFrac,
       glowToSpace: earthFrac,
     };
@@ -796,18 +811,12 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
   // ---- tour ----------------------------------------------------------------------------------------
   // One way only: the first group alone (what mostly stops sunlight), then one greenhouse gas
   // added per step, strongest first, until all are in, then round again. The amounts and the
-  // surface temperature stay as they are. Same manners as the other widgets' tours: it loops
-  // until the reader touches anything, and Play tour brings it back.
+  // surface temperature stay as they are. It loops until the reader touches anything, and
+  // there is no button to bring it back: it is a demonstration, not a story, and a reload does.
   const TOUR_HOLD = 2600;
   const STEPS = [GASES.filter(g => g.group === 0).map(g => g.key)];
   for (const g of GASES) if (g.group !== 0) STEPS.push([...STEPS[STEPS.length - 1], g.key]);
   let touring = false, tourTimer = null, tourWatcher = null;
-  function showTouring() {
-    tourButton.textContent = touring ? "Stop tour" : "Play tour";
-    tourButton.style.borderColor = touring ? ACCENT : "#ccc";
-    tourButton.style.color = touring ? ACCENT : "#333";
-    tourButton.setAttribute("aria-pressed", touring);
-  }
   function stopTour() {
     tourWatcher?.disconnect();
     tourWatcher = null;
@@ -816,7 +825,6 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     clearTimeout(tourTimer);
     tourTimer = null;
     hint.textContent = HINT_IDLE;
-    showTouring();
   }
   function tourStep(i) {
     if (!touring) return;
@@ -830,7 +838,6 @@ export function createAtmosphericTransmissionWidget({data, width = FIGURE_WIDTH,
     tourWatcher = null;
     touring = true;
     hint.textContent = HINT_TOUR;
-    showTouring();
     tourTimer = setTimeout(() => tourStep(0), delay);
   }
   if (tour && !reduceMotion) {
@@ -857,6 +864,13 @@ function formatShare(f) {
   if (pct < 0.05) return "0%";
   if (pct > 99.95) return "100%";
   return pct < 1 || pct > 99 ? `${pct.toFixed(1)}%` : `${Math.round(pct)}%`;
+}
+
+// Whole degrees, with a true minus sign; the Sun's 5499 °C is rounded to the hundred, since
+// it is an effective temperature and the figure is not about the Sun's exact value.
+function formatC(c) {
+  const r = Math.abs(c) >= 1000 ? Math.round(c / 100) * 100 : Math.round(c);
+  return `${String(r).replace("-", "−")} °C`;
 }
 
 function formatWavelength(um) {

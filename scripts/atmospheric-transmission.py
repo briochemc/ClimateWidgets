@@ -242,10 +242,10 @@ def main(only=()):
     order = [
         ("H2O", "h2o", "Water vapour", "H₂O", None),
         ("CO2", "co2", "Carbon dioxide", "CO₂", None),
-        ("O3", "o3", "Ozone", "O₃", f"{O3_COLUMN_DU:.0f} DU"),
+        ("O3", "o3", "Ozone", "O₃", ""),
         ("CH4", "ch4", "Methane", "CH₄", None),
         ("N2O", "n2o", "Nitrous oxide", "N₂O", None),
-        ("O2", "o2", "Oxygen", "O₂", "20.9%"),
+        ("O2", "o2", "Oxygen", "O₂", ""),
     ]
     previous = {}
     if only:

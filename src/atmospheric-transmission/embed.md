@@ -34,8 +34,8 @@ const data = await FileAttachment("data/transmission.json").json();
 // ?co2=278 (or 428, 856), ?ch4=729 (1939, 3878) and ?n2o=270 (340, 680) open on those
 // amounts (1750, today and doubled work too); ?h2o=dry (mean, tropical; or 4, 25, 42) on
 // that water column; ?gases=h2o,co2 opens with only those constituents included (keys:
-// h2o, co2, o3, ch4, n2o, o2, rayleigh); ?earth=255 opens with the surface at that
-// temperature (210 to 310 K); ?tour=0 starts without the tour.
+// h2o, co2, o3, ch4, n2o, o2, rayleigh); ?earth=-50 opens with the surface at that
+// temperature in °C (−90 to 60); ?tour=0 starts without the tour.
 const params = new URLSearchParams(location.search);
 const amounts = Object.fromEntries(["h2o", "co2", "ch4", "n2o"].filter(k => params.has(k)).map(k => [k, params.get(k)]));
 const gases = params.has("gases") ? params.get("gases").split(",").map(s => s.trim()).filter(Boolean) : undefined;
