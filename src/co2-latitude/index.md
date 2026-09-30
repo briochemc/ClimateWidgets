@@ -1,6 +1,6 @@
 # CO₂ around the world, month by month
 
-Where carbon dioxide is measured, and what one month of it looks like. The upper panel is CO₂ against latitude: the black curve is NOAA's marine boundary layer reference, the clean background air over the oceans, and the dots are the flask-sampling stations, with Mauna Loa and the South Pole in their colours and everything else on the map. Pick a month with the slider or by dragging across the lower chart, or press **Play** and watch the years go by.
+Where carbon dioxide is measured, and what one month of it looks like. The map shows the flask-sampling stations; the thin plot beside it, lined up with the map's parallels, is CO₂ against latitude for the month: the black curve is NOAA's marine boundary layer reference, the clean background air over the oceans, and the dots are the stations, Mauna Loa in red and the South Pole in blue. Pick a month with the slider or by dragging across the lower chart, or press **Play** and watch the years go by; the clock on the Mauna Loa curve keeps the month.
 
 ```js
 import {createCo2LatitudeWidget} from "./widget.js";
@@ -14,7 +14,7 @@ const month = view(createCo2LatitudeWidget({data}));
 
 ## Reading the figure
 
-Two things happen at once as the months pass. The curve breathes: every northern summer the forests draw CO₂ down, deepest in the far north where most of the land is, and every winter it comes back, while the southern hemisphere, mostly ocean, hardly moves. And the whole curve climbs, year after year, north first, because that is where most of the fossil fuel is burnt; the south catches up a year or so later. The January 1979 curve stays as a grey ghost, so the climb since then is always in view.
+Two things happen at once as the months pass. The curve breathes: every northern summer the forests draw CO₂ down, deepest in the far north where most of the land is, and every winter it comes back, while the southern hemisphere, mostly ocean, hardly moves. And the whole curve climbs, year after year, north first, because that is where most of the fossil fuel is burnt; the south catches up a year or so later. The January 1979 curve stays as a grey ghost, so the climb since then is always in view, and the CO₂ scale is the same for the latitude plot and the lower chart and never changes, so a move is a move.
 
 Before 1979 there is no reference curve, only the handful of stations that existed; the two longest records, Mauna Loa and the South Pole, are the lower chart. The lower chart is the same red and blue as the first decades of [the history of atmospheric CO₂](../co2-history/), which zooms out from here to the ice ages.
 
@@ -27,12 +27,14 @@ import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
 ```js
 display(embedSnippets({
   embedPath: "co2-latitude/embed",
-  height: 590,
+  height: 560,
   title: "CO₂ around the world, month by month",
   note: "The figure fills its column up to 640&nbsp;px wide and reflows down to about " +
     "320&nbsp;px, so it works on phones; narrower than that it scrolls sideways inside " +
-    "the frame. The bundled data are refreshed now and then; the last few months are " +
-    "always sparse because the stations' monthly means are published about a year behind.",
+    "the frame. The map keeps its 2:1 shape, so the figure is shorter in a narrow column " +
+    "(about 470 at 320&nbsp;px). The bundled data are refreshed now and then; the last few " +
+    "months are always sparse because the stations' monthly means are published about a " +
+    "year behind.",
   script: `<div id="co2-latitude"></div>
 
 <script type="module">

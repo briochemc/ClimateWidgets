@@ -13,7 +13,7 @@ Small, self-contained interactive figures for teaching climate science. Each wid
   </a>
   <a class="card" href="./co2-latitude/">
     <h2>CO₂ around the world</h2>
-    <img class="thumb" src="./assets/thumbnails/co2-latitude.png" alt="CO₂ against latitude for one month, a black curve rising towards the north with grey station dots on it and the January 1979 curve as a grey ghost below, beside a small world map of the stations and a month clock; underneath, the Mauna Loa and South Pole records since 1957 with a scrubber">
+    <img class="thumb" src="./assets/thumbnails/co2-latitude.png" alt="A world map dotted with CO₂ stations, and beside it a thin plot of CO₂ against latitude lined up with the map, a black curve leaning towards the north with the stations as dots and the January 1979 curve as a grey ghost; underneath, the Mauna Loa and South Pole records since 1957 with a scrubber and a small clock riding the red curve">
   </a>
   <a class="card" href="./temperature-trend/">
     <h2>Temperature trends</h2>

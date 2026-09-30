@@ -164,7 +164,8 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   controls.appendChild(tourButton);
   container.appendChild(controls);
 
-  // The look-back slider is logarithmic: a year at one end, the whole record at the other.
+  // The look-back slider is logarithmic, the whole record at the left end and a year at the
+  // right, so pulling it left goes back in time.
   const SLIDER_STEPS = 1000;
   const sliderField = document.createElement("label");
   sliderField.style.cssText = "display:flex;align-items:center;gap:8px;padding:0 0 6px;font-size:14px;cursor:pointer;";
@@ -174,7 +175,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   slider.max = SLIDER_STEPS;
   slider.step = 1;
   slider.style.cssText = `flex:1 1 120px;margin:0;accent-color:${ACCENT};cursor:pointer;`;
-  slider.setAttribute("aria-label", "How far back in time the chart looks");
+  slider.setAttribute("aria-label", "How far back in time the chart looks; left is further back");
   const sliderOut = document.createElement("span");
   sliderOut.style.cssText = "color:#333;min-width:7.5em;text-align:right;font-variant-numeric:tabular-nums;";
   sliderField.append("Look back", slider, sliderOut);
@@ -220,7 +221,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     w = newW;
     const k = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
     const lerp = (a, b) => Math.round(a + (b - a) * k);
-    marginL = lerp(44, 56);
+    marginL = lerp(58, 68);   // tick labels, and the axis title left of them
     marginR = lerp(12, 20);
     plotL = marginL;
     plotR = w - marginR;
@@ -245,10 +246,10 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   const y = v => PLOT_B - ((v - yLo) / (yHi - yLo)) * PLOT_H;
 
   function sliderToLook(s) {
-    return LOOK_MIN * Math.pow(LOOK_MAX / LOOK_MIN, s / SLIDER_STEPS);
+    return LOOK_MAX * Math.pow(LOOK_MIN / LOOK_MAX, s / SLIDER_STEPS);
   }
   function lookToSlider(l) {
-    return Math.round(SLIDER_STEPS * Math.log(l / LOOK_MIN) / Math.log(LOOK_MAX / LOOK_MIN));
+    return Math.round(SLIDER_STEPS * Math.log(l / LOOK_MAX) / Math.log(LOOK_MIN / LOOK_MAX));
   }
 
   // Which records are drawn depends on how far back the chart looks: each fades in and out
@@ -362,7 +363,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
       line(plotL, y(v), plotR, y(v));
       context.setLineDash([]);
       context.fillStyle = color;
-      context.fillText(text, plotL + 6, y(v) - 3);
+      haloText(text, plotL + 6, y(v) - 3);
     }
     context.globalAlpha = 1;
 
@@ -386,7 +387,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
       context.textAlign = "left"; context.textBaseline = "top";
       const lx = x(last350[0]) + 5;
       const lines = [`${monthName(last350[0])} ${Math.floor(last350[0])}: Mauna Loa`, "sees 350 ppm", "for the last time"];
-      lines.forEach((s, i) => context.fillText(s, lx, y(last350[1]) + 8 + i * 14));
+      lines.forEach((s, i) => haloText(s, lx, y(last350[1]) + 8 + i * 14));
       context.globalAlpha = 1;
     }
 
@@ -398,7 +399,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     context.beginPath();
     context.arc(endX, endY, dotR, 0, 2 * Math.PI);
     context.fill();
-    context.fillText(latestLabel, Math.min(plotR - 4, endX + 4), endY - dotR - 3);
+    haloText(latestLabel, Math.min(plotR - 4, endX + 4), endY - dotR - 3);
 
     // Hover cursor: a vertical rule at the pointer's time.
     if (hoverT !== null) {
@@ -426,9 +427,9 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
       context.fillText(tk.label, clamp(x(tk.t), half, w - half), PLOT_B + 8);
     }
     context.save();
-    context.translate(12, PLOT_T + PLOT_H / 2);
+    context.translate(14, PLOT_T + PLOT_H / 2);
     context.rotate(-Math.PI / 2);
-    context.textAlign = "center"; context.textBaseline = "top";
+    context.textAlign = "center"; context.textBaseline = "middle";
     context.fillText("CO₂ (ppm)", 0, 0);
     context.restore();
 
@@ -541,7 +542,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
       context.fillStyle = color;
       context.fillRect(plotL + 8, ly - 4, 10, 8);
       context.fillStyle = "#333";
-      context.fillText(name, plotL + 23, ly);
+      haloText(name, plotL + 23, ly);
     });
   }
 
@@ -783,6 +784,18 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     context.moveTo(x0, y0);
     context.lineTo(x1, y1);
     context.stroke();
+  }
+
+  // Text with a white halo, for labels that sit on top of the data. Uses the current font,
+  // alignment, fill and alpha; the stroke settings are restored afterwards.
+  function haloText(text, tx, ty) {
+    const {strokeStyle, lineWidth, lineJoin} = context;
+    context.strokeStyle = "rgba(255,255,255,0.9)";
+    context.lineWidth = 3.5;
+    context.lineJoin = "round";
+    context.strokeText(text, tx, ty);
+    context.fillText(text, tx, ty);
+    context.strokeStyle = strokeStyle; context.lineWidth = lineWidth; context.lineJoin = lineJoin;
   }
 }
 

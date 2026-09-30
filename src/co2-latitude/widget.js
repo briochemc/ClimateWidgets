@@ -1,11 +1,12 @@
-// Where in the world CO₂ is measured, and what it looks like month by month: NOAA's marine
-// boundary layer reference as a curve of CO₂ against latitude, the flask-sampling stations
-// as dots on it and on an inset map, a clock face for the month, and under them the Mauna
-// Loa and South Pole records since 1957 with a scrubber that picks the month. Play sweeps
-// the months, which is the point: the northern hemisphere breathes in and out every year,
-// and the whole curve climbs, north first. After the first half of Andy Jacobson's NOAA
-// animation (https://gml.noaa.gov/ccgg/trends/history.html); the second half, the zoom out
-// to the ice ages, is the co2-history widget.
+// Where in the world CO₂ is measured, and what it looks like month by month. A world map
+// with the flask-sampling stations on it; to its right, and lined up with its parallels, a
+// thin plot of CO₂ against latitude with NOAA's marine boundary layer reference as a curve
+// and the stations as dots; and under both the Mauna Loa and South Pole records since 1957
+// with a scrubber that picks the month, and a clock face for the month that rides along the
+// Mauna Loa curve. Play sweeps the months, which is the point: the northern hemisphere
+// breathes in and out every year, and the whole curve climbs, north first. After the first
+// half of Andy Jacobson's NOAA animation (https://gml.noaa.gov/ccgg/trends/history.html);
+// the second half, the zoom out to the ice ages, is the co2-history widget.
 //
 // Self-contained on purpose: no d3, no other imports, so the script-tag embed is a single
 // ES module import. The data file is built by scripts/co2-history.mjs; see its header for
@@ -16,23 +17,18 @@ const MLO_COLOR = "#d62728";
 const SPO_COLOR = "#1f4fd6";
 const MBL_COLOR = "#333";
 const SITE_COLOR = "#8a8f96";
-const GHOST_COLOR = "#bbb";
+const GHOST_COLOR = "#b5b5b5";
+const MUTED = "#9a9a9a";
 const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August",
   "September", "October", "November", "December"];
 
 // The figure fills its container up to FIGURE_WIDTH and reflows below it; below MIN_WIDTH
-// it stops shrinking and scrolls sideways inside its own wrapper.
+// it stops shrinking and scrolls sideways inside its own wrapper. The map keeps a 2:1 shape
+// (a degree of longitude as long as a degree of latitude), so the height follows the width.
 const FIGURE_WIDTH = 640;
 const MIN_WIDTH = 320;
-
-// Vertical layout is fixed so embed iframe heights stay put: the latitude panel with the
-// map beside it, then the time series with the scrubber.
-const LAT_T = 10, LAT_H = 230;
-const LAT_B = LAT_T + LAT_H;
-const SER_T = LAT_B + 46, SER_H = 150;
-const SER_B = SER_T + SER_H;
-const TOTAL_H = SER_B + 30;
-
+const ROW_T = 10;                // top of the map and the latitude plot
+const SER_H = 160;               // height of the time series
 const SWEEP_YEARS_PER_S = 2;     // how fast Play moves through the record
 
 // Unpacks a monthly series {year, month, v: [...]} into [[decimalYear, ppm], ...],
@@ -55,10 +51,10 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   const spoMonthly = unpackMonthly(data.spo.monthly);
   const mbl = data.mbl;
   const mblStep = mbl.t.length > 1 ? mbl.t[1] - mbl.t[0] : 1 / 24;
-  const sites = data.sites.map(s => ({...s, start: s.year * 12 + (s.month - 1), sinLat: Math.sin(s.lat * Math.PI / 180)}));
+  const mblLat = mbl.sinlat.map(s => Math.asin(clamp(s, -1, 1)) * 180 / Math.PI);
+  const sites = data.sites.map(s => ({...s, start: s.year * 12 + (s.month - 1)}));
   const mloSite = sites.find(s => s.code === "MLO");
   const spoSite = sites.find(s => s.code === "SPO");
-  const mloSinLat = mloSite ? mloSite.sinLat : Math.sin(19.54 * Math.PI / 180);
   const landPath = typeof Path2D === "function" && data.land ? new Path2D(data.land) : null;
 
   // The time axis runs from the first monthly mean to the last, whole years.
@@ -68,9 +64,17 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   const tEnd = Math.ceil(tLast);
   const firstMonth = Math.floor(Math.min(...all.map(p => p[0])) * 12);
   const lastMonth = Math.floor(tLast * 12);
-  // The series' range is fixed for the life of the widget: the scrubber must not move the axes.
-  const serLo = Math.floor(Math.min(...all.map(p => p[1])) / 10) * 10 - 5;
-  const serHi = Math.ceil(Math.max(...all.map(p => p[1])) / 10) * 10 + 5;
+
+  // One CO₂ range for the whole widget and the whole record, shared by the latitude plot and
+  // the time series, so nothing rescales as the months go by: the two long records, the
+  // reference, and the stations short of their rare outliers.
+  const [co2Lo, co2Hi] = (() => {
+    const vals = [...all.map(p => p[1])];
+    for (const row of mbl.v) for (const v of row) vals.push(v);
+    const siteVals = sites.flatMap(s => s.v.filter(v => v !== null)).sort((a, b) => a - b);
+    if (siteVals.length) vals.push(siteVals[Math.floor(siteVals.length * 0.005)], siteVals[Math.floor(siteVals.length * 0.995)]);
+    return [Math.floor(Math.min(...vals) / 10) * 10, Math.ceil(Math.max(...vals) / 10) * 10];
+  })();
 
   // The flask network's monthly means and the reference arrive a year or so behind Mauna
   // Loa, so the last months of the series are bare. The widget opens on, and Play ends at,
@@ -84,14 +88,13 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   })();
 
   const ghostProfile = mbl.v.length ? mbl.v[0] : [];
-  const ghostAtMlo = ghostProfile.length ? interpProfile(ghostProfile, mloSinLat) : null;
-  const ghostLabel = mbl.t.length ? `${MONTHS_LONG[Math.floor((mbl.t[0] % 1) * 12)].slice(0, 3)} ${Math.floor(mbl.t[0])}` : "";
+  const ghostT = mbl.t.length ? mbl.t[0] : null;
+  const ghostLabel = ghostT === null ? "" : `${MONTHS_LONG[Math.floor((ghostT % 1) * 12)].slice(0, 3)} ${Math.floor(ghostT)}`;
 
   // ---- state ----------------------------------------------------------------------------------
   let cursorT = month ?? tLatestFull;   // the month shown, as a decimal year
-  let hoverSite = null;                 // station under the pointer in the latitude panel
+  let hoverSite = null;                 // station under the pointer
   let dragging = false;
-  let latLo = 0, latHi = 1, latTargetLo = 0, latTargetHi = 1, snap = true;   // panel y range, animated
 
   // ---- DOM ------------------------------------------------------------------------------------
   const container = document.createElement("div");
@@ -130,7 +133,7 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   const canvas = document.createElement("canvas");
   canvas.style.cssText = "display:block;touch-action:pan-y;";
   canvas.setAttribute("role", "img");
-  canvas.setAttribute("aria-label", "Atmospheric CO₂ against latitude for one month, with a map of the stations and the Mauna Loa and South Pole records since 1957");
+  canvas.setAttribute("aria-label", "A world map of the CO₂ stations, CO₂ against latitude for one month, and the Mauna Loa and South Pole records since 1957");
   const context = canvas.getContext("2d");
   const scroller = document.createElement("div");
   scroller.style.cssText = "max-width:100%;overflow-x:auto;";
@@ -142,8 +145,8 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   container.appendChild(status);
 
   const HINT_IDLE =
-    "Drag across the lower chart, or the slider, to pick a month; hover a dot on the upper " +
-    "panel for the station's name.";
+    "Drag across the lower chart, or the slider, to pick a month; hover a station's dot on " +
+    "the map or the latitude plot for its name.";
   const HINT_PLAY = "Playing through the months — click anything to take over; Play starts it again.";
   const hint = document.createElement("div");
   hint.style.cssText = "padding:4px 0 0;color:#888;font-size:14px;";
@@ -152,43 +155,52 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
 
   // ---- layout ---------------------------------------------------------------------------------
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
-  let w, marginL, marginR, latL, latR, serL, serR, mapL, mapW, mapH, mapT;
-  let tickFont, noteFont, labelFont, dotR;
+  let w, totalH, mapL, mapW, mapH, rowB, latL, latW, latR, serL, serR, serT, serB;
+  let tickFont, noteFont, labelFont, mutedFont, dotR;
 
   function applyLayout(newW) {
     w = newW;
     const k = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
     const lerp = (a, b) => Math.round(a + (b - a) * k);
-    marginL = lerp(44, 56);
-    marginR = lerp(12, 20);
-    mapW = lerp(120, 230);
-    mapH = mapW / 2;
-    latL = marginL;
-    latR = w - marginR - mapW - lerp(16, 28);
-    mapL = w - marginR - mapW;
-    mapT = LAT_T + 4;
-    serL = marginL;
-    serR = w - marginR;
+    // Top row: the map, a gap, the thin latitude plot, and room for its latitude labels.
+    const gap = lerp(10, 16), latLabels = lerp(30, 38), edge = 8;
+    const avail = w - edge - gap - latLabels - edge;
+    mapL = edge;
+    mapW = Math.round(avail * 0.66);
+    mapH = Math.round(mapW / 2);
+    rowB = ROW_T + mapH;
+    latL = mapL + mapW + gap;
+    latW = avail - mapW;
+    latR = latL + latW;
+    // The time series, full width, under both.
+    serL = lerp(52, 62);
+    serR = w - 12;
+    serT = rowB + 44;
+    serB = serT + SER_H;
+    totalH = serB + 30;
     tickFont = `${lerp(12, 14)}px sans-serif`;
     noteFont = `${lerp(11, 13)}px sans-serif`;
-    labelFont = `bold ${lerp(13, 15)}px sans-serif`;
+    mutedFont = `${lerp(10, 11)}px sans-serif`;
+    labelFont = `bold ${lerp(12, 14)}px sans-serif`;
     dotR = lerp(3, 4);
 
     const dpr = window.devicePixelRatio || 1;
     canvas.width = w * dpr;
-    canvas.height = TOTAL_H * dpr;
+    canvas.height = totalH * dpr;
     canvas.style.width = w + "px";
-    canvas.style.height = TOTAL_H + "px";
+    canvas.style.height = totalH + "px";
     context.scale(dpr, dpr);
   }
   applyLayout(maxW);
 
   // ---- scales ---------------------------------------------------------------------------------
-  const xLat = s => latL + ((s + 1) / 2) * (latR - latL);
-  const yLat = v => LAT_B - ((v - latLo) / (latHi - latLo)) * LAT_H;
+  // The map is plate carrée, so the latitude plot's vertical scale is the map's.
+  const mapX = lon => mapL + ((lon + 180) / 360) * mapW;
+  const mapY = lat => ROW_T + ((90 - lat) / 180) * mapH;
+  const xLat = v => latL + ((v - co2Lo) / (co2Hi - co2Lo)) * latW;
   const xSer = t => serL + ((t - tFirst) / (tEnd - tFirst)) * (serR - serL);
   xSer.invert = px => tFirst + ((px - serL) / (serR - serL)) * (tEnd - tFirst);
-  const ySer = v => SER_B - ((v - serLo) / (serHi - serLo)) * SER_H;
+  const ySer = v => serB - ((v - co2Lo) / (co2Hi - co2Lo)) * SER_H;
 
   // ---- lookups --------------------------------------------------------------------------------
   // The boundary-layer profile for a time, interpolated between the reference's steps.
@@ -198,12 +210,6 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     const i = Math.min(mbl.t.length - 2, Math.floor(f));
     const k = clamp(f - i, 0, 1);
     return mbl.v[i].map((v, j) => v + (mbl.v[i + 1][j] - v) * k);
-  }
-
-  function interpProfile(profile, s) {
-    const f = ((s + 1) / 2) * (profile.length - 1);
-    const i = Math.min(profile.length - 2, Math.floor(f));
-    return profile[i] + (profile[i + 1] - profile[i]) * (f - i);
   }
 
   function monthIndexOf(t) {
@@ -237,46 +243,21 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     return best && Math.abs(best[0] - t) < 1 / 12 + 1e-6 ? best : null;
   }
 
-  function latTargetRange(profile, dots) {
-    let lo = Infinity, hi = -Infinity;
-    const take = v => { if (v < lo) lo = v; if (v > hi) hi = v; };
-    for (const v of ghostProfile) take(v);
-    if (profile) for (const v of profile) take(v);
-    for (const d of dots) take(d.v);
-    if (!Number.isFinite(lo)) { lo = 300; hi = 450; }
-    const pad = Math.max(3, (hi - lo) * 0.1);
-    return [lo - pad, hi + pad * 1.5];
-  }
-
   // ---- rendering ------------------------------------------------------------------------------
   let raf = null;
-  function requestRender() { if (raf === null) raf = requestAnimationFrame(frame); }
+  function requestRender() { if (raf === null) raf = requestAnimationFrame(render); }
 
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-  let lastFrame = 0;
   let latFrame = {profile: null, dots: [], mloAt: null, spoAt: null};
-  function frame(now) {
-    raf = null;
-    const dt = lastFrame ? Math.min(0.1, (now - lastFrame) / 1000) : 0.016;
-    lastFrame = now;
-    latFrame = latitudeData(cursorT);
-    [latTargetLo, latTargetHi] = latTargetRange(latFrame.profile, latFrame.dots);
-    // The panel's range chases its target; it snaps on the first frame and under reduced motion.
-    const rate = snap || reduceMotion ? 1 : 1 - Math.exp(-dt * 10);
-    latLo += (latTargetLo - latLo) * rate;
-    latHi += (latTargetHi - latHi) * rate;
-    snap = false;
-    render();
-    if (Math.abs(latTargetLo - latLo) + Math.abs(latTargetHi - latHi) >= 0.05) requestRender();
-    else { latLo = latTargetLo; latHi = latTargetHi; lastFrame = 0; }
-  }
 
   function render() {
-    context.clearRect(0, 0, w, TOTAL_H);
+    raf = null;
+    latFrame = latitudeData(cursorT);
+    context.clearRect(0, 0, w, totalH);
     context.fillStyle = "#fff";
-    context.fillRect(0, 0, w, TOTAL_H);
-    drawLatitudePanel();
+    context.fillRect(0, 0, w, totalH);
     drawMap();
+    drawLatitudePlot();
     drawSeries();
     updateStatus();
     playButton.textContent = playing ? "Pause" : "Play";
@@ -287,143 +268,30 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     sliderOut.textContent = formatMonth(cursorT);
   }
 
-  function drawLatitudePanel() {
-    const {profile, dots} = latFrame;
-
-    // Gridlines: every 30° of latitude, on the sine scale.
-    const latTicks = [[-1, "90°S"], [-0.5, "30°S"], [0, "Equator"], [0.5, "30°N"], [1, "90°N"]];
-    const yt = yTicks(latLo, latHi, LAT_H);
-    context.strokeStyle = "rgba(0,0,0,0.1)";
-    context.lineWidth = 1;
-    for (const v of yt) line(latL, yLat(v), latR, yLat(v));
-    for (const [s] of latTicks) line(xLat(s), LAT_T, xLat(s), LAT_B);
-
-    context.save();
-    context.beginPath();
-    context.rect(latL - 6, LAT_T - 8, latR - latL + 12, LAT_H + 16);
-    context.clip();
-
-    // The first profile of the reference stays as a ghost, so the climb since is visible.
-    if (ghostProfile.length) {
-      context.strokeStyle = GHOST_COLOR;
-      context.lineWidth = 1.5;
-      strokeProfile(ghostProfile);
-      context.fillStyle = "#c98a9c";
-      context.beginPath();
-      context.arc(xLat(mloSinLat), yLat(ghostAtMlo), dotR, 0, 2 * Math.PI);
-      context.fill();
-      context.font = noteFont;
-      context.textBaseline = "top";
-      const ghostText = `${ghostLabel}: ${Math.round(ghostAtMlo)} ppm`;
-      const fits = xLat(mloSinLat) + 7 + context.measureText(ghostText).width <= latR;
-      context.textAlign = fits ? "left" : "right";
-      context.fillStyle = "#999";
-      context.fillText(ghostText, xLat(mloSinLat) + (fits ? 7 : -7), yLat(ghostAtMlo) + 2);
-    }
-
-    if (profile) {
-      context.strokeStyle = MBL_COLOR;
-      context.lineWidth = 2;
-      strokeProfile(profile);
-    }
-
-    for (const d of dots) {
-      if (d.big) continue;
-      context.fillStyle = d.site === hoverSite ? ACCENT : SITE_COLOR;
-      context.strokeStyle = "#fff";
-      context.lineWidth = 1;
-      context.beginPath();
-      context.arc(xLat(d.site.sinLat), yLat(d.v), dotR - 1, 0, 2 * Math.PI);
-      context.fill();
-      context.stroke();
-    }
-    for (const d of dots) {
-      if (!d.big) continue;
-      context.fillStyle = d.color;
-      context.strokeStyle = "#fff";
-      context.lineWidth = 1.5;
-      context.beginPath();
-      context.arc(xLat(d.site.sinLat), yLat(d.v), dotR + 1, 0, 2 * Math.PI);
-      context.fill();
-      context.stroke();
-    }
-    // Name the two coloured dots, once, beside them.
-    context.font = noteFont;
-    context.textBaseline = "bottom";
-    for (const d of dots) {
-      if (!d.big) continue;
-      context.fillStyle = d.color;
-      const left = d.site.sinLat < 0;
-      context.textAlign = left ? "left" : "right";
-      context.fillText(d.site.code === "MLO" ? "Mauna Loa" : "South Pole",
-        xLat(d.site.sinLat) + (left ? dotR + 4 : -dotR - 4), yLat(d.v) - 2);
-    }
-    context.restore();
-
-    // Axes.
-    context.strokeStyle = "#666"; context.fillStyle = "#333";
-    context.lineWidth = 1;
-    context.beginPath();
-    context.moveTo(latL, LAT_T); context.lineTo(latL, LAT_B); context.lineTo(latR, LAT_B);
-    context.stroke();
-    context.font = tickFont;
-    context.textAlign = "right"; context.textBaseline = "middle";
-    for (const v of yt) {
-      line(latL - 4, yLat(v), latL, yLat(v));
-      context.fillText(v, latL - 7, yLat(v));
-    }
-    context.textAlign = "center"; context.textBaseline = "top";
-    for (const [s, label] of latTicks) {
-      line(xLat(s), LAT_B, xLat(s), LAT_B + 5);
-      context.fillText(label, clamp(xLat(s), latL + 16, latR - 16), LAT_B + 8);
-    }
-    context.save();
-    context.translate(12, LAT_T + LAT_H / 2);
-    context.rotate(-Math.PI / 2);
-    context.textAlign = "center"; context.textBaseline = "top";
-    context.fillText("CO₂ (ppm)", 0, 0);
-    context.restore();
-
-    // A word on what is missing before the reference begins.
-    if (!profile) {
-      context.font = noteFont;
-      context.fillStyle = "#777";
-      context.textAlign = "center"; context.textBaseline = "top";
-      const msg = dots.length === 0 ? "No station data this month" : "NOAA's background reference begins in 1979";
-      context.fillText(msg, (latL + latR) / 2, LAT_T + 4);
-    }
-  }
-
-  function strokeProfile(profile) {
-    context.beginPath();
-    profile.forEach((v, j) => {
-      const s = mbl.sinlat[j];
-      if (j) context.lineTo(xLat(s), yLat(v)); else context.moveTo(xLat(s), yLat(v));
-    });
-    context.stroke();
-  }
-
-  // The inset map, the month's name and a clock face with one hand for the month.
+  // The map: ocean, land, faint parallels every 30° (which the latitude plot shares), and
+  // the stations reporting this month.
   function drawMap() {
     const {dots} = latFrame;
     context.fillStyle = "#e6eef6";
-    context.fillRect(mapL, mapT, mapW, mapH);
+    context.fillRect(mapL, ROW_T, mapW, mapH);
     if (landPath) {
       context.save();
       context.beginPath();
-      context.rect(mapL, mapT, mapW, mapH);
+      context.rect(mapL, ROW_T, mapW, mapH);
       context.clip();
-      context.translate(mapL, mapT);
+      context.translate(mapL, ROW_T);
       context.scale(mapW / 360, mapH / 180);
       context.fillStyle = "#c9d3c0";
       context.fill(landPath);
       context.restore();
     }
-    context.strokeStyle = "#bbb";
     context.lineWidth = 1;
-    context.strokeRect(mapL + 0.5, mapT + 0.5, mapW - 1, mapH - 1);
-    const px = lon => mapL + ((lon + 180) / 360) * mapW;
-    const py = lat => mapT + ((90 - lat) / 180) * mapH;
+    for (const lat of [-60, -30, 0, 30, 60]) {
+      context.strokeStyle = lat === 0 ? "rgba(0,0,0,0.18)" : "rgba(0,0,0,0.1)";
+      line(mapL, mapY(lat), mapL + mapW, mapY(lat));
+    }
+    context.strokeStyle = "#bbb";
+    context.strokeRect(mapL + 0.5, ROW_T + 0.5, mapW - 1, mapH - 1);
     for (const pass of [false, true]) {
       for (const d of dots) {
         if (!!d.big !== pass || d.site.lon === null) continue;
@@ -431,63 +299,120 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
         context.strokeStyle = "#fff";
         context.lineWidth = 0.8;
         context.beginPath();
-        context.arc(px(d.site.lon), py(d.site.lat), d.big ? 3.5 : 2.2, 0, 2 * Math.PI);
+        context.arc(mapX(d.site.lon), mapY(d.site.lat), d.big ? 3.5 : 2.4, 0, 2 * Math.PI);
         context.fill();
         context.stroke();
       }
     }
+  }
 
-    // Month and year, then the clock: January at twelve o'clock, clockwise.
-    const year = Math.floor(cursorT);
-    const month = Math.min(11, Math.floor((cursorT - year) * 12));
-    context.font = labelFont;
-    context.fillStyle = "#222";
-    context.textAlign = "left"; context.textBaseline = "top";
-    const textY = mapT + mapH + 10;
-    context.fillText(`${MONTHS_LONG[month]} ${year}`, mapL, textY);
+  // CO₂ across, latitude up, on the map's own vertical scale; the axes are kept quiet because
+  // the parallels on the map already say where the latitudes are.
+  function drawLatitudePlot() {
+    const {profile, dots} = latFrame;
+    context.lineWidth = 1;
+    for (const lat of [-60, -30, 0, 30, 60]) {
+      context.strokeStyle = lat === 0 ? "rgba(0,0,0,0.18)" : "rgba(0,0,0,0.1)";
+      line(latL, mapY(lat), latR, mapY(lat));
+    }
+    const co2Ticks = co2TickValues(latW);
+    context.strokeStyle = "rgba(0,0,0,0.08)";
+    for (const v of co2Ticks) line(xLat(v), ROW_T, xLat(v), rowB);
 
-    const cr = Math.min(22, (LAT_B - textY - 40) / 2), cx = mapL + cr + 14, cy = textY + 36 + cr;
-    if (cr >= 12) {
-      context.strokeStyle = "#999";
-      context.lineWidth = 1;
-      context.beginPath();
-      context.arc(cx, cy, cr, 0, 2 * Math.PI);
-      context.stroke();
-      context.font = noteFont;
-      context.fillStyle = "#777";
-      context.textAlign = "center"; context.textBaseline = "bottom";
-      context.fillText("Jan", cx, cy - cr - 2);
-      context.textBaseline = "top";
-      context.fillText("Jul", cx, cy + cr + 2);
-      context.textAlign = "left"; context.textBaseline = "middle";
-      context.fillText("Apr", cx + cr + 4, cy);
-      context.textAlign = "right";
-      context.fillText("Oct", cx - cr - 4, cy);
-      const angle = ((month + 0.5) / 12) * 2 * Math.PI - Math.PI / 2;
-      context.strokeStyle = "#222";
+    context.save();
+    context.beginPath();
+    context.rect(latL - 5, ROW_T - 6, latW + 10, mapH + 12);
+    context.clip();
+    // The first profile of the reference stays as a ghost, so the climb since is visible.
+    if (ghostProfile.length) {
+      context.strokeStyle = GHOST_COLOR;
+      context.lineWidth = 1.5;
+      strokeProfile(ghostProfile);
+    }
+    if (profile) {
+      context.strokeStyle = MBL_COLOR;
       context.lineWidth = 2;
-      line(cx, cy, cx + Math.cos(angle) * (cr - 3), cy + Math.sin(angle) * (cr - 3));
-      context.lineWidth = 1;
+      strokeProfile(profile);
+    }
+    const small = mapH < 140;
+    for (const pass of [false, true]) {
+      for (const d of dots) {
+        if (!!d.big !== pass) continue;
+        context.fillStyle = d.color ?? (d.site === hoverSite ? ACCENT : SITE_COLOR);
+        context.strokeStyle = "#fff";
+        context.lineWidth = d.big ? 1.5 : 1;
+        context.beginPath();
+        context.arc(xLat(d.v), mapY(d.site.lat), (d.big ? dotR + 1 : dotR - 1) - (small ? 0.5 : 0), 0, 2 * Math.PI);
+        context.fill();
+        context.stroke();
+      }
+    }
+    context.restore();
+
+    // Muted axes: a frame, CO₂ ticks along the bottom, latitudes down the right.
+    context.strokeStyle = "#ccc";
+    context.lineWidth = 1;
+    context.strokeRect(latL + 0.5, ROW_T + 0.5, latW - 1, mapH - 1);
+    context.font = mutedFont;
+    context.fillStyle = MUTED;
+    context.textAlign = "center"; context.textBaseline = "top";
+    for (const v of co2Ticks) {
+      line(xLat(v), rowB, xLat(v), rowB + 3);
+      context.fillText(v, xLat(v), rowB + 5);
+    }
+    context.textAlign = "left";
+    context.fillText("ppm", latR + 4, rowB + 5);
+    context.textAlign = "left"; context.textBaseline = "middle";
+    const latLabels = small ? [[60, "60°N"], [0, "0°"], [-60, "60°S"]]
+      : [[60, "60°N"], [30, "30°N"], [0, "0°"], [-30, "30°S"], [-60, "60°S"]];
+    for (const [lat, label] of latLabels) {
+      line(latR, mapY(lat), latR + 3, mapY(lat));
+      context.fillText(label, latR + 5, mapY(lat));
     }
   }
 
-  // The two long records, with the scrubber over the month shown.
+  function strokeProfile(profile) {
+    context.beginPath();
+    profile.forEach((v, j) => {
+      if (j) context.lineTo(xLat(v), mapY(mblLat[j])); else context.moveTo(xLat(v), mapY(mblLat[j]));
+    });
+    context.stroke();
+  }
+
+  // The two long records, the scrubber over the month shown, and the clock riding the curve.
   function drawSeries() {
-    const yt = yTicks(serLo, serHi, SER_H);
+    const yt = co2TickValues(SER_H, true);
     const step = (serR - serL) >= 400 ? 10 : 20;
     context.strokeStyle = "rgba(0,0,0,0.1)";
     context.lineWidth = 1;
     for (const v of yt) line(serL, ySer(v), serR, ySer(v));
-    for (let yr = Math.ceil(tFirst / step) * step; yr <= tEnd; yr += step) line(xSer(yr), SER_T, xSer(yr), SER_B);
+    for (let yr = Math.ceil(tFirst / step) * step; yr <= tEnd; yr += step) line(xSer(yr), serT, xSer(yr), serB);
+
+    context.save();
+    context.beginPath();
+    context.rect(serL, serT - 1, serR - serL, SER_H + 2);
+    context.clip();
+
+    // The month the ghost profile belongs to, so the grey curve above has a date.
+    if (ghostT !== null) {
+      context.strokeStyle = GHOST_COLOR;
+      context.setLineDash([3, 3]);
+      line(xSer(ghostT), serT, xSer(ghostT), serB);
+      context.setLineDash([]);
+      context.font = noteFont;
+      context.fillStyle = "#888";
+      context.textAlign = "left"; context.textBaseline = "top";
+      haloText(ghostLabel, xSer(ghostT) + 4, serB - 16);
+    }
 
     strokeSeries(spoMonthly, SPO_COLOR);
     strokeSeries(mloMonthly, MLO_COLOR);
 
-    // Scrubber: a rule at the month, its two values as dots, a handle below the axis.
     const sx = xSer(cursorT);
     context.strokeStyle = "rgba(0,0,0,0.45)";
-    line(sx, SER_T, sx, SER_B);
-    for (const [p, color] of [[latFrame.mloAt, MLO_COLOR], [latFrame.spoAt, SPO_COLOR]]) {
+    context.lineWidth = 1;
+    line(sx, serT, sx, serB);
+    for (const [p, color] of [[latFrame.spoAt, SPO_COLOR], [latFrame.mloAt, MLO_COLOR]]) {
       if (!p) continue;
       context.fillStyle = color;
       context.strokeStyle = "#fff";
@@ -497,11 +422,15 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
       context.fill();
       context.stroke();
     }
+    drawClock(sx);
+    context.restore();
+
+    // Scrubber handle below the axis.
     context.fillStyle = ACCENT;
     context.beginPath();
-    context.moveTo(sx, SER_B + 1);
-    context.lineTo(sx - 6, SER_B + 10);
-    context.lineTo(sx + 6, SER_B + 10);
+    context.moveTo(sx, serB + 1);
+    context.lineTo(sx - 6, serB + 10);
+    context.lineTo(sx + 6, serB + 10);
     context.closePath();
     context.fill();
 
@@ -509,7 +438,7 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     context.strokeStyle = "#666"; context.fillStyle = "#333";
     context.lineWidth = 1;
     context.beginPath();
-    context.moveTo(serL, SER_T); context.lineTo(serL, SER_B); context.lineTo(serR, SER_B);
+    context.moveTo(serL, serT); context.lineTo(serL, serB); context.lineTo(serR, serB);
     context.stroke();
     context.font = tickFont;
     context.textAlign = "right"; context.textBaseline = "middle";
@@ -519,20 +448,62 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     }
     context.textAlign = "center"; context.textBaseline = "top";
     for (let yr = Math.ceil(tFirst / step) * step; yr <= tEnd; yr += step) {
-      line(xSer(yr), SER_B, xSer(yr), SER_B + 5);
-      context.fillText(yr, xSer(yr), SER_B + 12);
+      line(xSer(yr), serB, xSer(yr), serB + 5);
+      context.fillText(yr, xSer(yr), serB + 12);
     }
+    context.save();
+    context.translate(14, serT + SER_H / 2);
+    context.rotate(-Math.PI / 2);
+    context.textAlign = "center"; context.textBaseline = "middle";
+    context.fillText("CO₂ (ppm)", 0, 0);
+    context.restore();
 
     // Legend, top left, where the rising curves leave room.
     context.font = noteFont;
     context.textAlign = "left"; context.textBaseline = "middle";
     [["Mauna Loa", MLO_COLOR], ["South Pole", SPO_COLOR]].forEach(([name, color], i) => {
-      const ly = SER_T + 12 + i * 15;
+      const ly = serT + 12 + i * 15;
       context.fillStyle = color;
       context.fillRect(serL + 8, ly - 1.5, 14, 3);
       context.fillStyle = "#333";
-      context.fillText(name, serL + 27, ly);
+      haloText(name, serL + 27, ly);
     });
+  }
+
+  // A small clock face with one hand for the month, January at twelve o'clock, that keeps
+  // to the upper left of the month's Mauna Loa dot (the South Pole's before 1958), where the
+  // rising curve leaves room, with the month's name above it.
+  function drawClock(sx) {
+    const p = latFrame.mloAt ?? latFrame.spoAt;
+    const cr = 15;
+    const cx = clamp(sx - 34, serL + cr + 4, serR - cr - 4);
+    const cy = clamp(p ? ySer(p[1]) - 30 : serT + SER_H / 2, serT + cr + 22, serB - cr - 4);
+    context.fillStyle = "rgba(255,255,255,0.92)";
+    context.strokeStyle = "#999";
+    context.lineWidth = 1;
+    context.beginPath();
+    context.arc(cx, cy, cr, 0, 2 * Math.PI);
+    context.fill();
+    context.stroke();
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * 2 * Math.PI - Math.PI / 2;
+      const inner = i % 3 ? cr - 3 : cr - 5;
+      context.strokeStyle = i % 3 ? "#bbb" : "#777";
+      line(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner, cx + Math.cos(a) * (cr - 1), cy + Math.sin(a) * (cr - 1));
+    }
+    const year = Math.floor(cursorT);
+    const mo = Math.min(11, Math.floor((cursorT - year) * 12));
+    const angle = ((mo + 0.5) / 12) * 2 * Math.PI - Math.PI / 2;
+    context.strokeStyle = "#222";
+    context.lineWidth = 2;
+    line(cx, cy, cx + Math.cos(angle) * (cr - 4), cy + Math.sin(angle) * (cr - 4));
+    context.lineWidth = 1;
+    context.font = labelFont;
+    context.fillStyle = "#222";
+    context.textAlign = "center"; context.textBaseline = "bottom";
+    const text = `${MONTHS_LONG[mo]} ${year}`;
+    const half = context.measureText(text).width / 2 + 2;
+    haloText(text, clamp(cx, serL + half, serR - half), cy - cr - 3);
   }
 
   function strokeSeries(pts, color) {
@@ -546,12 +517,14 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   }
 
   // ---- ticks and formatting -------------------------------------------------------------------
-  function yTicks(lo, hi, height) {
-    const target = Math.max(2, Math.floor(height / 45));
-    const raw = (hi - lo) / target;
-    const step = [1, 2, 5, 10, 20, 25, 50, 100].find(s => s >= raw) ?? 100;
+  // Round CO₂ ticks over the shared range, as many as the space allows: about one per 45 px
+  // vertically, one per 40 px along the thin plot's bottom.
+  function co2TickValues(extent, vertical = false) {
+    const target = Math.max(2, Math.floor(extent / (vertical ? 45 : 40)));
+    const raw = (co2Hi - co2Lo) / target;
+    const step = [10, 20, 25, 50, 100].find(s => s >= raw) ?? 100;
     const out = [];
-    for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) out.push(v);
+    for (let v = Math.ceil(co2Lo / step) * step; v <= co2Hi; v += step) out.push(v);
     return out;
   }
 
@@ -571,6 +544,7 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     if (spoAt) parts.push(`South Pole ${spoAt[1].toFixed(1)} ppm`);
     // The reference's bins are equal in sine latitude, so their plain mean is the area-weighted global one.
     if (profile) parts.push(`global surface mean ${(profile.reduce((s, v) => s + v, 0) / profile.length).toFixed(1)} ppm`);
+    else if (ghostT !== null && cursorT < ghostT) parts.push(`no background reference before ${Math.floor(ghostT)}`);
     const n = dots.filter(d => !d.big).length;
     const others = n ? `${n} other station${n === 1 ? "" : "s"} reporting` : "no other stations reported yet";
     status.textContent = `${formatMonth(cursorT)}: ${parts.join(", ")}${parts.length ? "; " : ""}${others}.`;
@@ -585,9 +559,10 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   // ---- pointer --------------------------------------------------------------------------------
   function pointerAt(e) {
     const r = canvas.getBoundingClientRect();
-    return {px: (e.clientX - r.left) * (w / r.width), py: (e.clientY - r.top) * (TOTAL_H / r.height)};
+    return {px: (e.clientX - r.left) * (w / r.width), py: (e.clientY - r.top) * (totalH / r.height)};
   }
-  const onSeries = (px, py) => py >= SER_T - 8 && py <= SER_B + 26 && px >= serL - 8 && px <= serR + 8;
+  const onSeries = (px, py) => py >= serT - 8 && py <= serB + 26 && px >= serL - 8 && px <= serR + 8;
+  const onRow = (px, py) => py >= ROW_T - 8 && py <= rowB + 8 && px >= mapL && px <= latR + 8;
 
   canvas.addEventListener("pointerdown", e => {
     const {px, py} = pointerAt(e);
@@ -607,7 +582,7 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
       if (hoverSite) { hoverSite = null; requestRender(); }
       return;
     }
-    if (!playing && py >= LAT_T - 8 && py <= LAT_B + 8 && px >= latL && px <= latR) {
+    if (!playing && onRow(px, py)) {
       const near = nearestSite(px, py);
       if (near !== hoverSite) { hoverSite = near; requestRender(); }
       canvas.style.cursor = near ? "pointer" : "default";
@@ -627,13 +602,17 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     if (hoverSite) { hoverSite = null; requestRender(); }
   });
 
+  // The station nearest the pointer, on the map or on the latitude plot, within 10 px.
   function nearestSite(px, py) {
-    let best = null, bestD = 100;   // 10 px
+    let best = null, bestD = 100;
     for (const d of latFrame.dots) {
       if (d.big) continue;
-      const dx = xLat(d.site.sinLat) - px, dy = yLat(d.v) - py;
-      const dd = dx * dx + dy * dy;
-      if (dd < bestD) { bestD = dd; best = d.site; }
+      const spots = [[xLat(d.v), mapY(d.site.lat)]];
+      if (d.site.lon !== null) spots.push([mapX(d.site.lon), mapY(d.site.lat)]);
+      for (const [x, y] of spots) {
+        const dd = (x - px) ** 2 + (y - py) ** 2;
+        if (dd < bestD) { bestD = dd; best = d.site; }
+      }
     }
     return best;
   }
@@ -732,6 +711,18 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     context.moveTo(x0, y0);
     context.lineTo(x1, y1);
     context.stroke();
+  }
+
+  // Text with a white halo, for labels that sit on top of the data. Uses the current font,
+  // alignment and fill; the stroke settings are restored afterwards.
+  function haloText(text, tx, ty) {
+    const {strokeStyle, lineWidth, lineJoin} = context;
+    context.strokeStyle = "rgba(255,255,255,0.9)";
+    context.lineWidth = 3.5;
+    context.lineJoin = "round";
+    context.strokeText(text, tx, ty);
+    context.fillText(text, tx, ty);
+    context.strokeStyle = strokeStyle; context.lineWidth = lineWidth; context.lineJoin = lineJoin;
   }
 }
 
