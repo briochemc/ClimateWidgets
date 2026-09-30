@@ -55,6 +55,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Atmospheric transmission</h2>
     <img class="thumb" src="./assets/thumbnails/atmospheric-transmission.png" alt="Three panels on a logarithmic wavelength axis: the Sun's and the Earth's glow curves in faint gold and red, filled solidly where the light gets through the atmosphere, below them the fraction the atmosphere absorbs as a grey area with a wide gap in the visible and a narrower one near 10 micrometres, and below that one coloured row per gas showing where each one absorbs">
   </a>
+  <a class="card" href="./carbon-budget/">
+    <h2>The carbon budget</h2>
+    <img class="thumb" src="./assets/thumbnails/carbon-budget.png" alt="A grid of small squares, one per billion tonnes of CO₂, filled from the bottom in warm colours from pale for 1850 to dark red for 2025, with grey squares above the fill and three labelled lines across them where the budgets for 1.5, 1.7 and 2 °C of warming run out">
+  </a>
 </div>
 
 <style>

@@ -18,6 +18,7 @@ export default {
     {name: "Blackbody radiation", path: "/blackbody-radiation/"},
     {name: "What the air is made of", path: "/atmospheric-composition/"},
     {name: "Atmospheric transmission", path: "/atmospheric-transmission/"},
+    {name: "The carbon budget", path: "/carbon-budget/"},
   ],
   head: "",
   // Embed pages disable the footer themselves, so this only shows on the regular pages.
