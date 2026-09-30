@@ -43,6 +43,24 @@ const TOTAL_H = PLOT_B + 32;
 const LOOK_MIN = 1;                  // years; the shortest window
 const PREINDUSTRIAL = 278, ICE_AGE = 185;
 
+// Landmarks that give the time axis a sense of scale, after xkcd's temperature timeline.
+// Each is a dashed vertical line with its label written up along it; a label shows only
+// while its event sits comfortably inside the window (not crammed against the right edge,
+// not about to fall off the left), so a few are up at a time and none collide. Times are
+// years CE; "years ago" events are counted from 1950, as the ice cores are.
+const MILESTONES = [
+  {t: 2015.95, label: "2015: Paris Agreement"},
+  {t: 1958.2, label: "1958: Keeling begins at Mauna Loa"},
+  {t: 1770, label: "c. 1770: Industrial Revolution begins"},
+  {t: 1000, label: "c. 1000: Vikings reach America"},
+  {t: -2560, label: "4,600 years ago: Great Pyramid built"},
+  {t: 1950 - 11700, label: "11,700 years ago: last ice age ends, farming begins"},
+  {t: 1950 - 21000, label: "21,000 years ago: last ice age at its peak"},
+  {t: 1950 - 65000, label: "65,000 years ago: humans reach Australia"},
+  {t: 1950 - 300000, label: "300,000 years ago: first Homo sapiens"},
+  {t: 1950 - 773000, label: "773,000 years ago: Earth's magnetic field last flips"},
+];
+
 // Unpacks a monthly series {year, month, v: [...]} into [[decimalYear, ppm], ...],
 // dropping the missing months.
 export function unpackMonthly(packed) {
@@ -114,7 +132,13 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
 
   const tEnd = mloWeekly.length ? mloWeekly[mloWeekly.length - 1][0] : mloMonthly[mloMonthly.length - 1][0];
   const tOldest = composite[0][0];
-  const LOOK_MAX = Math.ceil((tEnd - tOldest + 500) / 1000) * 1000;
+  // Wide enough for the oldest ice and for the oldest milestone to clear the left edge.
+  const LOOK_MAX = Math.ceil(Math.max(tEnd - tOldest + 500, (tEnd - MILESTONES[MILESTONES.length - 1].t) * 1.06) / 1000) * 1000;
+  // The milestones' ages, oldest last, and where the tour rests to show each one: the window
+  // in which the event sits about two fifths of the way in from the left.
+  const milestones = MILESTONES.map(m => ({...m, age: tEnd - m.t})).filter(m => m.age > 0 && m.age < LOOK_MAX)
+    .sort((a, b) => a.age - b.age);
+  const milestoneAlpha = m => fadeIn(m.age * 1.02, m.age * 1.06) * fadeOut(m.age * 8, m.age * 12);
   const tFirstObs = Math.min(mloMonthly[0]?.[0] ?? Infinity, spoMonthly[0]?.[0] ?? Infinity);
   const latest = mloMonthly[mloMonthly.length - 1];
   const latestLabel = `${monthName(latest[0])} ${Math.floor(latest[0])}: ${Math.round(latest[1])} ppm`;
@@ -205,7 +229,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     "Drag the slider to look further back, or pick a span above; hover the chart to read " +
     "the record under the cursor.";
   const HINT_TOUR =
-    "Touring: zooming out from the last decades to the ice ages, one stop at a time — " +
+    "Touring: zooming out from the last decades to the ice ages, pausing at each landmark — " +
     "click anything to take over; Play tour starts it again.";
   const hint = document.createElement("div");
   hint.style.cssText = "padding:4px 0 0;color:#888;font-size:14px;";
@@ -409,6 +433,8 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     context.fill();
     haloText(latestLabel, Math.min(plotR - 4, endX + 4), endY - dotR - 3);
 
+    drawMilestones();
+
     // Hover cursor: a vertical rule at the pointer's time.
     if (hoverT !== null) {
       context.strokeStyle = "rgba(0,0,0,0.35)";
@@ -442,6 +468,30 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     context.restore();
 
     drawLegend(a, t0, t1);
+  }
+
+  // Dashed rules with their labels written upwards from the axis, to the right of the rule.
+  function drawMilestones() {
+    context.font = noteFont;
+    context.textAlign = "left"; context.textBaseline = "top";
+    for (const m of milestones) {
+      const alpha = milestoneAlpha(m);
+      if (alpha <= 0.02) continue;
+      const mx = x(m.t);
+      context.globalAlpha = alpha;
+      context.strokeStyle = "rgba(0,0,0,0.3)";
+      context.lineWidth = 1;
+      context.setLineDash([3, 4]);
+      line(mx, PLOT_T, mx, PLOT_B);
+      context.setLineDash([]);
+      context.save();
+      context.translate(mx + 3, PLOT_B - 6);
+      context.rotate(-Math.PI / 2);
+      context.fillStyle = "#555";
+      haloText(m.label, 0, 0);
+      context.restore();
+    }
+    context.globalAlpha = 1;
   }
 
   function strokeSeries(pts, t0, t1, color, lineWidth, alpha) {
@@ -709,10 +759,12 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   canvas.addEventListener("pointerdown", () => stopTour());
 
   // ---- tour -----------------------------------------------------------------------------------
-  // The video's zoom out: from the last five years, the chart widens to each preset in turn,
-  // resting at each, until the whole 800,000 years are on screen. One way, then it stops; any
-  // click or drag ends it early.
-  const TOUR_HOLD = 2600;
+  // The video's zoom out, paced by the milestones: from the last five years, the chart widens
+  // to show each landmark in turn, resting long enough to read it, until the whole 800,000
+  // years are on screen. One way, then it stops; any click or drag ends it early.
+  const TOUR_HOLD = 3200;
+  const TOUR_GLIDE = 1600;
+  const tourStops = [5, ...milestones.map(m => m.age * 2.5).filter(l => l < LOOK_MAX / 1.15), LOOK_MAX];
   let touring = false, tourTimer = null, tourWatcher = null;
 
   function stopTour() {
@@ -739,8 +791,8 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   function zoomStep(i) {
     if (!touring) return;
     if (container.isConnected === false) return stopTour();
-    if (i >= presets.length) return stopTour();
-    glideLook(presets[i].look, 2200, () => {
+    if (i >= tourStops.length) return stopTour();
+    glideLook(tourStops[i], TOUR_GLIDE, () => {
       if (!touring) return;
       tourTimer = setTimeout(() => zoomStep(i + 1), TOUR_HOLD);
     });

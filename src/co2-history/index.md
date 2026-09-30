@@ -24,7 +24,7 @@ const history = view(createCo2HistoryWidget({data}));
 
 Mauna Loa (red) and the South Pole (blue) are direct measurements of the air; before 1958 every point is air recovered from ice, dated by how long it took the snow to seal it in. Law Dome (orange) and Siple Station (brown) cover the last two centuries at a resolution of years to decades, and the 800,000-year composite is stitched from seven Antarctic cores, each in its own colour. Zooming out, the modern rise folds into a vertical line: two centuries against the eight glacial cycles it sits on.
 
-The **Play tour** does the zoom by itself, resting at each stop. For where in the world these numbers come from, and how the air breathes in and out each year, see [CO₂ around the world, month by month](../co2-latitude/).
+The dashed lines are landmarks for the scale of the axis, from the Paris Agreement back to the last time Earth's magnetic field flipped, 773,000 years ago; each shows only while it sits comfortably in the window. (The last dinosaurs, 66 million years ago, would be eighty times further left than the axis goes.) The **Play tour** does the zoom by itself, pausing at each landmark. For where in the world these numbers come from, and how the air breathes in and out each year, see [CO₂ around the world, month by month](../co2-latitude/).
 
 ## Embed this widget
 
