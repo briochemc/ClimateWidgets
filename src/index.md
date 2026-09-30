@@ -71,6 +71,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>The carbon budget as a pie</h2>
     <img class="thumb" src="./assets/thumbnails/carbon-budget-pie.png" alt="A pie chart filled clockwise from the top with slices of many colours, one per country, nearly all the way round, leaving a thin grey wedge for what is left of the 1.5 °C budget, with ticks on the rim where the 1.7 and 2 °C budgets would end">
   </a>
+  <a class="card" href="./co2-per-capita/">
+    <h2>CO₂ per person by country</h2>
+    <img class="thumb" src="./assets/thumbnails/co2-per-capita.png" alt="A polar chart of wedges running clockwise from the top, each country a wedge whose angle is its population and whose length is its CO₂ per person, tall slivers for the Gulf states first, then a long United States wedge and a wide, shorter China wedge, coloured by region with labels along the outer edges and radiating from the tips">
+  </a>
 </div>
 
 <style>

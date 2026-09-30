@@ -22,6 +22,7 @@ export default {
     {name: "Atmospheric transmission", path: "/atmospheric-transmission/"},
     {name: "The carbon budget", path: "/carbon-budget/"},
     {name: "The carbon budget as a pie", path: "/carbon-budget-pie/"},
+    {name: "CO\u2082 per person, country by country", path: "/co2-per-capita/"},
   ],
   head: "",
   // Embed pages disable the footer themselves, so this only shows on the regular pages.
