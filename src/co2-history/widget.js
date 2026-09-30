@@ -1,0 +1,1156 @@
+// Atmospheric CO₂ across every scale we have measured it on: the weekly Mauna Loa record,
+// the Keeling curve since 1958, two centuries of Law Dome and Siple Station ice, and the
+// 800,000-year Antarctic composite. One chart, one time axis that always ends at the latest
+// week, and a "look back" slider that stretches the axis from a year to 800,000 years, so
+// the reader zooms out from today's seasonal wiggle to the ice ages in one motion.
+//
+// Below it, a latitude panel shows where in the world that CO₂ was measured: NOAA's marine
+// boundary layer reference as a curve against latitude for the month under the cursor,
+// the flask sites as dots, and an inset map. Hovering the chart moves the month; the Play
+// tour sweeps 1979 to now and then zooms the chart out through the ice cores, after Andy
+// Jacobson's NOAA animation (https://gml.noaa.gov/ccgg/trends/history.html).
+//
+// Self-contained on purpose: no d3, no other imports, so the script-tag embed is a single
+// ES module import. The data file is built by scripts/co2-history.mjs; see its header for
+// the layout of the packed monthly series.
+
+const ACCENT = "#0b57d0";
+const MLO_COLOR = "#d62728";
+const SPO_COLOR = "#1f4fd6";
+const LAW_COLOR = "#f28e2b";
+const SIPLE_COLOR = "#8c564b";
+const MBL_COLOR = "#333";
+const SITE_COLOR = "#8a8f96";
+// One colour per ice core in the Bereiter composite, keyed by the names the data file uses.
+const CORE_COLORS = {
+  "Law Dome": LAW_COLOR,
+  "EPICA Dome C": "#2b3a9e",
+  "Vostok": "#9467bd",
+  "EDML": "#2ca02c",
+  "Talos Dome": "#e377c2",
+  "Siple Dome": "#bcbd22",
+  "WAIS Divide": "#17becf",
+};
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August",
+  "September", "October", "November", "December"];
+
+// The figure fills its container up to FIGURE_WIDTH and reflows below it; below MIN_WIDTH
+// it stops shrinking and scrolls sideways inside its own wrapper.
+const FIGURE_WIDTH = 640;
+const MIN_WIDTH = 320;
+
+// Vertical layout is fixed so embed iframe heights stay put: the main chart, then the
+// latitude panel with the inset map beside it.
+const PLOT_T = 10, PLOT_H = 290;
+const PLOT_B = PLOT_T + PLOT_H;
+const LAT_T = PLOT_B + 64, LAT_H = 190;
+const LAT_B = LAT_T + LAT_H;
+const TOTAL_H = LAT_B + 32;
+
+const LOOK_MIN = 1;                  // years; the shortest window
+const PREINDUSTRIAL = 278, ICE_AGE = 185;
+
+// Unpacks a monthly series {year, month, v: [...]} into [[decimalYear, ppm], ...],
+// dropping the missing months.
+export function unpackMonthly(packed) {
+  if (!packed) return [];
+  const out = [];
+  const start = packed.year * 12 + (packed.month - 1);
+  packed.v.forEach((val, i) => {
+    if (val === null) return;
+    const m = start + i;
+    out.push([Math.floor(m / 12) + ((m % 12) + 0.5) / 12, val]);
+  });
+  return out;
+}
+
+// NOAA serves its Mauna Loa files with open CORS headers, so a page can fetch the weekly and
+// monthly records live and hand them here to bring the bundled data up to date. Each series
+// is replaced only when the live file reaches later than the bundled one; a failed or
+// truncated fetch changes nothing. Returns true when anything was updated.
+export function updateMaunaLoa(data, {weekly, monthly} = {}) {
+  let changed = false;
+  if (weekly) {
+    const rows = noaaLines(weekly).map(c => [Math.round(c[3] * 10000) / 10000, Math.round(c[4] * 100) / 100])
+      .filter(([, v]) => v > 0);
+    const bundled = data.mlo.weekly;
+    if (rows.length && (!bundled.length || rows[rows.length - 1][0] > bundled[bundled.length - 1][0])) {
+      data.mlo.weekly = rows;
+      changed = true;
+    }
+  }
+  if (monthly) {
+    const rows = noaaLines(monthly).filter(c => c[3] > 0);
+    if (rows.length) {
+      const first = rows[0][0] * 12 + (rows[0][1] - 1);
+      const last = rows[rows.length - 1][0] * 12 + (rows[rows.length - 1][1] - 1);
+      const b = data.mlo.monthly;
+      const bundledLast = b ? b.year * 12 + (b.month - 1) + b.v.length - 1 : -Infinity;
+      if (last > bundledLast) {
+        const v = new Array(last - first + 1).fill(null);
+        for (const c of rows) v[c[0] * 12 + (c[1] - 1) - first] = Math.round(c[3] * 100) / 100;
+        data.mlo.monthly = {year: rows[0][0], month: rows[0][1], v};
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+// Data lines of a NOAA trends text file (`#` comments, whitespace-separated numbers).
+function noaaLines(text) {
+  return text.split(/\r?\n/)
+    .filter(l => l.trim() && !l.startsWith("#"))
+    .map(l => l.trim().split(/\s+/).map(Number))
+    .filter(c => c.length >= 5 && c.every(Number.isFinite));
+}
+
+export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = null}) {
+  // ---- data -----------------------------------------------------------------------------------
+  const mloMonthly = unpackMonthly(data.mlo.monthly);
+  const mloWeekly = data.mlo.weekly;
+  const spoMonthly = unpackMonthly(data.spo.monthly);
+  const lawSamples = data.lawDome.samples;                 // [ageCE, ppm, err]
+  const lawSpline = data.lawDome.spline;                   // [ageCE, ppm]
+  const siple = [
+    ...data.siple.neftel.map(([t, lo, hi, v]) => [t, v, lo, hi]),
+    ...data.siple.friedli.map(([t, v]) => [t, v, null, null]),
+  ].sort((a, b) => a[0] - b[0]);
+  const composite = data.composite.rows;                   // [yearCE, ppm, sigma, coreIndex], ascending
+  const coreNames = data.composite.cores;
+  const mbl = data.mbl;
+  const mblStep = mbl.t.length > 1 ? mbl.t[1] - mbl.t[0] : 1 / 24;
+  const sites = data.sites.map(s => ({...s, start: s.year * 12 + (s.month - 1), sinLat: Math.sin(s.lat * Math.PI / 180)}));
+  const mloSite = sites.find(s => s.code === "MLO");
+  const spoSite = sites.find(s => s.code === "SPO");
+  const mloSinLat = mloSite ? mloSite.sinLat : Math.sin(19.54 * Math.PI / 180);
+
+  const tEnd = mloWeekly.length ? mloWeekly[mloWeekly.length - 1][0] : mloMonthly[mloMonthly.length - 1][0];
+  const tOldest = composite[0][0];
+  const LOOK_MAX = Math.ceil((tEnd - tOldest + 500) / 1000) * 1000;
+  const tFirstObs = Math.min(mloMonthly[0]?.[0] ?? Infinity, spoMonthly[0]?.[0] ?? Infinity);
+  const latest = mloMonthly[mloMonthly.length - 1];
+  const latestLabel = `${monthName(latest[0])} ${Math.floor(latest[0])}: ${Math.round(latest[1])} ppm`;
+
+  // The last time Mauna Loa's monthly mean was below 350 ppm — the video's callout.
+  const last350 = (() => {
+    for (let i = mloMonthly.length - 1; i >= 0; i--) if (mloMonthly[i][1] < 350) return mloMonthly[i];
+    return null;
+  })();
+
+  const landPath = typeof Path2D === "function" && data.land ? new Path2D(data.land) : null;
+
+  // ---- state ----------------------------------------------------------------------------------
+  const presets = [
+    {label: "5 years", look: 5},
+    {label: "Since 1958", look: tEnd - 1957.9},
+    {label: "Since 1750", look: tEnd - 1749},
+    {label: "2,000 years", look: 2000},
+    {label: "10,000 years", look: 10000},
+    {label: "800,000 years", look: LOOK_MAX},
+  ];
+  let look = clamp(lookBack ?? presets[1].look, LOOK_MIN, LOOK_MAX);   // years shown, ending at tEnd
+  let cursorT = latest[0];              // month the latitude panel shows
+  let hoverT = null;                    // where the pointer is over the chart, or null
+  let hoverSite = null;                 // site under the pointer in the latitude panel
+  let yLo = 0, yHi = 1, yTargetLo = 0, yTargetHi = 1, ySnap = true;   // main chart y range, animated
+  let latLo = 0, latHi = 1, latTargetLo = 0, latTargetHi = 1;           // latitude panel y range
+
+  // ---- DOM ------------------------------------------------------------------------------------
+  const container = document.createElement("div");
+  container.style.cssText = "font:16px sans-serif;color:#333;";
+
+  const buttonCss =
+    "font:13px sans-serif;color:#333;background:#fff;border:1px solid #ccc;border-radius:999px;" +
+    "padding:3px 12px;cursor:pointer;";
+  const controls = document.createElement("div");
+  controls.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 0 8px;";
+  const presetButtons = presets.map(p => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = p.label;
+    b.style.cssText = buttonCss;
+    b.addEventListener("click", () => { stopTour(); glideLook(p.look); });
+    controls.appendChild(b);
+    return {el: b, preset: p};
+  });
+  const tourButton = document.createElement("button");
+  tourButton.type = "button";
+  tourButton.textContent = "Play tour";
+  tourButton.style.cssText = buttonCss + "margin-left:auto;";
+  tourButton.addEventListener("click", () => (touring ? stopTour() : startTour(0)));
+  controls.appendChild(tourButton);
+  container.appendChild(controls);
+
+  // The look-back slider is logarithmic: a year at one end, the whole record at the other.
+  const SLIDER_STEPS = 1000;
+  const sliderField = document.createElement("label");
+  sliderField.style.cssText = "display:flex;align-items:center;gap:8px;padding:0 0 6px;font-size:14px;cursor:pointer;";
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = 0;
+  slider.max = SLIDER_STEPS;
+  slider.step = 1;
+  slider.style.cssText = `flex:1 1 120px;margin:0;accent-color:${ACCENT};cursor:pointer;`;
+  slider.setAttribute("aria-label", "How far back in time the chart looks");
+  const sliderOut = document.createElement("span");
+  sliderOut.style.cssText = "color:#333;min-width:7.5em;text-align:right;font-variant-numeric:tabular-nums;";
+  sliderField.append("Look back", slider, sliderOut);
+  slider.addEventListener("input", e => {
+    e.stopPropagation();
+    stopTour();
+    setLook(sliderToLook(Number(slider.value)));
+    emit();
+  });
+  container.appendChild(sliderField);
+
+  const canvas = document.createElement("canvas");
+  canvas.style.cssText = "display:block;touch-action:pan-y;";
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", "Atmospheric CO₂ against time, and against latitude for one month");
+  const context = canvas.getContext("2d");
+  const scroller = document.createElement("div");
+  scroller.style.cssText = "max-width:100%;overflow-x:auto;";
+  scroller.appendChild(canvas);
+  container.appendChild(scroller);
+
+  const status = document.createElement("div");
+  status.style.cssText = "padding:8px 0 0;color:#555;min-height:1.4em;line-height:1.4;";
+  container.appendChild(status);
+
+  const HINT_IDLE =
+    "Drag the slider to look further back, or pick a span above. Hover the chart to move the " +
+    "latitude panel through the months; hover a dot there for the station's name.";
+  const HINT_TOUR =
+    "Touring: the months since 1979 first, then zooming out through the ice cores — " +
+    "click anything to take over; Play tour starts it again.";
+  const hint = document.createElement("div");
+  hint.style.cssText = "padding:4px 0 0;color:#888;font-size:14px;";
+  hint.textContent = HINT_IDLE;
+  container.appendChild(hint);
+
+  // ---- layout ---------------------------------------------------------------------------------
+  const maxW = Math.max(MIN_WIDTH, Math.round(width));
+  let w, marginL, marginR, plotL, plotR, latL, latR, mapL, mapW, mapH, mapT;
+  let tickFont, noteFont, labelFont, dotR;
+
+  function applyLayout(newW) {
+    w = newW;
+    const k = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
+    const lerp = (a, b) => Math.round(a + (b - a) * k);
+    marginL = lerp(44, 56);
+    marginR = lerp(12, 20);
+    plotL = marginL;
+    plotR = w - marginR;
+    // The latitude panel shares the left margin; the map takes the right third.
+    mapW = lerp(112, 200);
+    mapH = mapW / 2;
+    latL = marginL;
+    latR = w - marginR - mapW - lerp(16, 28);
+    mapL = w - marginR - mapW;
+    mapT = LAT_T + 6;
+    tickFont = `${lerp(12, 14)}px sans-serif`;
+    noteFont = `${lerp(11, 13)}px sans-serif`;
+    labelFont = `bold ${lerp(12, 14)}px sans-serif`;
+    dotR = lerp(3, 4);
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = w * dpr;
+    canvas.height = TOTAL_H * dpr;
+    canvas.style.width = w + "px";
+    canvas.style.height = TOTAL_H + "px";
+    context.scale(dpr, dpr);
+  }
+  applyLayout(maxW);
+
+  // ---- scales ---------------------------------------------------------------------------------
+  const tStart = () => tEnd - look;
+  const x = t => plotL + ((t - tStart()) / look) * (plotR - plotL);
+  x.invert = px => tStart() + ((px - plotL) / (plotR - plotL)) * look;
+  const y = v => PLOT_B - ((v - yLo) / (yHi - yLo)) * PLOT_H;
+  const xLat = s => latL + ((s + 1) / 2) * (latR - latL);
+  const yLat = v => LAT_B - ((v - latLo) / (latHi - latLo)) * LAT_H;
+
+  function sliderToLook(s) {
+    return LOOK_MIN * Math.pow(LOOK_MAX / LOOK_MIN, s / SLIDER_STEPS);
+  }
+  function lookToSlider(l) {
+    return Math.round(SLIDER_STEPS * Math.log(l / LOOK_MIN) / Math.log(LOOK_MAX / LOOK_MIN));
+  }
+
+  // Which records are drawn depends on how far back the chart looks: each fades in and out
+  // over a band of look-back spans (in log space), so zooming never pops a layer on or off.
+  function fadeIn(a, b) { return smooth((Math.log(look) - Math.log(a)) / (Math.log(b) - Math.log(a))); }
+  function fadeOut(a, b) { return 1 - fadeIn(a, b); }
+  const alphas = () => ({
+    weekly: fadeOut(8, 16),
+    monthly: fadeIn(6, 12),
+    law: fadeIn(80, 160) * fadeOut(20000, 50000),
+    siple: fadeIn(80, 160) * fadeOut(3000, 8000),
+    composite: fadeIn(1200, 3000),
+    preindustrial: fadeIn(120, 250),
+    iceAge: fadeIn(15000, 40000),
+    last350: last350 ? fadeIn(12, 20) * fadeOut(150, 400) : 0,
+  });
+
+  // ---- y ranges -------------------------------------------------------------------------------
+  // The main chart's range follows the visible data: the min and max of every record that is
+  // drawn, over the window, plus the reference lines when they show.
+  function targetRange() {
+    const a = alphas();
+    const t0 = tStart(), t1 = tEnd + look * 0.02;
+    let lo = Infinity, hi = -Infinity;
+    const take = v => { if (v < lo) lo = v; if (v > hi) hi = v; };
+    const scan = (pts, alpha) => {
+      if (alpha <= 0.02) return;
+      for (let i = lowerBound(pts, t0); i < pts.length && pts[i][0] <= t1; i++) take(pts[i][1]);
+    };
+    scan(mloWeekly, a.weekly);
+    scan(mloMonthly, a.monthly);
+    scan(spoMonthly, a.monthly);
+    scan(lawSamples, a.law);
+    scan(siple, a.siple);
+    scan(composite, a.composite);
+    if (a.preindustrial > 0.02) take(PREINDUSTRIAL);
+    if (a.iceAge > 0.02) take(ICE_AGE);
+    if (!Number.isFinite(lo)) { lo = 300; hi = 450; }
+    const pad = Math.max(2, (hi - lo) * 0.08);
+    return [lo - pad, hi + pad * 1.6];   // extra room above for the labels
+  }
+
+  function latTargetRange(profile, dots) {
+    let lo = Infinity, hi = -Infinity;
+    const take = v => { if (v < lo) lo = v; if (v > hi) hi = v; };
+    for (const v of ghostProfile) take(v);
+    if (profile) for (const v of profile) take(v);
+    for (const d of dots) take(d.v);
+    if (!Number.isFinite(lo)) { lo = 300; hi = 450; }
+    const pad = Math.max(3, (hi - lo) * 0.1);
+    return [lo - pad, hi + pad * 1.5];
+  }
+
+  // ---- lookups --------------------------------------------------------------------------------
+  // Values on the latitude panel for a month: the boundary-layer profile (interpolated
+  // between the reference's steps), and every site with a monthly mean that month.
+  function mblProfile(t) {
+    if (t < mbl.t[0] || t > mbl.t[mbl.t.length - 1]) return null;
+    const f = (t - mbl.t[0]) / mblStep;
+    const i = Math.min(mbl.t.length - 2, Math.floor(f));
+    const k = clamp(f - i, 0, 1);
+    return mbl.v[i].map((v, j) => v + (mbl.v[i + 1][j] - v) * k);
+  }
+  const ghostProfile = mbl.v.length ? mbl.v[0] : [];
+  const ghostAtMlo = ghostProfile.length ? interpProfile(ghostProfile, mloSinLat) : null;
+
+  function interpProfile(profile, s) {
+    const f = ((s + 1) / 2) * (profile.length - 1);
+    const i = Math.min(profile.length - 2, Math.floor(f));
+    return profile[i] + (profile[i + 1] - profile[i]) * (f - i);
+  }
+
+  function monthIndexOf(t) {
+    const year = Math.floor(t);
+    return year * 12 + Math.min(11, Math.floor((t - year) * 12));
+  }
+
+  function siteDots(t) {
+    const m = monthIndexOf(t);
+    const dots = [];
+    for (const s of sites) {
+      const v = s.v[m - s.start];
+      if (v === null || v === undefined) continue;
+      // Mauna Loa and South Pole are drawn from their own series below, in their colours;
+      // both networks sample them, so only NOAA's dot is kept for the other stations.
+      if ((s.code === "MLO" || s.code === "SPO") && s.source === "scripps") continue;
+      dots.push({site: s, v});
+    }
+    return dots;
+  }
+
+  function seriesAt(pts, t) {
+    if (!pts.length) return null;
+    const i = lowerBound(pts, t);
+    const cands = [pts[i - 1], pts[i]].filter(Boolean);
+    let best = null;
+    for (const p of cands) if (!best || Math.abs(p[0] - t) < Math.abs(best[0] - t)) best = p;
+    return best && Math.abs(best[0] - t) < 1 / 12 + 1e-6 ? best : null;
+  }
+
+  // ---- rendering ------------------------------------------------------------------------------
+  let raf = null;
+  function requestRender() { if (raf === null) raf = requestAnimationFrame(frame); }
+
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  let lastFrame = 0;
+  let latFrame = {profile: null, dots: []};   // what the latitude panel shows this frame
+  function frame(now) {
+    raf = null;
+    const dt = lastFrame ? Math.min(0.1, (now - lastFrame) / 1000) : 0.016;
+    lastFrame = now;
+    latFrame = latitudeData(cursorT);
+    [latTargetLo, latTargetHi] = latTargetRange(latFrame.profile, latFrame.dots);
+    // Ranges chase their targets; snapping happens on the first frame and under reduced motion.
+    const rate = ySnap || reduceMotion ? 1 : 1 - Math.exp(-dt * 10);
+    yLo += (yTargetLo - yLo) * rate;
+    yHi += (yTargetHi - yHi) * rate;
+    latLo += (latTargetLo - latLo) * rate;
+    latHi += (latTargetHi - latHi) * rate;
+    ySnap = false;
+    render();
+    const settled = Math.abs(yTargetLo - yLo) + Math.abs(yTargetHi - yHi) +
+      Math.abs(latTargetLo - latLo) + Math.abs(latTargetHi - latHi) < 0.05;
+    if (!settled) requestRender();
+    else { yLo = yTargetLo; yHi = yTargetHi; latLo = latTargetLo; latHi = latTargetHi; lastFrame = 0; }
+  }
+
+  function render() {
+    context.clearRect(0, 0, w, TOTAL_H);
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, w, TOTAL_H);
+    drawChart();
+    drawLatitudePanel();
+    updateStatus();
+    updateButtons();
+  }
+
+  function drawChart() {
+    const a = alphas();
+    const t0 = tStart(), t1 = tEnd + look * 0.02;
+
+    // Gridlines and axes.
+    const yt = yTicks(yLo, yHi, PLOT_H);
+    const xt = xTicks();
+    context.strokeStyle = "rgba(0,0,0,0.1)";
+    context.lineWidth = 1;
+    for (const v of yt) line(plotL, y(v), plotR, y(v));
+    for (const tk of xt) line(x(tk.t), PLOT_T, x(tk.t), PLOT_B);
+
+    context.save();
+    context.beginPath();
+    context.rect(plotL, PLOT_T - 1, plotR - plotL, PLOT_H + 2);
+    context.clip();
+
+    // Reference lines, dashed, with their labels tucked above them on the left.
+    context.font = labelFont;
+    context.textAlign = "left"; context.textBaseline = "bottom";
+    for (const [alpha, v, text, color] of [
+      [a.preindustrial, PREINDUSTRIAL, "Preindustrial: about 278 ppm", LAW_COLOR],
+      [a.iceAge, ICE_AGE, "Ice ages: about 185 ppm", CORE_COLORS["EPICA Dome C"]],
+    ]) {
+      if (alpha <= 0.02) continue;
+      context.globalAlpha = alpha;
+      context.strokeStyle = color;
+      context.setLineDash([4, 4]);
+      line(plotL, y(v), plotR, y(v));
+      context.setLineDash([]);
+      context.fillStyle = color;
+      context.fillText(text, plotL + 6, y(v) - 3);
+    }
+    context.globalAlpha = 1;
+
+    // Ice cores, oldest layers first so the modern records sit on top.
+    if (a.composite > 0.02) drawComposite(a.composite, t0, t1);
+    if (a.siple > 0.02) drawSiple(a.siple, t0, t1);
+    if (a.law > 0.02) drawLawDome(a.law, t0, t1);
+    if (a.monthly > 0.02) {
+      strokeSeries(spoMonthly, t0, t1, SPO_COLOR, 1.5, a.monthly);
+      strokeSeries(mloMonthly, t0, t1, MLO_COLOR, 1.5, a.monthly);
+    }
+    if (a.weekly > 0.02) strokeSeries(mloWeekly, t0, t1, MLO_COLOR, 1.5, a.weekly);
+
+    // The 350 ppm callout: a thin vertical rule at the last month below it.
+    if (a.last350 > 0.02) {
+      context.globalAlpha = a.last350;
+      context.strokeStyle = MLO_COLOR;
+      line(x(last350[0]), y(last350[1]), x(last350[0]), PLOT_B);
+      context.fillStyle = MLO_COLOR;
+      context.font = noteFont;
+      context.textAlign = "left"; context.textBaseline = "top";
+      const lx = x(last350[0]) + 5;
+      const lines = [`${monthName(last350[0])} ${Math.floor(last350[0])}: Mauna Loa`, "sees 350 ppm", "for the last time"];
+      lines.forEach((s, i) => context.fillText(s, lx, y(last350[1]) + 8 + i * 14));
+      context.globalAlpha = 1;
+    }
+
+    // Latest month, labelled at the end of the record.
+    context.font = labelFont;
+    context.fillStyle = MLO_COLOR;
+    context.textAlign = "right"; context.textBaseline = "bottom";
+    const endX = x(latest[0]), endY = y(latest[1]);
+    context.beginPath();
+    context.arc(endX, endY, dotR, 0, 2 * Math.PI);
+    context.fill();
+    context.fillText(latestLabel, Math.min(plotR - 4, endX + 4), endY - dotR - 3);
+
+    // Hover cursor: a vertical rule at the pointer's time.
+    if (hoverT !== null) {
+      context.strokeStyle = "rgba(0,0,0,0.35)";
+      line(x(hoverT), PLOT_T, x(hoverT), PLOT_B);
+    }
+    context.restore();
+
+    // Axes and tick labels.
+    context.strokeStyle = "#666"; context.fillStyle = "#333";
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(plotL, PLOT_T); context.lineTo(plotL, PLOT_B); context.lineTo(plotR, PLOT_B);
+    context.stroke();
+    context.font = tickFont;
+    context.textAlign = "right"; context.textBaseline = "middle";
+    for (const v of yt) {
+      line(plotL - 4, y(v), plotL, y(v));
+      context.fillText(v, plotL - 7, y(v));
+    }
+    context.textAlign = "center"; context.textBaseline = "top";
+    for (const tk of xt) {
+      line(x(tk.t), PLOT_B, x(tk.t), PLOT_B + 5);
+      const half = context.measureText(tk.label).width / 2 + 2;
+      context.fillText(tk.label, clamp(x(tk.t), half, w - half), PLOT_B + 8);
+    }
+    context.save();
+    context.translate(12, PLOT_T + PLOT_H / 2);
+    context.rotate(-Math.PI / 2);
+    context.textAlign = "center"; context.textBaseline = "top";
+    context.fillText("CO₂ (ppm)", 0, 0);
+    context.restore();
+
+    drawLegend(a, t0, t1);
+  }
+
+  function strokeSeries(pts, t0, t1, color, lineWidth, alpha) {
+    const i0 = Math.max(0, lowerBound(pts, t0) - 1);
+    context.globalAlpha = alpha;
+    context.strokeStyle = color;
+    context.lineWidth = lineWidth;
+    context.lineJoin = "round";
+    context.beginPath();
+    let first = true;
+    for (let i = i0; i < pts.length; i++) {
+      const [t, v] = pts[i];
+      if (first) { context.moveTo(x(t), y(v)); first = false; } else context.lineTo(x(t), y(v));
+      if (t > t1) break;
+    }
+    context.stroke();
+    context.globalAlpha = 1;
+    context.lineWidth = 1;
+  }
+
+  function drawComposite(alpha, t0, t1) {
+    context.globalAlpha = alpha;
+    // Thin joining lines per core, then the dots on top. Two points from different cores are
+    // not joined, so the record reads as several overlapping cores rather than one curve.
+    const i0 = Math.max(0, lowerBound(composite, t0) - 1);
+    const r = look > 200000 ? 1.6 : look > 30000 ? 2.2 : dotR - 1;
+    context.lineWidth = 1;
+    let prev = null;
+    for (let i = i0; i < composite.length && composite[i][0] <= t1; i++) {
+      const p = composite[i];
+      if (prev && prev[3] === p[3]) {
+        context.strokeStyle = CORE_COLORS[coreNames[p[3]]] ?? "#666";
+        line(x(prev[0]), y(prev[1]), x(p[0]), y(p[1]));
+      }
+      prev = p;
+    }
+    for (let i = i0; i < composite.length && composite[i][0] <= t1; i++) {
+      const p = composite[i];
+      context.fillStyle = CORE_COLORS[coreNames[p[3]]] ?? "#666";
+      context.beginPath();
+      context.arc(x(p[0]), y(p[1]), r, 0, 2 * Math.PI);
+      context.fill();
+    }
+    context.globalAlpha = 1;
+  }
+
+  function drawLawDome(alpha, t0, t1) {
+    context.globalAlpha = alpha;
+    context.strokeStyle = LAW_COLOR;
+    context.lineWidth = 1.5;
+    context.beginPath();
+    let first = true;
+    for (let i = Math.max(0, lowerBound(lawSpline, t0) - 1); i < lawSpline.length; i++) {
+      const [t, v] = lawSpline[i];
+      if (first) { context.moveTo(x(t), y(v)); first = false; } else context.lineTo(x(t), y(v));
+      if (t > t1) break;
+    }
+    context.stroke();
+    context.lineWidth = 1;
+    context.fillStyle = LAW_COLOR;
+    for (let i = lowerBound(lawSamples, t0); i < lawSamples.length && lawSamples[i][0] <= t1; i++) {
+      const [t, v, err] = lawSamples[i];
+      if (err > 0) line(x(t), y(v - err), x(t), y(v + err));
+      context.beginPath();
+      context.arc(x(t), y(v), dotR - 1.5, 0, 2 * Math.PI);
+      context.fill();
+    }
+    context.globalAlpha = 1;
+  }
+
+  function drawSiple(alpha, t0, t1) {
+    context.globalAlpha = alpha;
+    context.strokeStyle = SIPLE_COLOR;
+    context.fillStyle = SIPLE_COLOR;
+    context.lineWidth = 1;
+    for (let i = lowerBound(siple, t0); i < siple.length && siple[i][0] <= t1; i++) {
+      const [t, v, lo, hi] = siple[i];
+      if (lo !== null) line(x(lo), y(v), x(hi), y(v));   // the air-enclosure date range
+      context.beginPath();
+      context.arc(x(t), y(v), dotR - 1, 0, 2 * Math.PI);
+      context.fill();
+    }
+    context.globalAlpha = 1;
+  }
+
+  // Lists the records on screen, top left, where the rising curve leaves room.
+  function drawLegend(a, t0, t1) {
+    const items = [];
+    if (a.weekly > 0.02 || a.monthly > 0.02) items.push(["Mauna Loa", MLO_COLOR]);
+    if (a.monthly > 0.02) items.push(["South Pole", SPO_COLOR]);
+    if (a.law > 0.02) items.push(["Law Dome", LAW_COLOR]);
+    if (a.siple > 0.02) items.push(["Siple Station", SIPLE_COLOR]);
+    if (a.composite > 0.02) {
+      const seen = new Set();
+      for (let i = lowerBound(composite, t0); i < composite.length && composite[i][0] <= t1; i++) seen.add(composite[i][3]);
+      for (const k of [...seen].sort((p, q) => p - q)) {
+        const name = coreNames[k];
+        if (name === "Law Dome" && a.law > 0.02) continue;
+        items.push([name, CORE_COLORS[name] ?? "#666"]);
+      }
+    }
+    context.font = noteFont;
+    context.textAlign = "left"; context.textBaseline = "middle";
+    items.forEach(([name, color], i) => {
+      const ly = PLOT_T + 12 + i * 15;
+      context.fillStyle = color;
+      context.fillRect(plotL + 8, ly - 4, 10, 8);
+      context.fillStyle = "#333";
+      context.fillText(name, plotL + 23, ly);
+    });
+  }
+
+  // ---- latitude panel -------------------------------------------------------------------------
+  // The profile and the dots for a month; Mauna Loa and the South Pole come from their own
+  // series, in their colours, and are drawn bigger.
+  function latitudeData(t) {
+    const profile = mblProfile(t);
+    const dots = siteDots(t);
+    const mloAt = seriesAt(mloMonthly, t), spoAt = seriesAt(spoMonthly, t);
+    if (mloAt && mloSite) dots.push({site: mloSite, v: mloAt[1], color: MLO_COLOR, big: true});
+    if (spoAt && spoSite) dots.push({site: spoSite, v: spoAt[1], color: SPO_COLOR, big: true});
+    return {profile, dots};
+  }
+
+  function drawLatitudePanel() {
+    const t = cursorT;
+    const {profile, dots} = latFrame;
+
+    // Gridlines: every 30° of latitude, on the sine scale.
+    const latTicks = [[-1, "90°S"], [-0.5, "30°S"], [0, "Equator"], [0.5, "30°N"], [1, "90°N"]];
+    const yt = yTicks(latLo, latHi, LAT_H);
+    context.strokeStyle = "rgba(0,0,0,0.1)";
+    context.lineWidth = 1;
+    for (const v of yt) line(latL, yLat(v), latR, yLat(v));
+    for (const [s] of latTicks) line(xLat(s), LAT_T, xLat(s), LAT_B);
+
+    context.save();
+    context.beginPath();
+    context.rect(latL - 6, LAT_T - 8, latR - latL + 12, LAT_H + 16);
+    context.clip();
+
+    // The January 1979 profile stays as a ghost, so the climb since then is visible.
+    if (ghostProfile.length) {
+      context.strokeStyle = "#bbb";
+      context.lineWidth = 1.5;
+      strokeProfile(ghostProfile);
+      context.fillStyle = "#c98a9c";
+      context.beginPath();
+      context.arc(xLat(mloSinLat), yLat(ghostAtMlo), dotR, 0, 2 * Math.PI);
+      context.fill();
+      context.font = noteFont;
+      context.textBaseline = "top";
+      const ghostText = `Jan 1979: ${Math.round(ghostAtMlo)} ppm`;
+      const fits = xLat(mloSinLat) + 7 + context.measureText(ghostText).width <= latR;
+      context.textAlign = fits ? "left" : "right";
+      context.fillText(ghostText, xLat(mloSinLat) + (fits ? 7 : -7), yLat(ghostAtMlo) + 2);
+    }
+
+    if (profile) {
+      context.strokeStyle = MBL_COLOR;
+      context.lineWidth = 2;
+      strokeProfile(profile);
+    }
+
+    for (const d of dots) {
+      if (d.big) continue;
+      context.fillStyle = d.site === hoverSite ? ACCENT : SITE_COLOR;
+      context.strokeStyle = "#fff";
+      context.lineWidth = 1;
+      context.beginPath();
+      context.arc(xLat(d.site.sinLat), yLat(d.v), dotR - 1, 0, 2 * Math.PI);
+      context.fill();
+      context.stroke();
+    }
+    for (const d of dots) {
+      if (!d.big) continue;
+      context.fillStyle = d.color;
+      context.strokeStyle = "#fff";
+      context.lineWidth = 1.5;
+      context.beginPath();
+      context.arc(xLat(d.site.sinLat), yLat(d.v), dotR + 1, 0, 2 * Math.PI);
+      context.fill();
+      context.stroke();
+    }
+    context.restore();
+
+    // Axes.
+    context.strokeStyle = "#666"; context.fillStyle = "#333";
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(latL, LAT_T); context.lineTo(latL, LAT_B); context.lineTo(latR, LAT_B);
+    context.stroke();
+    context.font = tickFont;
+    context.textAlign = "right"; context.textBaseline = "middle";
+    for (const v of yt) {
+      line(latL - 4, yLat(v), latL, yLat(v));
+      context.fillText(v, latL - 7, yLat(v));
+    }
+    context.textAlign = "center"; context.textBaseline = "top";
+    for (const [s, label] of latTicks) {
+      line(xLat(s), LAT_B, xLat(s), LAT_B + 5);
+      context.fillText(label, clamp(xLat(s), latL + 16, latR - 16), LAT_B + 8);
+    }
+
+    // A word on what is missing, when the month is before the reference or the stations.
+    if (!profile || dots.length === 0) {
+      context.font = noteFont;
+      context.fillStyle = "#777";
+      context.textAlign = "center"; context.textBaseline = "top";
+      const msg = dots.length === 0
+        ? (t < tFirstObs ? "No direct measurements before 1957" : "No station data this month")
+        : "NOAA's background reference begins in 1979";
+      context.fillText(msg, (latL + latR) / 2, LAT_T + 4);
+    }
+
+    drawMap(t, dots);
+  }
+
+  function strokeProfile(profile) {
+    context.beginPath();
+    profile.forEach((v, j) => {
+      const s = mbl.sinlat[j];
+      if (j) context.lineTo(xLat(s), yLat(v)); else context.moveTo(xLat(s), yLat(v));
+    });
+    context.stroke();
+  }
+
+  // The inset map, the month's name and a small clock face with one hand for the month.
+  function drawMap(t, dots) {
+    context.fillStyle = "#e6eef6";
+    context.fillRect(mapL, mapT, mapW, mapH);
+    if (landPath) {
+      context.save();
+      context.beginPath();
+      context.rect(mapL, mapT, mapW, mapH);
+      context.clip();
+      context.translate(mapL, mapT);
+      context.scale(mapW / 360, mapH / 180);
+      context.fillStyle = "#c9d3c0";
+      context.fill(landPath);
+      context.restore();
+    }
+    context.strokeStyle = "#bbb";
+    context.lineWidth = 1;
+    context.strokeRect(mapL + 0.5, mapT + 0.5, mapW - 1, mapH - 1);
+    const px = lon => mapL + ((lon + 180) / 360) * mapW;
+    const py = lat => mapT + ((90 - lat) / 180) * mapH;
+    for (const pass of [false, true]) {
+      for (const d of dots) {
+        if (!!d.big !== pass || d.site.lon === null) continue;
+        context.fillStyle = d.color ?? (d.site === hoverSite ? ACCENT : SITE_COLOR);
+        context.strokeStyle = "#fff";
+        context.lineWidth = 0.8;
+        context.beginPath();
+        context.arc(px(d.site.lon), py(d.site.lat), d.big ? 3.5 : 2.2, 0, 2 * Math.PI);
+        context.fill();
+        context.stroke();
+      }
+    }
+
+    // Date and clock.
+    const year = Math.floor(t);
+    const monthFrac = (t - year) * 12;
+    const month = Math.min(11, Math.floor(monthFrac));
+    context.font = labelFont;
+    context.fillStyle = "#222";
+    context.textAlign = "left"; context.textBaseline = "top";
+    const textY = mapT + mapH + 10;
+    context.fillText(`${MONTHS_LONG[month]} ${year}`, mapL, textY);
+
+    const cr = 16, cx = mapL + cr + 2, cy = textY + 26 + cr;
+    if (cy + cr < LAT_B + 2) {
+      context.strokeStyle = "#999";
+      context.lineWidth = 1;
+      context.beginPath();
+      context.arc(cx, cy, cr, 0, 2 * Math.PI);
+      context.stroke();
+      context.font = noteFont;
+      context.fillStyle = "#777";
+      context.textAlign = "center"; context.textBaseline = "bottom";
+      context.fillText("Jan", cx, cy - cr - 2);
+      context.textBaseline = "top";
+      context.fillText("Jul", cx, cy + cr + 2);
+      context.textAlign = "left"; context.textBaseline = "middle";
+      context.fillText("Apr", cx + cr + 4, cy);
+      context.textAlign = "right";
+      context.fillText("Oct", cx - cr - 4, cy);
+      // Mid-month for the hand, January at twelve o'clock, clockwise.
+      const angle = ((month + 0.5) / 12) * 2 * Math.PI - Math.PI / 2;
+      context.strokeStyle = "#222";
+      context.lineWidth = 2;
+      line(cx, cy, cx + Math.cos(angle) * (cr - 3), cy + Math.sin(angle) * (cr - 3));
+      context.lineWidth = 1;
+    }
+  }
+
+  // ---- ticks and formatting -------------------------------------------------------------------
+  // Round steps for a CO₂ axis: as many gridlines as the height allows at ~45 px apart.
+  function yTicks(lo, hi, height) {
+    const target = Math.max(2, Math.floor(height / 45));
+    const raw = (hi - lo) / target;
+    const step = [1, 2, 5, 10, 20, 25, 50, 100].find(s => s >= raw) ?? 100;
+    const out = [];
+    for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) out.push(v);
+    return out;
+  }
+
+  // Time ticks follow the span: months across a few years, calendar years back to a few
+  // thousand years, then "years ago" once the calendar stops meaning much.
+  function xTicks() {
+    const innerW = plotR - plotL;
+    const t0 = tStart();
+    const out = [];
+    if (look <= 3) {
+      // Month ticks, labelled with the month name, the year on January.
+      const step = look <= 1.5 ? 1 : look <= 2.5 ? 2 : 3;
+      const m0 = Math.ceil(t0 * 12);
+      for (let m = m0; m / 12 <= tEnd + look * 0.02; m++) {
+        if (m % step) continue;
+        const t = m / 12, month = ((m % 12) + 12) % 12, year = Math.floor(t + 1e-9);
+        out.push({t, label: month === 0 ? `${year}` : MONTHS[month]});
+      }
+      return out;
+    }
+    if (look <= 12000) {
+      // Calendar years, negative ones as BCE.
+      const step = niceStep(look, innerW, 62);
+      for (let yr = Math.ceil(t0 / step) * step; yr <= tEnd + look * 0.02; yr += step) {
+        out.push({t: yr, label: yr > 0 ? `${yr}` : yr === 0 ? "1 BCE" : `${-yr} BCE`});
+      }
+      return out;
+    }
+    // Years ago, counted from the end of the record, in round thousands.
+    const step = niceStep(look, innerW, 110);
+    for (let ago = 0; ago <= look; ago += step) {
+      const t = tEnd - ago;
+      if (t < t0) break;
+      out.push({t, label: ago === 0 ? "now" : `${formatInt(ago)} years ago`});
+    }
+    return out;
+  }
+
+  // A 1-2-5 step in years such that labels sit at least `px` apart.
+  function niceStep(span, innerW, px) {
+    const maxTicks = Math.max(2, Math.floor(innerW / px));
+    const raw = span / maxTicks;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    for (const m of [1, 2, 5, 10]) if (m * mag >= raw) return m * mag;
+    return 10 * mag;
+  }
+
+  function formatLook(l) {
+    if (l < 1.5) return "1 year";
+    if (l < 100) return `${Math.round(l)} years`;
+    return `${formatInt(Number(l.toPrecision(l < 1000 ? 2 : 3)))} years`;
+  }
+
+  // How the read-out names a time: by month wherever there are monthly data, otherwise by
+  // calendar year or, for the ice cores, years ago.
+  function formatTime(t) {
+    if (t >= tFirstObs - 1) return `${MONTHS_LONG[Math.min(11, Math.floor((t - Math.floor(t)) * 12))]} ${Math.floor(t)}`;
+    if (look <= 12000) {
+      const yr = Math.round(t);
+      return yr > 0 ? `${yr}` : yr === 0 ? "1 BCE" : `${formatInt(-yr)} BCE`;
+    }
+    return `about ${formatInt(Number((tEnd - t).toPrecision(3)))} years ago`;
+  }
+
+  // ---- status line ----------------------------------------------------------------------------
+  function updateStatus() {
+    if (hoverSite) {
+      const m = monthIndexOf(cursorT);
+      const v = hoverSite.v[m - hoverSite.start];
+      status.textContent = `${hoverSite.name} (${hoverSite.code}), ${formatTime(cursorT)}: ${v} ppm`;
+      return;
+    }
+    const t = hoverT ?? cursorT;
+    const parts = [];
+    if (t >= tFirstObs - 1) {
+      const mlo = seriesAt(mloMonthly, t), spo = seriesAt(spoMonthly, t);
+      if (mlo) parts.push(`Mauna Loa ${mlo[1].toFixed(1)} ppm`);
+      if (spo) parts.push(`South Pole ${spo[1].toFixed(1)} ppm`);
+      const prof = mblProfile(t);
+      if (prof) parts.push(`global surface mean ${(prof.reduce((s, v) => s + v, 0) / prof.length).toFixed(1)} ppm`);
+    }
+    if (!parts.length) {
+      // Nearest ice-core value to the hovered time, from the composite or Law Dome.
+      const pts = look > 3000 ? composite : lawSamples.length ? lawSamples : composite;
+      const i = lowerBound(pts, t);
+      const p = [pts[i - 1], pts[i]].filter(Boolean).sort((u, v) => Math.abs(u[0] - t) - Math.abs(v[0] - t))[0];
+      if (p) {
+        const src = pts === composite ? coreNames[p[3]] : "Law Dome";
+        status.textContent = `${capitalise(formatTime(p[0]))}: ${Math.round(p[1])} ppm (${src} ice core)`;
+      } else status.textContent = "";
+      return;
+    }
+    status.textContent = `${capitalise(formatTime(t))}: ${parts.join(", ")}.`;
+  }
+
+  function updateButtons() {
+    for (const b of presetButtons) {
+      const on = Math.abs(Math.log(b.preset.look / look)) < 0.02;
+      b.el.style.borderColor = on ? ACCENT : "#ccc";
+      b.el.style.color = on ? ACCENT : "#333";
+      b.el.style.background = on ? hexToRgba(ACCENT, 0.08) : "#fff";
+      b.el.setAttribute("aria-pressed", on);
+    }
+    tourButton.textContent = touring ? "Stop tour" : "Play tour";
+    tourButton.style.borderColor = touring ? ACCENT : "#ccc";
+    tourButton.style.color = touring ? ACCENT : "#333";
+    tourButton.setAttribute("aria-pressed", touring);
+  }
+
+  // ---- state changes --------------------------------------------------------------------------
+  function setLook(l) {
+    look = clamp(l, LOOK_MIN, LOOK_MAX);
+    slider.value = lookToSlider(look);
+    sliderOut.textContent = formatLook(look);
+    [yTargetLo, yTargetHi] = targetRange();
+    requestRender();
+  }
+
+  function setCursor(t) {
+    cursorT = clamp(t, tOldest, tEnd);
+    requestRender();
+  }
+
+  // Glides the look-back span to a target, in log space, over about a second.
+  let glideFrame = null;
+  function glideLook(target, duration = 900, done) {
+    cancelAnimationFrame(glideFrame);
+    if (reduceMotion || duration === 0) { setLook(target); emit(); done?.(); return; }
+    const l0 = Math.log(look), l1 = Math.log(clamp(target, LOOK_MIN, LOOK_MAX)), start = performance.now();
+    const step = now => {
+      const k = Math.min(1, (now - start) / duration);
+      setLook(Math.exp(l0 + (l1 - l0) * easeInOut(k)));
+      if (k < 1) glideFrame = requestAnimationFrame(step);
+      else { glideFrame = null; emit(); done?.(); }
+    };
+    glideFrame = requestAnimationFrame(step);
+  }
+
+  // ---- pointer --------------------------------------------------------------------------------
+  function pointerAt(e) {
+    const r = canvas.getBoundingClientRect();
+    return {px: (e.clientX - r.left) * (w / r.width), py: (e.clientY - r.top) * (TOTAL_H / r.height)};
+  }
+
+  canvas.addEventListener("pointermove", e => {
+    const {px, py} = pointerAt(e);
+    if (touring) { canvas.style.cursor = "pointer"; return; }
+    if (py >= PLOT_T && py <= PLOT_B + 24 && px >= plotL - 4 && px <= plotR + 4) {
+      hoverSite = null;
+      hoverT = clamp(x.invert(px), tOldest, tEnd);
+      setCursor(hoverT);
+      emit();
+      canvas.style.cursor = "crosshair";
+      return;
+    }
+    hoverT = null;
+    if (py >= LAT_T - 8 && py <= LAT_B + 8 && px >= latL && px <= latR) {
+      const near = nearestSite(px, py);
+      if (near !== hoverSite) { hoverSite = near; requestRender(); }
+      canvas.style.cursor = near ? "pointer" : "default";
+      return;
+    }
+    if (hoverSite) { hoverSite = null; requestRender(); }
+    canvas.style.cursor = "default";
+  });
+  canvas.addEventListener("pointerleave", () => {
+    hoverT = null;
+    hoverSite = null;
+    requestRender();
+  });
+  // A tap on the chart moves the month too; the tour stops as on any other interaction.
+  canvas.addEventListener("pointerdown", e => {
+    const {px, py} = pointerAt(e);
+    if (py >= PLOT_T && py <= PLOT_B + 24) { stopTour(); setCursor(clamp(x.invert(px), tOldest, tEnd)); emit(); }
+  });
+
+  function nearestSite(px, py) {
+    let best = null, bestD = 100;   // 10 px
+    for (const d of siteDots(cursorT)) {
+      const dx = xLat(d.site.sinLat) - px, dy = yLat(d.v) - py;
+      const dd = dx * dx + dy * dy;
+      if (dd < bestD) { bestD = dd; best = d.site; }
+    }
+    return best;
+  }
+
+  // ---- tour -----------------------------------------------------------------------------------
+  // The video's story: the months since 1979 sweep past on the latitude panel while the cursor
+  // crosses the Keeling curve, then the chart zooms out, resting at each of the presets, to
+  // the ice ages. One way, then it stops; any click or drag ends it early.
+  const SWEEP_MS = 30000;   // 1979 to now
+  const TOUR_HOLD = 2600;
+  let touring = false, tourTimer = null, tourFrame = null, tourWatcher = null;
+
+  function stopTour() {
+    tourWatcher?.disconnect();
+    tourWatcher = null;
+    if (!touring) return;
+    touring = false;
+    clearTimeout(tourTimer);
+    cancelAnimationFrame(tourFrame);
+    tourTimer = tourFrame = null;
+    hint.textContent = HINT_IDLE;
+    requestRender();
+  }
+
+  function startTour(delay = TOUR_HOLD) {
+    if (touring) return;
+    tourWatcher?.disconnect();
+    tourWatcher = null;
+    touring = true;
+    hint.textContent = HINT_TOUR;
+    requestRender();
+    tourTimer = setTimeout(sweep, delay);
+  }
+
+  function sweep() {
+    if (!touring) return;
+    if (container.isConnected === false) return stopTour();
+    glideLook(presets[1].look, 900, () => {
+      if (!touring) return;
+      const from = mbl.t[0] ?? 1979, to = tEnd;
+      const start = performance.now();
+      const step = now => {
+        if (!touring) return;
+        const k = reduceMotion ? 1 : Math.min(1, (now - start) / SWEEP_MS);
+        setCursor(from + (to - from) * k);
+        if (k < 1) tourFrame = requestAnimationFrame(step);
+        else { emit(); tourTimer = setTimeout(() => zoomStep(2), TOUR_HOLD); }
+      };
+      tourFrame = requestAnimationFrame(step);
+    });
+  }
+
+  function zoomStep(i) {
+    if (!touring) return;
+    if (container.isConnected === false) return stopTour();
+    if (i >= presets.length) return stopTour();
+    glideLook(presets[i].look, 2200, () => {
+      if (!touring) return;
+      tourTimer = setTimeout(() => zoomStep(i + 1), TOUR_HOLD);
+    });
+  }
+
+  // ---- value ----------------------------------------------------------------------------------
+  function value() {
+    return {lookBack: look, from: tStart(), to: tEnd, cursor: cursorT};
+  }
+  function emit() {
+    container.value = value();
+    container.dispatchEvent(new CustomEvent("input", {bubbles: true}));
+  }
+
+  // ---- go -------------------------------------------------------------------------------------
+  setLook(look);
+  container.value = value();
+
+  if (typeof ResizeObserver === "function") {
+    const ro = new ResizeObserver(entries => {
+      const avail = entries[0]?.contentRect?.width || container.clientWidth;
+      if (!(avail > 0)) return;
+      const fitted = Math.max(MIN_WIDTH, Math.min(maxW, Math.floor(avail)));
+      if (fitted !== w) { applyLayout(fitted); requestRender(); }
+    });
+    ro.observe(container);
+  }
+
+  // Not under reduced motion, and not before the figure has scrolled into view.
+  if (!reduceMotion && typeof requestAnimationFrame === "function") {
+    if (typeof IntersectionObserver === "function") {
+      tourWatcher = new IntersectionObserver(entries => {
+        if (!entries.some(entry => entry.isIntersecting)) return;
+        tourWatcher.disconnect();
+        tourWatcher = null;
+        startTour();
+      }, {threshold: 0.3});
+      tourWatcher.observe(container);
+    } else {
+      startTour();
+    }
+  }
+
+  return container;
+
+  // ---- canvas helpers (closures over `context`) -----------------------------------------------
+  function line(x0, y0, x1, y1) {
+    context.beginPath();
+    context.moveTo(x0, y0);
+    context.lineTo(x1, y1);
+    context.stroke();
+  }
+}
+
+// ---- helpers ------------------------------------------------------------------------------------
+
+// First index whose time is >= t, in an array of [t, ...] rows sorted by t.
+function lowerBound(pts, t) {
+  let lo = 0, hi = pts.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (pts[mid][0] < t) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
+
+function monthName(t) {
+  return MONTHS[Math.min(11, Math.floor((t - Math.floor(t)) * 12))];
+}
+
+function formatInt(n) {
+  return Math.round(n).toLocaleString("en-US");
+}
+
+function capitalise(s) {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+function smooth(k) {
+  const s = clamp(k, 0, 1);
+  return s * s * (3 - 2 * s);
+}
+
+function easeInOut(k) {
+  return k < 0.5 ? 2 * k * k : 1 - 2 * (1 - k) * (1 - k);
+}
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}

@@ -7,6 +7,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Draw the future</h2>
     <img class="thumb" src="./assets/thumbnails/draw-the-future.png" alt="Two stacked panels: atmospheric CO₂ curves for the CMIP7 scenarios above, and historical CO₂ emissions and natural sink below, marked &ldquo;Draw from here!&rdquo;">
   </a>
+  <a class="card" href="./co2-history/">
+    <h2>The history of atmospheric CO₂</h2>
+    <img class="thumb" src="./assets/thumbnails/co2-history.png" alt="Atmospheric CO₂ since 1958 as the rising red Mauna Loa and blue South Pole curves, above a panel of CO₂ against latitude for the latest month with a small world map of the sampling stations; buttons above stretch the time axis out to 800,000 years">
+  </a>
   <a class="card" href="./temperature-trend/">
     <h2>Temperature trends</h2>
     <img class="thumb" src="./assets/thumbnails/temperature-trend.png" alt="The GISTEMP global temperature record with a fitted trend line and a two-handle year-range slider">
