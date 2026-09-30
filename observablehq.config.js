@@ -6,6 +6,7 @@ export default {
   // out: they exist only to be iframed, and they disable the chrome themselves.
   pages: [
     {name: "Draw the future", path: "/draw-the-future/"},
+    {name: "The history of atmospheric CO\u2082", path: "/co2-history/"},
     {name: "Temperature trends", path: "/temperature-trend/"},
     {name: "Daily sea surface temperature", path: "/sst-daily/"},
     {name: "Vlasceanu et al. 2024 \u2014 beliefs and action", path: "/vlasceanu-etal-2024/"},
