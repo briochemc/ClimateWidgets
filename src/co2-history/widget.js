@@ -475,11 +475,11 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     drawLegend(a, t0, t1);
   }
 
-  // Short labels just above the curve, each with a leader line down to the record's value
-  // at that moment, so the eye need not travel to the top of the plot. A label sits as close
-  // above its point as it can: it moves up a line at a time until its box clears every label
-  // already placed, the legend's corner, and their leaders, and no placed label sits over
-  // its own leader.
+  // Short labels a little above the curve, each with a leader line down to the record's
+  // value at that moment, so the eye need not travel to the top of the plot. A label sits a
+  // tenth of the plot's height above its point, and moves up another tenth at a time until
+  // its box clears every label already placed, the legend's corner, and their leaders, and
+  // no placed label sits over its own leader.
   function drawMilestones(a, t0, t1) {
     const up = milestones.map(m => ({m, alpha: milestoneAlpha(m), mx: x(m.t)}))
       .filter(d => d.alpha > 0.02).sort((p, q) => p.mx - q.mx);
@@ -491,7 +491,8 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
       const legendW = Math.max(...legend.map(([n]) => context.measureText(n).width)) + 32;
       boxes.push({x0: plotL, x1: plotL + legendW, y0: PLOT_T, y1: PLOT_T + 4 + legend.length * 15});
     }
-    const LIFT = 22, STEP = 16, H = 7;
+    // A tenth of the plot's height above the point, and another tenth per step up.
+    const LIFT = PLOT_H / 10, STEP = PLOT_H / 10, H = 7;
     const clear = (x0, x1, y0, y1) => boxes.every(b => x1 < b.x0 || x0 > b.x1 || y1 < b.y0 || y0 > b.y1);
     const crosses = (mx, yTop, yBot) => boxes.some(b => mx >= b.x0 - 2 && mx <= b.x1 + 2 && yBot >= b.y0 && yTop <= b.y1);
     for (const d of up) {
