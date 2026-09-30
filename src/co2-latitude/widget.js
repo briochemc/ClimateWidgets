@@ -109,19 +109,22 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   playButton.type = "button";
   playButton.style.cssText = buttonCss;
   playButton.addEventListener("click", () => (playing ? stopPlay() : startPlay(0)));
-  const sliderField = document.createElement("label");
-  sliderField.style.cssText = "display:flex;flex:1 1 auto;align-items:center;gap:8px;cursor:pointer;";
+  // The month slider sits under the time series, its track exactly as wide as the series'
+  // axis (laid out in applyLayout), so the thumb is over the month it picks; the month's
+  // name goes beside the Play button.
+  const sliderRow = document.createElement("div");
+  sliderRow.style.cssText = "position:relative;height:24px;";
   const slider = document.createElement("input");
   slider.type = "range";
   slider.min = firstMonth;
   slider.max = lastMonth;
   slider.step = 1;
-  slider.style.cssText = `flex:1 1 120px;margin:0;accent-color:${ACCENT};cursor:pointer;`;
+  slider.style.cssText = `position:absolute;top:0;margin:0;accent-color:${ACCENT};cursor:pointer;`;
   slider.setAttribute("aria-label", "Month shown");
+  sliderRow.appendChild(slider);
   const sliderOut = document.createElement("span");
-  sliderOut.style.cssText = "color:#333;min-width:8.5em;text-align:right;font-variant-numeric:tabular-nums;";
-  sliderField.append(slider, sliderOut);
-  controls.append(playButton, sliderField);
+  sliderOut.style.cssText = "color:#333;font-variant-numeric:tabular-nums;";
+  controls.append(playButton, sliderOut);
   slider.addEventListener("input", e => {
     e.stopPropagation();
     stopPlay();
@@ -139,6 +142,7 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   scroller.style.cssText = "max-width:100%;overflow-x:auto;";
   scroller.appendChild(canvas);
   container.appendChild(scroller);
+  container.appendChild(sliderRow);
 
   const status = document.createElement("div");
   status.style.cssText = "padding:8px 0 0;color:#555;min-height:1.4em;line-height:1.4;";
@@ -178,6 +182,10 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     serT = rowB + 44;
     serB = serT + SER_H;
     totalH = serB + 30;
+    // The thumb's centre reaches half a thumb short of the track's ends, so the track
+    // overhangs the axis by that much on each side.
+    slider.style.left = `${serL - 8}px`;
+    slider.style.width = `${serR - serL + 16}px`;
     tickFont = `${lerp(12, 14)}px sans-serif`;
     noteFont = `${lerp(11, 13)}px sans-serif`;
     mutedFont = `${lerp(10, 11)}px sans-serif`;

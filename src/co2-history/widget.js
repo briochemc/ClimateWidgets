@@ -199,18 +199,23 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   // The look-back slider is logarithmic, the whole record at the left end and a year at the
   // right, so pulling it left goes back in time.
   const SLIDER_STEPS = 1000;
-  const sliderField = document.createElement("label");
-  sliderField.style.cssText = "display:flex;align-items:center;gap:8px;padding:0 0 6px;font-size:14px;cursor:pointer;";
+  // The slider's track is exactly as wide as the plot's time axis (laid out in applyLayout),
+  // with the span it gives written above it.
+  const sliderField = document.createElement("div");
+  sliderField.style.cssText = "font-size:14px;color:#666;padding:0 0 4px;";
+  const sliderOut = document.createElement("span");
+  sliderOut.style.cssText = "color:#333;font-variant-numeric:tabular-nums;";
+  sliderField.append("Look back ", sliderOut);
+  const sliderRow = document.createElement("div");
+  sliderRow.style.cssText = "position:relative;height:24px;";
   const slider = document.createElement("input");
   slider.type = "range";
   slider.min = 0;
   slider.max = SLIDER_STEPS;
   slider.step = 1;
-  slider.style.cssText = `flex:1 1 120px;margin:0;accent-color:${ACCENT};cursor:pointer;`;
+  slider.style.cssText = `position:absolute;top:0;margin:0;accent-color:${ACCENT};cursor:pointer;`;
   slider.setAttribute("aria-label", "How far back in time the chart looks; left is further back");
-  const sliderOut = document.createElement("span");
-  sliderOut.style.cssText = "color:#333;min-width:7.5em;text-align:right;font-variant-numeric:tabular-nums;";
-  sliderField.append("Look back", slider, sliderOut);
+  sliderRow.appendChild(slider);
   slider.addEventListener("input", e => {
     e.stopPropagation();
     stopTour();
@@ -218,6 +223,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     emit();
   });
   container.appendChild(sliderField);
+  container.appendChild(sliderRow);
 
   const canvas = document.createElement("canvas");
   canvas.style.cssText = "display:block;touch-action:pan-y;";
@@ -257,6 +263,10 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     marginR = lerp(12, 20);
     plotL = marginL;
     plotR = w - marginR;
+    // The thumb's centre reaches half a thumb short of the track's ends, so the track
+    // overhangs the axis by that much on each side.
+    slider.style.left = `${plotL - 8}px`;
+    slider.style.width = `${plotR - plotL + 16}px`;
     tickFont = `${lerp(12, 14)}px sans-serif`;
     noteFont = `${lerp(11, 13)}px sans-serif`;
     labelFont = `bold ${lerp(12, 14)}px sans-serif`;
