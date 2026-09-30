@@ -397,7 +397,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   // The chronological layout has a path per year (`yearPaths`, with the full-length `d` in
   // `fullD`, since the year in progress is cut short); the stacked layout a path per region
   // (`regionPaths`), redrawn at every step of time.
-  let yearPaths = [], fullD = [], regionPaths = [], hoverPath = null;
+  let yearPaths = [], fullD = [], regionPaths = [], hoverHalo = null, hoverPath = null;
 
   function build() {
     svg.setAttribute("width", (gridW + LABEL_W).toFixed(0));
@@ -453,7 +453,9 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
       label.textContent = th.label;
     }
 
-    // The block under the pointer, outlined: a country's contribution, or a year's.
+    // The block picked out, outlined: a country's contribution, or a year's, with a white halo
+    // under the line so that it shows on the dark blocks.
+    hoverHalo = svgEl("path", {fill: "none", stroke: "#fff", "stroke-width": 5.5, "stroke-linecap": "square", "pointer-events": "none"}, svg);
     hoverPath = svgEl("path", {fill: "none", stroke: "#111", "stroke-width": 2.5, "stroke-linecap": "square", "pointer-events": "none"}, svg);
 
     shownYear = null;
@@ -579,9 +581,9 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
       let i = regions.length - 1;
       while (i > 0 && square < at[i] - EPS) i--;
       const region = regions[i];
-      const cat = bases(region.countries, t);
+      const cat = bases(region.countries, t), offset = square - at[i];
       let j = region.countries.length - 1;
-      while (j > 0 && square < cat[j] - EPS) j--;
+      while (j > 0 && offset < cat[j] - EPS) j--;
       return {square, kind: "country", country: region.countries[j], region};
     }
     if (square >= used - EPS) return {square, kind: "grey"};
@@ -692,7 +694,9 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
     const h = shown();
     const span = h === null ? null : spanOf(h);
     const top = thresholds[thresholds.length - 1].total;
-    hoverPath.setAttribute("d", span === null ? "" : outlinePath(rowRects(span[0], Math.min(span[1], top), rows), cell));
+    const d = span === null ? "" : outlinePath(rowRects(span[0], Math.min(span[1], top), rows), cell);
+    hoverHalo.setAttribute("d", d);
+    hoverPath.setAttribute("d", d);
     updateStatus();
   }
 
