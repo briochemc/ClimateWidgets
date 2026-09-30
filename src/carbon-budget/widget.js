@@ -15,8 +15,8 @@
 // its share of the block's area, so every square belongs to a country and a country is a
 // block rather than a thin run; hovering one outlines that country's whole contribution and
 // names it. By year (or by decade) the fill is chronological instead: each year's emissions
-// are one band, one level per year (or per decade) on a warm ramp from pale for 1850 to
-// dark for the latest years, never a gradient. Either way the fill's height is
+// are one band, one level per year on a warm ramp from pale for 1850 to dark for the latest
+// years (or one tab20 colour per decade), never a gradient. Either way the fill's height is
 // the same, since it is the same squares, and a square that a year or a country only partly
 // fills is cut at the exact fraction: nothing is rounded to fit the grid.
 //
@@ -47,14 +47,28 @@ export const COLOUR_MODES = ["none", "region", "year", "decade"];
 // Regions in the Okabe–Ito palette, which is safe for every kind of colour-vision
 // deficiency; its pale yellow is left out because it vanishes against the white lattice, and
 // the rest of the world is a grey darker than the unspent budget's. Time is coloured in
-// discrete steps, never a gradient: the ramp below is sampled at one colour per class, a
-// decade each in the decade layout and one per year in the year layout, from pale
-// for 1850 to dark for the latest years, so the recent past reads as the dark mass it is.
+// discrete steps, never a gradient: one level per year in the year layout, sampled from the
+// ramp below from pale for 1850 to dark for the latest years, so the recent past reads as
+// the dark mass it is; and one of the eighteen tab20 colours per decade in the decade layout.
 // With no colouring, the default, the fill is a plain dark grey. What is left is a lighter
 // grey, a shade lighter again for each budget beyond the first.
 export const COLOURS = {
   regions: {asia: "#D55E00", europe: "#0072B2", namerica: "#E69F00", samerica: "#009E73", africa: "#CC79A7", mideast: "#56B4E9", rest: "#7a7a7a"},
   ramp: ["#fde3b0", "#f8b95c", "#ee7f2f", "#d9482a", "#b0202f", "#7a1140", "#3d0c33"],
+  // Decades: tab20's nine vibrant pairs (its grey pair left out), a dark and a light of one
+  // hue each, ordered from cold to warm, so that a pair is twenty years and neighbouring
+  // decades never share a hue.
+  decades: [
+    "#9467bd", "#c5b0d5",   // purple
+    "#1f77b4", "#aec7e8",   // blue
+    "#17becf", "#9edae5",   // cyan
+    "#2ca02c", "#98df8a",   // green
+    "#bcbd22", "#dbdb8d",   // olive
+    "#ff7f0e", "#ffbb78",   // orange
+    "#8c564b", "#c49c94",   // brown
+    "#d62728", "#ff9896",   // red
+    "#e377c2", "#f7b6d2",   // pink
+  ],
   bands: ["#c9c9c9", "#d9d9d9", "#e7e7e7"],
   plain: "#4a4a4a",
   line: "#222",
@@ -535,9 +549,10 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   // Time in classes: class k of n gets the ramp's colour at k / (n − 1), and every year in
   // the class gets that one colour, so the fill steps rather than shades.
   const classCount = size => Math.ceil((lastYear - firstYear + 1) / size);
-  const classRgb = (year, size) => rampRgb(Math.floor((year - firstYear) / size) / Math.max(1, classCount(size) - 1));
+  const classRgb = (year, size) => size === 10 ? decadeRgb(year)
+    : rampRgb(Math.floor((year - firstYear) / size) / Math.max(1, classCount(size) - 1));
   const yearRgb = year => classRgb(year, YEAR_CLASS);
-  const decadeRgb = year => classRgb(year, 10);
+  const decadeRgb = year => hexToRgb(COLOURS.decades[Math.floor((year - firstYear) / 10) % COLOURS.decades.length]);
 
   function applyColours() {
     yearPaths.forEach((p, k) => p.setAttribute("fill", cssRgb(mode === "decade" ? decadeRgb(years[k].year) : yearRgb(years[k].year))));
