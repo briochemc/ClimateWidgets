@@ -3,7 +3,9 @@
 // population and whose length is its emissions per person, so its area is its emissions in
 // all. The wedges run clockwise from twelve o'clock in order of emissions per person, the
 // highest first, so the chart reads as a ranking and the fat wedges of the populous countries
-// stand out from the thin tall ones of the small rich emitters. Colours are seven groups:
+// stand out from the thin tall ones of the small rich emitters. The angular scale is fixed,
+// a full turn for ten billion people, so the world's wedges fill most of the circle today and
+// a sliver of it in 1850, and the ring's ticks stay put. Colours are seven groups:
 // the Americas, Europe, Russia, the Middle East, Asia and Oceania, Australia and New Zealand,
 // and Africa.
 //
@@ -23,6 +25,7 @@ const MIN_WIDTH = 320;
 const ACCENT = "#0b57d0";
 const EPS = 1e-9;
 const POP_MIN_FOR_SCALE = 3;   // millions: the radial scale fits every country at least this big
+const FULL_TURN_POP = 10000;   // millions: a full turn of the circle is ten billion people
 
 export const MODES = ["year", "cumulative"];
 
@@ -72,9 +75,9 @@ export function createCo2PerCapitaWidget({data, width = FIGURE_WIDTH, year, mode
   let w, R, r0, cx, cy, svgH, margin;
   function applyLayout(newW) {
     w = newW;
-    margin = clamp(Math.round(w * 0.16), 56, 100);   // room for the radial labels
+    margin = clamp(Math.round(w * 0.15), 52, 96);   // room for the radial labels
     R = (w - 2 * margin) / 2;
-    r0 = Math.max(24, R * 0.16);
+    r0 = Math.max(40, R * 0.32);   // the base ring, wide so the thin wedges have some width there
     cx = w / 2;
     cy = margin + R;
     svgH = 2 * (margin + R);
@@ -273,7 +276,7 @@ export function createCo2PerCapitaWidget({data, width = FIGURE_WIDTH, year, mode
     layout.clear();
     let a = 0;
     for (const row of s.rows) {
-      const wd = 2 * Math.PI * row.pop / s.pop;
+      const wd = 2 * Math.PI * row.pop / FULL_TURN_POP;
       layout.set(row.c.code, {a0: a, w: wd, r: rOf(row.v, s.vMax), alpha: 1});
       a += wd;
     }
@@ -299,7 +302,7 @@ export function createCo2PerCapitaWidget({data, width = FIGURE_WIDTH, year, mode
     const seen = new Set();
     let a = 0, moving = Math.abs(s.vMax - vMaxNow) > 1e-3 * s.vMax;
     for (const row of s.rows) {
-      const wd = 2 * Math.PI * row.pop / s.pop;
+      const wd = 2 * Math.PI * row.pop / FULL_TURN_POP;
       const target = {a0: a, w: wd, r: rOf(row.v, vMaxNow), alpha: 1};
       let cur = layout.get(row.c.code);
       if (!cur) { cur = {a0: a, w: 0, r: r0, alpha: 0}; layout.set(row.c.code, cur); }
@@ -366,12 +369,13 @@ export function createCo2PerCapitaWidget({data, width = FIGURE_WIDTH, year, mode
     }
     const cap = svgEl("text", {x: F(cx + 6), y: F(cy - R - 6), "font-size": 11, fill: "#333", "text-anchor": "start"}, axisGroup);
     cap.textContent = mode === "year" ? "tonnes of CO₂ per person a year" : `tonnes of CO₂ per person since ${firstYear}`;
-    // Population: a tick on the ring every billion people, if the ring is long enough for them.
-    const perB = 2 * Math.PI * 1000 / s.pop;   // radians per billion
-    const popStep = perB * r0 > 34 ? 1000 : perB * r0 > 12 ? 5000 : 0;
-    if (popStep) {
-      for (let p = popStep; p < s.pop; p += popStep) {
-        const a = 2 * Math.PI * p / s.pop;
+    // Population: a tick on the ring every billion people, all the way round, since the scale
+    // is fixed; every fifth one only if the ring is too small for them all.
+    const perB = 2 * Math.PI * 1000 / FULL_TURN_POP;   // radians per billion
+    const popStep = perB * r0 > 30 ? 1000 : 5000;
+    {
+      for (let p = popStep; p < FULL_TURN_POP; p += popStep) {
+        const a = 2 * Math.PI * p / FULL_TURN_POP;
         const [x0, y0] = pt(a, r0 - 4), [x1, y1] = pt(a, r0), [lx, ly] = pt(a, r0 - 12);
         svgEl("path", {d: `M${F(x0)},${F(y0)}L${F(x1)},${F(y1)}`, stroke: "#666", "stroke-width": 1}, axisGroup);
         const tl = svgEl("text", {x: F(lx), y: F(ly), "text-anchor": "middle", "dominant-baseline": "central", "font-size": 9, fill: "#666"}, axisGroup);
