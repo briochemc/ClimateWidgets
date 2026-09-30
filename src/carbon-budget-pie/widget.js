@@ -7,7 +7,8 @@
 //
 // The emitted part can be sliced five ways: as one piece; by region; by country (every
 // country its own slice, colours cycling through a palette so that neighbours never match,
-// and a click names one); by year; or by decade. Regions are not subdivided and decades are
+// and a click names one); by year, alternating two greys so that each year is a band of its
+// own, every tenth one labelled; or by decade. Regions are not subdivided and decades are
 // not split into years: each way is one ring of slices. None has a key: the slices are
 // there to be clicked. Time runs on the same slider as the grid widget, and the tour plays
 // the years through in the same manner. The budget arithmetic, the palettes and the number
@@ -22,6 +23,8 @@ const ACCENT = "#0b57d0";
 const EPS = 1e-9;
 
 export const SLICE_MODES = ["none", "region", "country", "year", "decade"];
+
+const YEAR_ALT = "#767676";   // the year layout alternates the plain fill with this
 
 // Countries cycle through tab20's vibrant hues, all the darks first and then all the lights,
 // so that neighbouring slices differ in hue and not only in shade.
@@ -205,7 +208,8 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
       const y = Math.floor(tt + EPS);
       for (const yr of years) {
         if (yr.year > y + 1) break;
-        push("year", yr, yr.year <= y ? yr.total : clamp(tt - y, 0, 1) * yr.total, yearColour(yr.year));
+        // Years alternate between the plain fill and a lighter grey, so each is its own band.
+        push("year", yr, yr.year <= y ? yr.total : clamp(tt - y, 0, 1) * yr.total, (yr.year - firstYear) % 2 ? YEAR_ALT : COLOURS.plain);
       }
     } else {
       const y = Math.floor(tt + EPS);
@@ -224,16 +228,6 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
     return out;
   }
 
-  const yearColour = (() => {
-    const n = lastYear - firstYear;
-    return yr => cssRgb(rampRgb((yr - firstYear) / Math.max(1, n)));
-  })();
-  function rampRgb(s) {
-    const stops = COLOURS.ramp;
-    const p = clamp(s, 0, 1) * (stops.length - 1);
-    const i = Math.min(Math.floor(p), stops.length - 2);
-    return mixRgb(hexToRgb(stops[i]), hexToRgb(stops[i + 1]), p - i);
-  }
 
   // Clockwise from twelve o'clock: the point on the rim at a fraction f of the whole.
   const angle = f => 2 * Math.PI * f;
@@ -254,7 +248,7 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
     svg.setAttribute("height", svgH.toFixed(0));
     svg.replaceChildren();
     restPath = svgEl("path", {fill: COLOURS.bands[0], "data-rest": "1"}, svg);
-    sliceGroup = svgEl("g", {stroke: "#fff", "stroke-width": 0.75, "stroke-linejoin": "round"}, svg);
+    sliceGroup = svgEl("g", {}, svg);   // no outlines: at 176 slices they would be most of the ink
     tickGroup = svgEl("g", {"pointer-events": "none"}, svg);
     labelGroup = svgEl("g", {"pointer-events": "none", "font-size": 12, fill: "#333"}, svg);
     pickHalo = svgEl("path", {fill: "none", stroke: "#fff", "stroke-width": 4, "stroke-linejoin": "round", "pointer-events": "none"}, svg);
@@ -603,10 +597,4 @@ function hexToRgb(hex) {
 }
 function hexToRgba(hex, alpha) {
   return `rgba(${hexToRgb(hex).join(",")},${alpha})`;
-}
-function mixRgb(A, B, s) {
-  return A.map((a, i) => Math.round(a + (B[i] - a) * s));
-}
-function cssRgb(rgb) {
-  return `rgb(${rgb.join(",")})`;
 }
