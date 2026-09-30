@@ -61,8 +61,11 @@ const MILESTONES = [
   {t: 1950 - 11500, label: "farming begins"},
   {t: 1950 - 11700, label: "last ice age ends"},
   {t: 1950 - 40000, label: "last Neanderthals"},
-  {t: 1950 - 127000, label: "last interglacial"},   // sea level 6–9 m above today's
+  {t: 1950 - 127000, label: "last interglacial\nsea level 6–9 m above today"},
   {t: 1950 - 300000, label: "first Homo sapiens"},
+  // The composite's highest CO₂ before industry, 299 ppm in the Vostok record; that
+  // interglacial's sea level is poorly constrained, unlike the last one's.
+  {t: 1950 - 335000, label: "highest CO₂ before industry\nsea level likely above today"},
   {t: 1950 - 773000, label: "magnetic field flips"},
 ];
 
@@ -485,26 +488,28 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     const up = milestones.map(m => ({m, alpha: milestoneAlpha(m), mx: x(m.t)})).filter(d => d.alpha > 0.02);
     if (!up.length) return;
     context.font = noteFont;
-    const H = 7;
+    const LINE = 14;
     for (const d of up) {
       const v = co2At(d.m.t);
       d.py = v === null ? PLOT_B : y(v);
-      const half = context.measureText(d.m.label).width / 2 + 4;
+      d.lines = d.m.label.split("\n");
+      d.H = (d.lines.length * LINE) / 2;   // half the label's height
+      const half = Math.max(...d.lines.map(s => context.measureText(s).width)) / 2 + 4;
       d.lx = clamp(d.mx, plotL + half, plotR - half);
-      d.ly = clamp(d.py - d.m.tier * PLOT_H / 10, PLOT_T + H + 2, PLOT_B - H);
+      d.ly = clamp(d.py - d.m.tier * PLOT_H / 10, PLOT_T + d.H + 2, PLOT_B - d.H);
     }
     // Leaders first, then the labels, whose halos cover any leader passing under them.
     for (const d of up) {
       context.globalAlpha = d.alpha;
       context.strokeStyle = "rgba(0,0,0,0.35)";
       context.lineWidth = 1;
-      line(d.mx, d.ly + H + 1, d.mx, d.py - 3);
+      line(d.mx, d.ly + d.H + 1, d.mx, d.py - 3);
     }
     context.fillStyle = "#444";
     context.textAlign = "center"; context.textBaseline = "middle";
     for (const d of up) {
       context.globalAlpha = d.alpha;
-      haloText(d.m.label, d.lx, d.ly);
+      d.lines.forEach((s, i) => haloText(s, d.lx, d.ly - d.H + LINE / 2 + i * LINE));
     }
     context.globalAlpha = 1;
   }
