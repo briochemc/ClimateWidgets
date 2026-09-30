@@ -31,10 +31,10 @@ import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
 ```js
 display(embedSnippets({
   embedPath: "co2-per-capita/embed",
-  height: 820,
+  height: 1180,
   title: "CO₂ per person, country by country",
-  note: "The chart fills the frame up to 640&nbsp;px wide and shrinks with it below that, down to about 320&nbsp;px; " +
-    "allow about 640&nbsp;px of height at phone width. The embed page accepts <code>?year=1990</code> to open on " +
+  note: "The chart fills the frame up to 1280&nbsp;px wide and shrinks with it below that, down to about 320&nbsp;px, " +
+    "so the height to allow is about the frame's width plus 200&nbsp;px. The embed page accepts <code>?year=1990</code> to open on " +
     "that year and <code>?mode=cumulative</code> to open on emissions since 1850.",
   script: `<div id="co2-per-capita"></div>
 

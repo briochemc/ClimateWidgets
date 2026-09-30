@@ -20,7 +20,7 @@
 // would not fit; the font shrinks to fit either way. Emissions are fossil fuels and cement
 // plus land-use change, as in the carbon-budget widgets. Self-contained: no d3, no imports.
 
-const FIGURE_WIDTH = 640;
+const FIGURE_WIDTH = 1280;   // twice the other widgets': the wedges need the room, and the page column decides
 const MIN_WIDTH = 320;
 const ACCENT = "#0b57d0";
 const EPS = 1e-9;
@@ -381,9 +381,6 @@ export function createCo2PerCapitaWidget({data, width = FIGURE_WIDTH, year, mode
         const tl = svgEl("text", {x: F(lx), y: F(ly), "text-anchor": "middle", "dominant-baseline": "central", "font-size": 9, fill: "#666"}, axisGroup);
         tl.textContent = `${p / 1000}B`;
       }
-    }
-    if (s.world > 0 && s.world <= vMax) {
-      svgEl("circle", {cx: F(cx), cy: F(cy), r: F(rOf(s.world, vMax)), fill: "none", stroke: "#222", "stroke-width": 1, "stroke-dasharray": "4 4", opacity: 0.6}, axisGroup);
     }
   }
 
