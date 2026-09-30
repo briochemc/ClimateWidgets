@@ -67,6 +67,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>The carbon budget</h2>
     <img class="thumb" src="./assets/thumbnails/carbon-budget.png" alt="A grid of small squares, one per billion tonnes of CO₂, filled from the bottom in warm colours from pale for 1850 to dark red for 2025, with grey squares above the fill and three labelled lines across them where the budgets for 1.5, 1.7 and 2 °C of warming run out">
   </a>
+  <a class="card" href="./carbon-budget-pie/">
+    <h2>The carbon budget as a pie</h2>
+    <img class="thumb" src="./assets/thumbnails/carbon-budget-pie.png" alt="A pie chart filled clockwise from the top with slices of many colours, one per country, nearly all the way round, leaving a thin grey wedge for what is left of the 1.5 °C budget, with ticks on the rim where the 1.7 and 2 °C budgets would end">
+  </a>
 </div>
 
 <style>

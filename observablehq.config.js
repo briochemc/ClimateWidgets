@@ -21,6 +21,7 @@ export default {
     {name: "What the air is made of", path: "/atmospheric-composition/"},
     {name: "Atmospheric transmission", path: "/atmospheric-transmission/"},
     {name: "The carbon budget", path: "/carbon-budget/"},
+    {name: "The carbon budget as a pie", path: "/carbon-budget-pie/"},
   ],
   head: "",
   // Embed pages disable the footer themselves, so this only shows on the regular pages.
