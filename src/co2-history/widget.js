@@ -63,9 +63,9 @@ const MILESTONES = [
   {t: 1950 - 40000, label: "last Neanderthals"},
   {t: 1950 - 127000, label: "last interglacial\nsea level 6–9 m above today"},
   {t: 1950 - 300000, label: "first Homo sapiens"},
-  // The composite's highest CO₂ before industry, 299 ppm in the Vostok record; that
-  // interglacial's sea level is poorly constrained, unlike the last one's.
-  {t: 1950 - 335000, label: "highest CO₂ before industry\nsea level likely above today"},
+  // The long interglacial of 405,000 years ago (MIS 11), whose highstand is well constrained;
+  // the record's CO₂ peak, 299 ppm at 335,000 years ago, is not, so it goes unlabelled.
+  {t: 1950 - 405000, label: "long interglacial\nsea level 6–13 m above today"},
   {t: 1950 - 773000, label: "magnetic field flips"},
 ];
 
