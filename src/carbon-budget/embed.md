@@ -31,7 +31,7 @@ import {createCarbonBudgetWidget} from "./widget.js";
 
 const data = await FileAttachment("data/carbon-budget.json").json();
 
-// ?year=1990 opens on that year; ?colour=year or ?colour=decade opens in that colouring;
+// ?year=1990 opens on that year; ?colour=region, ?colour=year or ?colour=decade opens in that colouring;
 // ?estimate=ipcc or ?estimate=forster draws the lines from that estimate (the data file's ids).
 const params = new URLSearchParams(location.search);
 const year = Number(params.get("year")) || undefined;

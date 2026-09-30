@@ -38,21 +38,22 @@ const COLUMNS = 60;
 const FIGURE_WIDTH = 640;
 const MIN_WIDTH = 320;
 const GRID_MAX = 520;  // the grid's width cap, px; narrower figures shrink it
-const LABEL_W = 56;    // room to the right of the grid for the threshold labels
 const ACCENT = "#0b57d0";
 const EPS = 1e-9;
 
-export const COLOUR_MODES = ["region", "year", "decade"];
+export const COLOUR_MODES = ["none", "region", "year", "decade"];
 
 // Regions in the Okabe–Ito palette, which is safe for every kind of colour-vision
 // deficiency; its pale yellow is left out because it vanishes against the white lattice, and
 // the rest of the world is a grey darker than the unspent budget's. Years are on one warm
 // ramp from pale for 1850 to dark for the latest year, so the recent decades read as the
-// dark mass they are. What is left is grey, a shade lighter for each budget beyond the first.
+// dark mass they are. With no colouring, the default, the fill is plain near-black. What is
+// left is grey, a shade lighter for each budget beyond the first.
 export const COLOURS = {
   regions: {asia: "#D55E00", europe: "#0072B2", namerica: "#E69F00", samerica: "#009E73", africa: "#CC79A7", mideast: "#56B4E9", rest: "#7a7a7a"},
   ramp: ["#f9d9b8", "#f2ab74", "#e4713f", "#b93a24", "#6b1a15"],
   bands: ["#c9c9c9", "#d9d9d9", "#e7e7e7"],
+  plain: "#1b1b1b",
   line: "#222",
 };
 const FALLBACK_REGION = "#8c7a4e";
@@ -212,7 +213,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 
 // `year` is where the slider starts (the last data year by default); `estimate` the id of
 // one of the data file's remaining-budget estimates (its first by default); `colour` one of
-// COLOUR_MODES ("region" by default).
+// COLOUR_MODES ("none" by default: the fill in plain black, stacked by region and country).
 export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, estimate, colour} = {}) {
   if (!data?.years || !data?.budgets) throw new Error("createCarbonBudgetWidget needs {data}: the contents of data/carbon-budget.json");
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
@@ -225,7 +226,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   const ESTIMATES = data.budgets.estimates;
   let estimateId = ESTIMATES.some(e => e.id === estimate) ? estimate : ESTIMATES[0].id;
   let thresholds = budgetThresholds(data, series, estimateId);
-  const modes = regions.length ? COLOUR_MODES : COLOUR_MODES.filter(m => m !== "region");
+  const modes = regions.length ? COLOUR_MODES : ["year", "decade"];
   let mode = modes.includes(colour) ? colour : modes[0];
   // The top of the grid: the largest 2 °C total any estimate reaches, so switching estimates
   // never changes the grid's shape.
@@ -240,14 +241,14 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
 
   const fillAt = tt => fillOf(series, worldByYear, worldCumulative, tt);
   const blockFill = (block, tt) => fillOf(series, block.byYear, block.cumulative, tt);
-  const stacked = () => mode === "region";
+  const stacked = () => mode === "none" || mode === "region";
 
   // ---- layout -----------------------------------------------------------------------------------
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
   let w, gridW, cell, gridH, latticeW, labelFont;
   function applyLayout(newW) {
     w = newW;
-    gridW = Math.min(GRID_MAX, w - LABEL_W);
+    gridW = Math.min(GRID_MAX, w);
     cell = gridW / COLUMNS;
     gridH = rows * cell;
     latticeW = clamp(cell * 0.12, 0.6, 1.6); // the white gap between squares
@@ -295,7 +296,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
     return update;
   }
 
-  const MODE_LABELS = {region: "Region", year: "Year", decade: "Decade"};
+  const MODE_LABELS = {none: "None", region: "Region", year: "Year", decade: "Decade"};
   const updateModeButtons = buttonRow("Colour", modes.map(m => ({id: m, label: MODE_LABELS[m]})), setMode);
   const updateEstimateButtons = buttonRow("Budget", ESTIMATES.map(e => ({
     id: e.id, label: e.short ?? e.name,
@@ -329,16 +330,35 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   const legend = document.createElement("div");
   legend.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;padding:0 0 8px;font-size:13px;color:#333;min-height:1.4em;";
   container.appendChild(legend);
+  // Each region's entry is a button: it selects the whole region, outlined on the grid.
   const legendItems = new Map();
   for (const region of regions) {
-    const item = document.createElement("span");
-    item.style.cssText = "display:inline-flex;align-items:center;gap:5px;white-space:nowrap;";
+    const item = document.createElement("button");
+    item.type = "button";
+    item.style.cssText = "display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font:inherit;color:inherit;" +
+      "background:none;border:1px solid transparent;border-radius:999px;padding:1px 6px 1px 4px;margin:-2px -6px -2px -4px;cursor:pointer;";
     const swatch = document.createElement("span");
     swatch.style.cssText = `width:11px;height:11px;border-radius:2px;background:${regionColour(region.id)};flex:none;`;
     const text = document.createElement("span");
     item.append(swatch, text);
-    item.title = region.note ? `${region.name}, ${region.note}` : region.name;
+    item.title = `${region.note ? `${region.name}, ${region.note}` : region.name}: click to outline it on the grid`;
+    item.addEventListener("click", () => {
+      stopTour();
+      const hit = {kind: "region", region};
+      selected = sameBlock(hit, selected) ? null : hit;
+      hovered = null;
+      updateHover();
+      emit();
+    });
     legendItems.set(region.id, {item, text});
+  }
+  function updateLegendButtons() {
+    for (const [id, {item}] of legendItems) {
+      const on = selected?.kind === "region" && selected.region.id === id;
+      item.style.borderColor = on ? ACCENT : "transparent";
+      item.style.color = on ? ACCENT : "inherit";
+      item.setAttribute("aria-pressed", on);
+    }
   }
   const rampItem = document.createElement("span");
   rampItem.style.cssText = "display:inline-flex;align-items:center;gap:6px;color:#666;";
@@ -381,7 +401,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
 
   const hint = document.createElement("div");
   hint.style.cssText = "padding:8px 0 0;color:#888;font-size:14px;";
-  const HINT_IDLE = "Click or tap a square to see whose it is; click it again to let go. Drag the slider to a year.";
+  const HINT_IDLE = "Click or tap a square to see whose it is, or a region in the key; click again to let go. Drag the slider to a year.";
   const HINT_TOUR = "Playing the years through — move the slider or click anything to take over; Play tour starts it again.";
   hint.textContent = HINT_IDLE;
   container.appendChild(hint);
@@ -397,10 +417,11 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   // The chronological layout has a path per year (`yearPaths`, with the full-length `d` in
   // `fullD`, since the year in progress is cut short); the stacked layout a path per region
   // (`regionPaths`), redrawn at every step of time.
-  let yearPaths = [], fullD = [], regionPaths = [], hoverHalo = null, hoverPath = null;
+  let yearPaths = [], fullD = [], regionPaths = [], hoverHalo = null, hoverPath = null, hoverLabel = null;
+  const halo = {stroke: "#fff", "stroke-width": 3, "paint-order": "stroke", "stroke-linejoin": "round"};
 
   function build() {
-    svg.setAttribute("width", (gridW + LABEL_W).toFixed(0));
+    svg.setAttribute("width", gridW.toFixed(0));
     svg.setAttribute("height", Math.ceil(gridH + 2));
     svg.replaceChildren();
 
@@ -441,22 +462,28 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
     svgEl("path", {d: thin, stroke: "#fff", "stroke-width": latticeW.toFixed(2), fill: "none", "pointer-events": "none"}, svg);
     svgEl("path", {d: thick, stroke: "#fff", "stroke-width": (2 * latticeW).toFixed(2), fill: "none", "pointer-events": "none"}, svg);
 
-    // The budgets: a line each, labelled at its right end.
+    // The budgets: a dashed line each, labelled just above its right-hand end (below it for a
+    // line too close to the top), the label haloed in white so that it reads on the grey.
     const lines = svgEl("g", {"pointer-events": "none"}, svg);
     for (const th of thresholds) {
       const {d, y} = stepLine(th.total, rows, cell);
-      svgEl("path", {d, stroke: COLOURS.line, "stroke-width": 1.5, fill: "none"}, lines);
+      svgEl("path", {d, stroke: COLOURS.line, "stroke-width": 1.5, "stroke-dasharray": "5 3", fill: "none"}, lines);
+      const above = y - 4 >= labelFont;
       const label = svgEl("text", {
-        x: (gridW + 6).toFixed(1), y: y.toFixed(1), "dominant-baseline": "central",
-        "font-size": labelFont, "font-weight": "bold", fill: COLOURS.line,
+        x: (gridW - 4).toFixed(1), y: (above ? y - 4 : y + labelFont + 2).toFixed(1), "text-anchor": "end",
+        "font-size": labelFont, "font-weight": "bold", fill: COLOURS.line, ...halo,
       }, lines);
       label.textContent = th.label;
     }
 
-    // The block picked out, outlined: a country's contribution, or a year's, with a white halo
-    // under the line so that it shows on the dark blocks.
-    hoverHalo = svgEl("path", {fill: "none", stroke: "#fff", "stroke-width": 5.5, "stroke-linecap": "square", "pointer-events": "none"}, svg);
-    hoverPath = svgEl("path", {fill: "none", stroke: "#111", "stroke-width": 2.5, "stroke-linecap": "square", "pointer-events": "none"}, svg);
+    // The block picked out: a country's contribution, a region's or a year's, outlined with a
+    // white halo under the line so that it shows on the dark blocks, and named on the grid.
+    hoverHalo = svgEl("path", {fill: "none", stroke: "#fff", "stroke-width": 3, "stroke-linecap": "square", "pointer-events": "none"}, svg);
+    hoverPath = svgEl("path", {fill: "none", stroke: "#111", "stroke-width": 1.25, "stroke-linecap": "square", "pointer-events": "none"}, svg);
+    hoverLabel = svgEl("text", {
+      "text-anchor": "middle", "dominant-baseline": "central", "font-size": labelFont, "font-weight": "bold",
+      fill: "#111", "pointer-events": "none", ...halo,
+    }, svg);
 
     shownYear = null;
     applyColours();
@@ -486,11 +513,13 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
 
   function applyColours() {
     yearPaths.forEach((p, k) => p.setAttribute("fill", cssRgb(mode === "decade" ? decadeRgb(years[k].year) : yearRgb(years[k].year))));
-    // The key for the mode: regions with their running totals, or the ramp.
+    regionPaths.forEach((p, i) => p.setAttribute("fill", mode === "region" ? regionColour(regions[i].id) : COLOURS.plain));
+    // The key for the mode: regions with their running totals, the ramp, or nothing.
     legend.replaceChildren();
-    if (stacked()) {
+    legend.style.display = mode === "none" ? "none" : "";
+    if (mode === "region") {
       for (const {item} of legendItems.values()) legend.appendChild(item);
-    } else {
+    } else if (!stacked()) {
       const span = lastYear - firstYear + 1;
       const stops = mode === "decade"
         ? Array.from({length: Math.ceil(span / 10)}, (_, d) =>
@@ -593,6 +622,10 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   // A block's [from, to) in the fill at the current time, or null if the layout has no block
   // for it (a country in the chronological layout, a year in the stacked one, or grey).
   function spanOf(h) {
+    if (h.kind === "region" && stacked()) {
+      const from = bases(regions, t)[regions.indexOf(h.region)];
+      return [from, from + blockFill(h.region, t)];
+    }
     if (h.kind === "country" && stacked()) {
       const i = regions.indexOf(h.region);
       const from = bases(regions, t)[i] + bases(h.region.countries, t)[h.region.countries.indexOf(h.country)];
@@ -603,7 +636,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   }
 
   const sameBlock = (a, b) => a === b || (a && b && a.kind === b.kind && a.country === b.country && a.year === b.year &&
-    (a.kind !== "grey" || Math.floor(a.square) === Math.floor(b.square)));
+    (a.kind !== "region" || a.region === b.region) && (a.kind !== "grey" || Math.floor(a.square) === Math.floor(b.square)));
 
   // A click or tap selects the block, and stays selected until the block is clicked again or
   // a grey square is; this is what works on a touch screen. A mouse also previews the block
@@ -657,6 +690,17 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
       const where = i === 0 ? `inside the ${thresholds[0].label} budget` : `past the ${thresholds[i - 1].label} budget, inside ${thresholds[i].label}`;
       return {head: "Not yet emitted. ", body: `This square is ${where}.`};
     }
+    if (h.kind === "region") {
+      const {region} = h;
+      const fill = blockFill(region, t), cum = fillAt(t);
+      const k = y - firstYear;
+      const top = region.countries.filter(c => !c.members && c.cumulative[k] > 0).slice(0, 3).map(c => `${c.name} ${formatGt(c.cumulative[k])}`);
+      return {
+        head: `${region.name}${region.note ? ` (${region.note})` : ""}. `,
+        body: `${formatGt(fill)} GtCO₂ since ${firstYear}: ${formatPercent(fill / cum)} of the world's ${formatGt(cum)}` +
+          (top.length ? `; most of it ${joinList(top)}` : "") + `. ${formatGt(region.byYear[k])} GtCO₂ in ${y}.`,
+      };
+    }
     if (h.kind === "country") {
       const {country, region} = h;
       const fill = blockFill(country, t), regionFill = blockFill(region, t), cum = fillAt(t);
@@ -694,9 +738,28 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
     const h = shown();
     const span = h === null ? null : spanOf(h);
     const top = thresholds[thresholds.length - 1].total;
-    const d = span === null ? "" : outlinePath(rowRects(span[0], Math.min(span[1], top), rows), cell);
+    const rects = span === null ? [] : rowRects(span[0], Math.min(span[1], top), rows);
+    const d = outlinePath(rects, cell);
     hoverHalo.setAttribute("d", d);
     hoverPath.setAttribute("d", d);
+    // The name, at the middle of the block: the rectangle around the block's centre of area,
+    // kept inside the grid.
+    const name = h === null ? "" : h.kind === "country" ? h.country.name : h.kind === "region" ? h.region.name : h.kind === "year" ? String(h.year.year) : "";
+    if (rects.length && name) {
+      const area = r => (r.x1 - r.x0) * (r.y1 - r.y0);
+      const total = rects.reduce((a, r) => a + area(r), 0);
+      const cy = rects.reduce((a, r) => a + area(r) * (r.y0 + r.y1) / 2, 0) / total;
+      const best = rects.find(r => cy >= r.y0 && cy < r.y1) ?? rects.reduce((a, b) => (area(b) > area(a) ? b : a));
+      const half = name.length * labelFont * 0.56 / 2 + 3;
+      const x = clamp((best.x0 + best.x1) / 2 * cell, half, gridW - half);
+      const y = clamp((best.y0 + best.y1) / 2 * cell, labelFont * 0.7, gridH - labelFont * 0.7);
+      hoverLabel.setAttribute("x", x.toFixed(1));
+      hoverLabel.setAttribute("y", y.toFixed(1));
+      hoverLabel.textContent = name;
+    } else {
+      hoverLabel.textContent = "";
+    }
+    updateLegendButtons();
     updateStatus();
   }
 
@@ -760,7 +823,9 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
       year: y,
       estimate: estimateId,
       colour: mode,
-      selected: selected === null ? null : selected.kind === "country" ? {country: selected.country.name, region: selected.region.name} : {year: selected.year.year},
+      selected: selected === null ? null
+        : selected.kind === "country" ? {country: selected.country.name, region: selected.region.name}
+        : selected.kind === "region" ? {region: selected.region.name} : {year: selected.year.year},
       emitted: Math.round(cum),
       remaining: Object.fromEntries(thresholds.map(th => [th.limit, Math.round(th.total - cum)])),
     };

@@ -1,8 +1,8 @@
 # The carbon budget
 
-Warming tracks the total amount of carbon dioxide ever emitted, so a limit on warming is a limit on the total: a carbon budget. Every square here is a billion tonnes of CO₂ (1 GtCO₂). The coloured squares are what has been emitted since 1850, about 2,770 of them by the end of 2025, stacked by region and, within a region, by country. The grey squares are what is left, and the three lines are where the budget runs out for 1.5, 1.7 and 2 °C of warming: 90, 450 and 1,010 GtCO₂ from the start of 2026, by the Global Carbon Budget 2025's update of Forster et al. (2025). At the 2025 rate of 42 GtCO₂ a year, that is about 2, 11 and 24 years.
+Warming tracks the total amount of carbon dioxide ever emitted, so a limit on warming is a limit on the total: a carbon budget. Every square here is a billion tonnes of CO₂ (1 GtCO₂). The black squares are what has been emitted since 1850, about 2,770 of them by the end of 2025, stacked by region and, within a region, by country. The grey squares are what is left, and the three lines are where the budget runs out for 1.5, 1.7 and 2 °C of warming: 90, 450 and 1,010 GtCO₂ from the start of 2026, by the Global Carbon Budget 2025's update of Forster et al. (2025). At the 2025 rate of 42 GtCO₂ a year, that is about 2, 11 and 24 years.
 
-Left alone, the figure winds back to 1850 and plays the years through. Move the slider or click anything to stop it; *Play tour* starts it again. Click or tap a square to see whose it is: the country is named and its whole contribution outlined, and stays so until you click it again. The *Colour* toggle lays the same squares out by year instead, oldest at the bottom, or by decade.
+Left alone, the figure winds back to 1850 and plays the years through. Move the slider or click anything to stop it; *Play tour* starts it again. Click or tap a square to see whose it is: the country is named and its whole contribution outlined, and stays so until you click it again. The *Colour* toggle paints the squares by region, with a key whose entries outline a whole region when clicked, or lays the same squares out by year instead, oldest at the bottom, or by decade.
 
 ```js
 import {createCarbonBudgetWidget, budgetSeries, budgetThresholds, formatGt} from "./widget.js";
@@ -16,7 +16,7 @@ const budget = view(createCarbonBudgetWidget({data}));
 
 ## What to look for
 
-**Three regions, three-quarters.** Asia, Europe and North America have emitted 30%, 24% and 24% of the total; South America 8%, Africa 6%, the Middle East 3%. Click inside the blocks and the countries come out: the United States alone is a fifth of everything since 1850, China an eighth, and then Russia, Brazil, Germany, Indonesia and India at three to five percent each. Brazil and Indonesia are there for their forests, not their fuel.
+**Three regions, three-quarters.** Colour by *Region*: Asia, Europe and North America have emitted 30%, 24% and 24% of the total; South America 8%, Africa 6%, the Middle East 3%. Click inside the blocks and the countries come out: the United States alone is a fifth of everything since 1850, China an eighth, and then Russia, Brazil, Germany, Indonesia and India at three to five percent each. Brazil and Indonesia are there for their forests, not their fuel.
 
 **The pace.** Switch the colour to *Year* and play the tour. The years go by at a steady rate and the fill does not: the first fifty years lay down about two hundred squares, the last fifty about 1,650. Half of everything emitted since 1850 has been emitted since 1986, and a third of it since 2000. Each row of the grid is 60 GtCO₂, about a year and a half of today's emissions, and it takes the fill about three rows to add a tenth of a degree of warming.
 
@@ -77,7 +77,7 @@ The layout is a waffle chart: a grid of unit squares, 60 wide, filled from the b
 
 **The whole grid is the total budget.** A remaining carbon budget is the difference between a total budget, fixed by the climate's response to CO₂, and what has been emitted. So the total for each limit is emissions to date plus the remaining budget, and the picture at any year is the same grid with the fill lower down. Ed Hawkins's [carbon budget countdown](https://ed-hawkins.github.io/climate-visuals/cbudget.html) draws exactly this as a pie chart filling from 1850; the grid is the same idea with the squares kept countable and, here, attributed.
 
-**Stacked, not interleaved.** By region, the fill is a stack of blocks, one per region and inside it one per country, largest first, each block growing as the years pass. The blocks shift as the ones below them grow, so a square is not a fixed gigatonne; it is a place in a stacked bar. By year, the same squares are laid down in the order they were emitted, and a square is a fixed gigatonne with a date. Both layouts have the same height at every year, because they hold the same squares.
+**Stacked, not interleaved.** In black or by region, the fill is a stack of blocks, one per region and inside it one per country, largest first, each block growing as the years pass. The blocks shift as the ones below them grow, so a square is not a fixed gigatonne; it is a place in a stacked bar. By year, the same squares are laid down in the order they were emitted, and a square is a fixed gigatonne with a date. Both layouts have the same height at every year, because they hold the same squares.
 
 **Why the lines move and the past does not.** The two estimates share the emissions record and differ only in the remaining budget, so switching between them moves the lines and leaves the coloured squares alone.
 
@@ -97,7 +97,7 @@ display(embedSnippets({
   note: "The grid is 520&nbsp;px wide and 560&nbsp;px tall in a frame 580&nbsp;px wide or more and shrinks with the " +
     "frame below that, so the height above suits a frame 640&nbsp;px wide; allow about " +
     "650&nbsp;px at phone width. The embed page accepts <code>?year=1990</code> to open on that year, " +
-    "<code>?colour=year</code> or <code>?colour=decade</code> to open in that colouring, and " +
+    "<code>?colour=region</code>, <code>?colour=year</code> or <code>?colour=decade</code> to open in that colouring, and " +
     "<code>?estimate=ipcc</code> to draw the lines from the IPCC estimate.",
   script: `<div id="carbon-budget"></div>
 
@@ -108,8 +108,8 @@ display(embedSnippets({
   const data = await fetch("${cdnUrl("carbon-budget/data/carbon-budget.json")}")
     .then(r => r.json());
 
-  // Options: {year: 1990} opens on that year, {colour: "year"} or {colour: "decade"} in that
-  // colouring, {estimate: "ipcc"} draws the lines from the IPCC estimate.
+  // Options: {year: 1990} opens on that year, {colour: "region"}, {colour: "year"} or
+  // {colour: "decade"} in that colouring, {estimate: "ipcc"} draws the lines from the IPCC estimate.
   document.getElementById("carbon-budget")
     .appendChild(createCarbonBudgetWidget({data}));
 <\/script>`
