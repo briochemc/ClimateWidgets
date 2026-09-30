@@ -349,21 +349,19 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     context.rect(plotL, PLOT_T - 1, plotR - plotL, PLOT_H + 2);
     context.clip();
 
-    // Reference lines, dashed, with their labels tucked above them on the left.
-    context.font = labelFont;
-    context.textAlign = "left"; context.textBaseline = "bottom";
-    for (const [alpha, v, text, color] of [
+    // Reference lines, dashed, under the data; their labels come after it, so the halo
+    // sits on top of the dots rather than under them.
+    const references = [
       [a.preindustrial, PREINDUSTRIAL, "Preindustrial: about 278 ppm", LAW_COLOR],
       [a.iceAge, ICE_AGE, "Ice ages: about 185 ppm", CORE_COLORS["EPICA Dome C"]],
-    ]) {
+    ];
+    for (const [alpha, v, , color] of references) {
       if (alpha <= 0.02) continue;
       context.globalAlpha = alpha;
       context.strokeStyle = color;
       context.setLineDash([4, 4]);
       line(plotL, y(v), plotR, y(v));
       context.setLineDash([]);
-      context.fillStyle = color;
-      haloText(text, plotL + 6, y(v) - 3);
     }
     context.globalAlpha = 1;
 
@@ -376,6 +374,16 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
       strokeSeries(mloMonthly, t0, t1, MLO_COLOR, 1.5, a.monthly);
     }
     if (a.weekly > 0.02) strokeSeries(mloWeekly, t0, t1, MLO_COLOR, 1.5, a.weekly);
+
+    context.font = labelFont;
+    context.textAlign = "left"; context.textBaseline = "bottom";
+    for (const [alpha, v, text, color] of references) {
+      if (alpha <= 0.02) continue;
+      context.globalAlpha = alpha;
+      context.fillStyle = color;
+      haloText(text, plotL + 6, y(v) - 3);
+    }
+    context.globalAlpha = 1;
 
     // The 350 ppm callout: a thin vertical rule at the last month below it.
     if (a.last350 > 0.02) {
