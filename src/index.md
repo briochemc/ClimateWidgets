@@ -75,6 +75,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>CO₂ per person by country</h2>
     <img class="thumb" src="./assets/thumbnails/co2-per-capita.png" alt="A polar chart of wedges running clockwise from the top, each country a wedge whose angle is its population and whose length is its CO₂ per person, tall slivers for the Gulf states first, then a long United States wedge and a wide, shorter China wedge, coloured by region with labels along the outer edges and radiating from the tips">
   </a>
+  <a class="card" href="./co2-per-capita-bars/">
+    <h2>CO₂ per person, as bars</h2>
+    <img class="thumb" src="./assets/thumbnails/co2-per-capita-bars.png" alt="A stack of horizontal bars, each country a bar as tall as its population and as long as its CO₂ per person, the longest at the top, thin long bars for the Gulf states, a big United States rectangle, a wider shorter China one, and a tall thin India one lower down, coloured by region">
+  </a>
 </div>
 
 <style>

@@ -23,6 +23,7 @@ export default {
     {name: "The carbon budget", path: "/carbon-budget/"},
     {name: "The carbon budget as a pie", path: "/carbon-budget-pie/"},
     {name: "CO\u2082 per person, country by country", path: "/co2-per-capita/"},
+    {name: "CO\u2082 per person, as bars", path: "/co2-per-capita-bars/"},
   ],
   head: "",
   // Embed pages disable the footer themselves, so this only shows on the regular pages.
