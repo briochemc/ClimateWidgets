@@ -247,7 +247,7 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
 
   // ---- drawing ----------------------------------------------------------------------------------
   let slices = [];
-  let sliceGroup, restPath, tickGroup, labelGroup, pickHalo, pickPath, pickLabel;
+  let sliceGroup, restPath, tickGroup, labelGroup, pickHalo, pickPath, pickLabel, centreYear;
 
   function build() {
     svg.setAttribute("width", w.toFixed(0));
@@ -259,6 +259,12 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
     labelGroup = svgEl("g", {"pointer-events": "none", "font-size": 12, fill: "#333"}, svg);
     pickHalo = svgEl("path", {fill: "none", stroke: "#fff", "stroke-width": 4, "stroke-linejoin": "round", "pointer-events": "none"}, svg);
     pickPath = svgEl("path", {fill: "none", stroke: "#111", "stroke-width": 1.5, "stroke-linejoin": "round", "pointer-events": "none"}, svg);
+    // The year, large, at the centre of the pie, haloed so it reads on any slice.
+    centreYear = svgEl("text", {
+      x: cx.toFixed(1), y: cy.toFixed(1), "text-anchor": "middle", "dominant-baseline": "central",
+      "font-size": Math.round(R * 0.22), "font-weight": "bold", fill: "#222",
+      stroke: "#fff", "stroke-width": 5, "paint-order": "stroke", "stroke-linejoin": "round", "pointer-events": "none",
+    }, svg);
     pickLabel = svgEl("text", {
       "text-anchor": "middle", "dominant-baseline": "central", "font-size": labelFont, "font-weight": "bold", fill: "#111",
       stroke: "#fff", "stroke-width": 3, "paint-order": "stroke", "stroke-linejoin": "round", "pointer-events": "none",
@@ -292,6 +298,7 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
     drawSliceLabels(W);
 
     yearLabel.textContent = Math.floor(t + EPS);
+    centreYear.textContent = Math.floor(t + EPS);
     totalLabel.textContent = `${formatGt(cum)} of ${formatGt(W)} GtCO₂ for ${thresholds[limitIndex].label} (${Math.round(100 * cum / W)}%)`;
     if (String(slider.value) !== String(Math.floor(t + EPS))) slider.value = Math.floor(t + EPS);
     updatePick();
