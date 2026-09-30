@@ -50,13 +50,18 @@ const PREINDUSTRIAL = 278, ICE_AGE = 185;
 // labels on screen are packed into rows so none overlap. Times are years CE; "years ago"
 // events are counted from 1950, as the ice cores are.
 const MILESTONES = [
+  {t: 2015.95, label: "Paris Agreement"},
   {t: 1958.2, label: "Keeling begins"},
+  {t: 1896, label: "Arrhenius predicts warming"},
   {t: 1770, label: "Industrial Revolution"},
   {t: 1680, label: "dodo extinct"},
+  {t: 1610, label: "Americas depopulated"},        // forests regrow on abandoned farmland: CO₂ dips
+  {t: -3200, label: "writing begins"},
   {t: -2050, label: "last woolly mammoths"},
   {t: 1950 - 11500, label: "farming begins"},
   {t: 1950 - 11700, label: "last ice age ends"},
   {t: 1950 - 40000, label: "last Neanderthals"},
+  {t: 1950 - 127000, label: "last interglacial"},   // sea level 6–9 m above today's
   {t: 1950 - 300000, label: "first Homo sapiens"},
   {t: 1950 - 773000, label: "magnetic field flips"},
 ];
