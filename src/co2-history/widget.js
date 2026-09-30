@@ -51,11 +51,11 @@ const PREINDUSTRIAL = 278, ICE_AGE = 185;
 // events are counted from 1950, as the ice cores are.
 const MILESTONES = [
   {t: 1958.2, label: "Keeling begins"},
-  {t: 1936.7, label: "last thylacine"},
   {t: 1770, label: "Industrial Revolution"},
   {t: 1680, label: "dodo extinct"},
   {t: -2050, label: "last woolly mammoths"},
   {t: 1950 - 10000, label: "last sabre-toothed cats"},
+  {t: 1950 - 11500, label: "farming begins"},
   {t: 1950 - 11700, label: "last ice age ends"},
   {t: 1950 - 40000, label: "last Neanderthals"},
   {t: 1950 - 300000, label: "first Homo sapiens"},
