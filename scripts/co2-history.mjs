@@ -1,6 +1,9 @@
-// Builds src/co2-history/data/co2-history.json, the one data file behind the CO₂ history
-// widget: 800,000 years of Antarctic ice cores down to this year's weekly Mauna Loa values,
-// plus NOAA's marine boundary layer reference and the flask network for the latitude panel.
+// Builds the data files behind the two CO₂ observation widgets:
+//   src/co2-history/data/co2-history.json    the timeline, 800,000 years of Antarctic ice
+//                                            cores down to this year's weekly Mauna Loa values;
+//   src/co2-latitude/data/co2-latitude.json  the latitude view, NOAA's marine boundary layer
+//                                            reference, the flask network and the Mauna Loa
+//                                            and South Pole monthly records since 1957.
 // Run it by hand from the repo root when the data should be refreshed (`node
 // scripts/co2-history.mjs`); it is never run by the site. Node 18 or later, no dependencies.
 //
@@ -21,7 +24,8 @@ import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const OUT = join(ROOT, "src/co2-history/data/co2-history.json");
+const OUT_HISTORY = join(ROOT, "src/co2-history/data/co2-history.json");
+const OUT_LATITUDE = join(ROOT, "src/co2-latitude/data/co2-latitude.json");
 const LAND = join(ROOT, "src/data/countries-110m.json");
 
 const NOAA_TRENDS = "https://gml.noaa.gov/webdata/ccgg/trends/co2/";
@@ -381,36 +385,47 @@ for (const site of [scripps.find(s => s.code === "SPO"), flaskSites.find(s => s.
 
 const lastWeek = mloWeekly[mloWeekly.length - 1][0];
 
+const meta = {
+  generated: now.toISOString().slice(0, 10),
+  latestWeek: lastWeek,
+  sources: SOURCES,
+  acknowledgement: "Inspired by Andy Jacobson's animation “History of atmospheric carbon dioxide”, " +
+    "NOAA Global Monitoring Laboratory, https://gml.noaa.gov/ccgg/trends/history.html",
+};
+const spo = {monthly: packMonthly(spoMap)};
+
 const data = {
-  meta: {
-    generated: now.toISOString().slice(0, 10),
-    latestWeek: lastWeek,
-    sources: SOURCES,
-    acknowledgement: "Inspired by Andy Jacobson's animation “History of atmospheric carbon dioxide”, " +
-      "NOAA Global Monitoring Laboratory, https://gml.noaa.gov/ccgg/trends/history.html",
-  },
+  meta,
   mlo: {monthly: mloMonthly, weekly: mloWeekly},
-  spo: {monthly: packMonthly(spoMap)},
+  spo,
   global: {monthly: globalMonthly},
-  mbl,
-  sites: [...flaskSites, ...scripps].sort((a, b) => b.lat - a.lat),
   lawDome: await lawDome(),
   siple: siple(),
   composite: await composite(),
+};
+const latitude = {
+  meta,
+  mlo: {monthly: mloMonthly},
+  spo,
+  mbl,
+  sites: [...flaskSites, ...scripps].sort((a, b) => b.lat - a.lat),
   land: landPath(),
 };
 
-mkdirSync(dirname(OUT), {recursive: true});
+mkdirSync(dirname(OUT_HISTORY), {recursive: true});
+mkdirSync(dirname(OUT_LATITUDE), {recursive: true});
 const json = JSON.stringify(data);
-writeFileSync(OUT, json);
+writeFileSync(OUT_HISTORY, json);
+const jsonLat = JSON.stringify(latitude);
+writeFileSync(OUT_LATITUDE, jsonLat);
 
 const kb = n => `${Math.round(n / 1024)} kB`;
 process.stderr.write(
-  `wrote ${OUT} (${kb(json.length)})\n` +
+  `wrote ${OUT_HISTORY} (${kb(json.length)}) and ${OUT_LATITUDE} (${kb(jsonLat.length)})\n` +
   `  mlo monthly ${data.mlo.monthly.year}-${data.mlo.monthly.month} +${data.mlo.monthly.v.length} months, ` +
   `weekly ${mloWeekly.length} rows to ${lastWeek}\n` +
   `  spo monthly from ${data.spo.monthly.year}-${data.spo.monthly.month}, ${data.spo.monthly.v.length} months\n` +
   `  mbl ${mbl.t.length} steps × ${mbl.sinlat.length} bins, ${mbl.t[0]}–${mbl.t[mbl.t.length - 1]} (${kb(JSON.stringify(mbl).length)})\n` +
-  `  sites ${data.sites.length} (${flaskSites.length} NOAA, ${scripps.length} Scripps; ${kb(JSON.stringify(data.sites).length)})\n` +
+  `  sites ${latitude.sites.length} (${flaskSites.length} NOAA, ${scripps.length} Scripps; ${kb(JSON.stringify(latitude.sites).length)})\n` +
   `  law dome ${data.lawDome.samples.length} samples, spline ${data.lawDome.spline.length}; siple ${SIPLE_NEFTEL.length + SIPLE_FRIEDLI.length}\n` +
-  `  composite ${data.composite.rows.length} rows (${kb(JSON.stringify(data.composite).length)}); land ${kb(data.land.length)}\n`);
+  `  composite ${data.composite.rows.length} rows (${kb(JSON.stringify(data.composite).length)}); land ${kb(latitude.land.length)}\n`);

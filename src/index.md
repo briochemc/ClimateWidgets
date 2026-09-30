@@ -9,7 +9,11 @@ Small, self-contained interactive figures for teaching climate science. Each wid
   </a>
   <a class="card" href="./co2-history/">
     <h2>The history of atmospheric CO₂</h2>
-    <img class="thumb" src="./assets/thumbnails/co2-history.png" alt="Atmospheric CO₂ since 1958 as the rising red Mauna Loa and blue South Pole curves, above a panel of CO₂ against latitude for the latest month with a small world map of the sampling stations; buttons above stretch the time axis out to 800,000 years">
+    <img class="thumb" src="./assets/thumbnails/co2-history.png" alt="Atmospheric CO₂ since 1958 as the rising red Mauna Loa and blue South Pole curves, with buttons above that stretch the time axis out to 800,000 years and a look-back slider">
+  </a>
+  <a class="card" href="./co2-latitude/">
+    <h2>CO₂ around the world</h2>
+    <img class="thumb" src="./assets/thumbnails/co2-latitude.png" alt="CO₂ against latitude for one month, a black curve rising towards the north with grey station dots on it and the January 1979 curve as a grey ghost below, beside a small world map of the stations and a month clock; underneath, the Mauna Loa and South Pole records since 1957 with a scrubber">
   </a>
   <a class="card" href="./temperature-trend/">
     <h2>Temperature trends</h2>
