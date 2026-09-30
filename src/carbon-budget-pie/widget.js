@@ -295,15 +295,18 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
     updatePick();
   }
 
-  // The ten biggest slices named outside the rim, with a leader from each slice's middle.
-  // Labels on each side of the circle are sorted by height and pushed a line apart, so the
-  // run of recent years that are all among the biggest still read.
+  // Slices named outside the rim, with a leader from each slice's middle: every decade, every
+  // tenth year, and the regions and countries with more than a twentieth of the pie. Labels
+  // on each side of the circle are sorted by height and pushed a line apart.
   const LABEL_GAP = 14;
+  const LABEL_SHARE = 0.05;
   function drawSliceLabels(W) {
     labelGroup.replaceChildren();
     if (mode === "none") return;
-    const top = slices.map(s => ({s, amount: Math.min(s.to, W) - s.from})).filter(d => d.amount > EPS)
-      .sort((a, b) => b.amount - a.amount).slice(0, 10);
+    const top = slices.map(s => ({s, amount: Math.min(s.to, W) - s.from})).filter(d => d.amount > EPS && (
+      d.s.kind === "decade" ? true
+      : d.s.kind === "year" ? d.s.block.year % 10 === 0
+      : d.amount / W >= LABEL_SHARE));
     const items = top.map(d => {
       const mid = (d.s.from + Math.min(d.s.to, W)) / 2 / W;
       const a = angle(mid);
