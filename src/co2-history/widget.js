@@ -54,7 +54,6 @@ const MILESTONES = [
   {t: 1770, label: "Industrial Revolution"},
   {t: 1680, label: "dodo extinct"},
   {t: -2050, label: "last woolly mammoths"},
-  {t: 1950 - 10000, label: "last sabre-toothed cats"},
   {t: 1950 - 11500, label: "farming begins"},
   {t: 1950 - 11700, label: "last ice age ends"},
   {t: 1950 - 40000, label: "last Neanderthals"},
@@ -471,38 +470,48 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     drawLegend(a, t0, t1);
   }
 
-  // Short labels packed into rows at the top of the plot, each with a leader line down to
-  // the record's value at that moment. The legend's corner counts as taken. A label goes in
-  // the first row where it fits and where no label above it sits over its leader.
+  // Short labels just above the curve, each with a leader line down to the record's value
+  // at that moment, so the eye need not travel to the top of the plot. A label sits as close
+  // above its point as it can: it moves up a line at a time until its box clears every label
+  // already placed, the legend's corner, and their leaders, and no placed label sits over
+  // its own leader.
   function drawMilestones(a, t0, t1) {
     const up = milestones.map(m => ({m, alpha: milestoneAlpha(m), mx: x(m.t)}))
       .filter(d => d.alpha > 0.02).sort((p, q) => p.mx - q.mx);
     if (!up.length) return;
     context.font = noteFont;
     const legend = legendItems(a, t0, t1);
-    const legendW = legend.length ? Math.max(...legend.map(([n]) => context.measureText(n).width)) + 32 : 0;
-    const rows = legend.map(() => [[plotL, plotL + legendW]]);   // occupied [x0, x1] per row
-    const ROW_H = 16, top = PLOT_T + 12;
+    const boxes = [];   // placed boxes {x0, x1, y0, y1} and, for labels, their leader {mx, yTop, yBot}
+    if (legend.length) {
+      const legendW = Math.max(...legend.map(([n]) => context.measureText(n).width)) + 32;
+      boxes.push({x0: plotL, x1: plotL + legendW, y0: PLOT_T, y1: PLOT_T + 4 + legend.length * 15});
+    }
+    const LIFT = 22, STEP = 16, H = 7;
+    const clear = (x0, x1, y0, y1) => boxes.every(b => x1 < b.x0 || x0 > b.x1 || y1 < b.y0 || y0 > b.y1);
+    const crosses = (mx, yTop, yBot) => boxes.some(b => mx >= b.x0 - 2 && mx <= b.x1 + 2 && yBot >= b.y0 && yTop <= b.y1);
     for (const d of up) {
+      const v = co2At(d.m.t);
+      d.py = v === null ? PLOT_B : y(v);
       const half = context.measureText(d.m.label).width / 2 + 4;
       d.lx = clamp(d.mx, plotL + half, plotR - half);
       const x0 = d.lx - half, x1 = d.lx + half;
-      let r = 0;
-      for (;; r++) {
-        const row = rows[r] ?? (rows[r] = []);
-        const free = row.every(([p0, p1]) => x1 < p0 || x0 > p1);
-        const leaderClear = rows.slice(0, r).every(rr => rr.every(([p0, p1]) => d.mx < p0 - 2 || d.mx > p1 + 2));
-        if ((free && leaderClear) || r >= 8) { row.push([x0, x1]); break; }
+      let ly = Math.min(d.py - LIFT, PLOT_B - LIFT);
+      for (let k = 0; k < 20; k++, ly -= STEP) {
+        if (ly - H < PLOT_T + 2) { ly = PLOT_T + 2 + H; break; }
+        const leaderOk = !crosses(d.mx, ly + H, d.py - 3) &&
+          // and no earlier leader passes through this box
+          boxes.every(b => b.mx === undefined || b.mx < x0 - 2 || b.mx > x1 + 2 || b.yBot < ly - H || b.yTop > ly + H);
+        if (clear(x0, x1, ly - H, ly + H) && leaderOk) break;
       }
-      d.ly = top + r * ROW_H;
+      d.ly = ly;
+      boxes.push({x0, x1, y0: ly - H, y1: ly + H, mx: d.mx, yTop: ly + H, yBot: d.py - 3});
     }
     // Leaders first, then the labels, whose halos cover any leader passing under them.
     for (const d of up) {
-      const v = co2At(d.m.t);
       context.globalAlpha = d.alpha;
       context.strokeStyle = "rgba(0,0,0,0.35)";
       context.lineWidth = 1;
-      line(d.mx, d.ly + 8, d.mx, v === null ? PLOT_B : y(v) - 3);
+      line(d.mx, d.ly + H + 1, d.mx, d.py - 3);
     }
     context.fillStyle = "#444";
     context.textAlign = "center"; context.textBaseline = "middle";
