@@ -43,22 +43,23 @@ const TOTAL_H = PLOT_B + 32;
 const LOOK_MIN = 1;                  // years; the shortest window
 const PREINDUSTRIAL = 278, ICE_AGE = 185;
 
-// Landmarks that give the time axis a sense of scale, after xkcd's temperature timeline.
-// Each is a dashed vertical line with its label written up along it; a label shows only
-// while its event sits comfortably inside the window (not crammed against the right edge,
-// not about to fall off the left), so a few are up at a time and none collide. Times are
-// years CE; "years ago" events are counted from 1950, as the ice cores are.
+// Landmarks that give the time axis a sense of scale, after xkcd's temperature timeline:
+// a few words at the top of the plot with a thin line down to the CO₂ of the moment. The
+// date is left to the axis. A label shows only while its event sits comfortably inside the
+// window (not crammed against the right edge, not about to fall off the left), and the
+// labels on screen are packed into rows so none overlap. Times are years CE; "years ago"
+// events are counted from 1950, as the ice cores are.
 const MILESTONES = [
-  {t: 1958.2, label: "1958: Keeling begins at Mauna Loa"},
-  {t: 1936.7, label: "1936: the last thylacine dies"},
-  {t: 1770, label: "c. 1770: Industrial Revolution begins"},
-  {t: 1680, label: "c. 1680: the dodo is gone"},
-  {t: -2050, label: "4,000 years ago: the last woolly mammoths"},
-  {t: 1950 - 10000, label: "10,000 years ago: the last sabre-toothed cats"},
-  {t: 1950 - 11700, label: "11,700 years ago: the last ice age ends"},
-  {t: 1950 - 40000, label: "40,000 years ago: the last Neanderthals"},
-  {t: 1950 - 300000, label: "300,000 years ago: the first Homo sapiens"},
-  {t: 1950 - 773000, label: "773,000 years ago: Earth's magnetic field last flips"},
+  {t: 1958.2, label: "Keeling begins"},
+  {t: 1936.7, label: "last thylacine"},
+  {t: 1770, label: "Industrial Revolution"},
+  {t: 1680, label: "dodo extinct"},
+  {t: -2050, label: "last woolly mammoths"},
+  {t: 1950 - 10000, label: "last sabre-toothed cats"},
+  {t: 1950 - 11700, label: "last ice age ends"},
+  {t: 1950 - 40000, label: "last Neanderthals"},
+  {t: 1950 - 300000, label: "first Homo sapiens"},
+  {t: 1950 - 773000, label: "magnetic field flips"},
 ];
 
 // Unpacks a monthly series {year, month, v: [...]} into [[decimalYear, ppm], ...],
@@ -433,7 +434,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     context.fill();
     haloText(latestLabel, Math.min(plotR - 4, endX + 4), endY - dotR - 3);
 
-    drawMilestones();
+    drawMilestones(a, t0, t1);
 
     // Hover cursor: a vertical rule at the pointer's time.
     if (hoverT !== null) {
@@ -470,32 +471,62 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     drawLegend(a, t0, t1);
   }
 
-  // Dashed rules with their labels written upwards from the axis, to the right of the rule.
-  function drawMilestones() {
-    // Two labels closer than a line of text would overprint; the fainter one gives way.
+  // Short labels packed into rows at the top of the plot, each with a leader line down to
+  // the record's value at that moment. The legend's corner counts as taken. A label goes in
+  // the first row where it fits and where no label above it sits over its leader.
+  function drawMilestones(a, t0, t1) {
     const up = milestones.map(m => ({m, alpha: milestoneAlpha(m), mx: x(m.t)}))
-      .filter(d => d.alpha > 0.02).sort((a, b) => a.mx - b.mx);
-    for (let i = 1; i < up.length; i++) {
-      if (up[i].mx - up[i - 1].mx < 16) (up[i].alpha < up[i - 1].alpha ? up[i] : up[i - 1]).alpha = 0;
-    }
+      .filter(d => d.alpha > 0.02).sort((p, q) => p.mx - q.mx);
+    if (!up.length) return;
     context.font = noteFont;
-    context.textAlign = "left"; context.textBaseline = "top";
-    for (const {m, alpha, mx} of up) {
-      if (alpha <= 0.02) continue;
-      context.globalAlpha = alpha;
-      context.strokeStyle = "rgba(0,0,0,0.3)";
+    const legend = legendItems(a, t0, t1);
+    const legendW = legend.length ? Math.max(...legend.map(([n]) => context.measureText(n).width)) + 32 : 0;
+    const rows = legend.map(() => [[plotL, plotL + legendW]]);   // occupied [x0, x1] per row
+    const ROW_H = 16, top = PLOT_T + 12;
+    for (const d of up) {
+      const half = context.measureText(d.m.label).width / 2 + 4;
+      d.lx = clamp(d.mx, plotL + half, plotR - half);
+      const x0 = d.lx - half, x1 = d.lx + half;
+      let r = 0;
+      for (;; r++) {
+        const row = rows[r] ?? (rows[r] = []);
+        const free = row.every(([p0, p1]) => x1 < p0 || x0 > p1);
+        const leaderClear = rows.slice(0, r).every(rr => rr.every(([p0, p1]) => d.mx < p0 - 2 || d.mx > p1 + 2));
+        if ((free && leaderClear) || r >= 8) { row.push([x0, x1]); break; }
+      }
+      d.ly = top + r * ROW_H;
+    }
+    // Leaders first, then the labels, whose halos cover any leader passing under them.
+    for (const d of up) {
+      const v = co2At(d.m.t);
+      context.globalAlpha = d.alpha;
+      context.strokeStyle = "rgba(0,0,0,0.35)";
       context.lineWidth = 1;
-      context.setLineDash([3, 4]);
-      line(mx, PLOT_T, mx, PLOT_B);
-      context.setLineDash([]);
-      context.save();
-      context.translate(mx + 3, PLOT_B - 6);
-      context.rotate(-Math.PI / 2);
-      context.fillStyle = "#555";
-      haloText(m.label, 0, 0);
-      context.restore();
+      line(d.mx, d.ly + 8, d.mx, v === null ? PLOT_B : y(v) - 3);
+    }
+    context.fillStyle = "#444";
+    context.textAlign = "center"; context.textBaseline = "middle";
+    for (const d of up) {
+      context.globalAlpha = d.alpha;
+      haloText(d.m.label, d.lx, d.ly);
     }
     context.globalAlpha = 1;
+  }
+
+  // The record's CO₂ at a time: Mauna Loa's monthly mean once it exists, the Law Dome
+  // spline before that, and the ice-core composite before that.
+  function co2At(t) {
+    if (mloMonthly.length && t >= mloMonthly[0][0]) return interpAt(mloMonthly, t);
+    if (lawSpline.length && t >= lawSpline[0][0] && t <= lawSpline[lawSpline.length - 1][0]) return interpAt(lawSpline, t);
+    return composite.length ? interpAt(composite, t) : null;
+  }
+
+  function interpAt(pts, t) {
+    const i = lowerBound(pts, t);
+    if (i <= 0) return pts[0][1];
+    if (i >= pts.length) return pts[pts.length - 1][1];
+    const [t0, v0] = pts[i - 1], [t1, v1] = pts[i];
+    return t1 === t0 ? v1 : v0 + (v1 - v0) * (t - t0) / (t1 - t0);
   }
 
   function strokeSeries(pts, t0, t1, color, lineWidth, alpha) {
@@ -582,7 +613,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   }
 
   // Lists the records on screen, top left, where the rising curve leaves room.
-  function drawLegend(a, t0, t1) {
+  function legendItems(a, t0, t1) {
     const items = [];
     if (a.weekly > 0.02 || a.monthly > 0.02) items.push(["Mauna Loa", MLO_COLOR]);
     if (a.monthly > 0.02) items.push(["South Pole", SPO_COLOR]);
@@ -597,6 +628,11 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
         items.push([name, CORE_COLORS[name] ?? "#666"]);
       }
     }
+    return items;
+  }
+
+  function drawLegend(a, t0, t1) {
+    const items = legendItems(a, t0, t1);
     context.font = noteFont;
     context.textAlign = "left"; context.textBaseline = "middle";
     items.forEach(([name, color], i) => {
