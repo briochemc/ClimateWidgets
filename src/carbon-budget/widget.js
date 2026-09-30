@@ -15,8 +15,8 @@
 // its share of the block's area, so every square belongs to a country and a country is a
 // block rather than a thin run; hovering one outlines that country's whole contribution and
 // names it. By year (or by decade) the fill is chronological instead: each year's emissions
-// are one band, coloured in steps of 25 years (or of a decade) on a warm ramp from pale for
-// 1850 to dark for the latest years, never a gradient. Either way the fill's height is
+// are one band, one level per year (or per decade) on a warm ramp from pale for 1850 to
+// dark for the latest years, never a gradient. Either way the fill's height is
 // the same, since it is the same squares, and a square that a year or a country only partly
 // fills is cut at the exact fraction: nothing is rounded to fit the grid.
 //
@@ -48,7 +48,7 @@ export const COLOUR_MODES = ["none", "region", "year", "decade"];
 // deficiency; its pale yellow is left out because it vanishes against the white lattice, and
 // the rest of the world is a grey darker than the unspent budget's. Time is coloured in
 // discrete steps, never a gradient: the ramp below is sampled at one colour per class, a
-// decade each in the decade layout and YEAR_CLASS years each in the year layout, from pale
+// decade each in the decade layout and one per year in the year layout, from pale
 // for 1850 to dark for the latest years, so the recent past reads as the dark mass it is.
 // With no colouring, the default, the fill is a plain dark grey. What is left is a lighter
 // grey, a shade lighter again for each budget beyond the first.
@@ -59,7 +59,7 @@ export const COLOURS = {
   plain: "#4a4a4a",
   line: "#222",
 };
-const YEAR_CLASS = 25;
+const YEAR_CLASS = 1;   // the year layout has one level per year; decades one per decade
 const FALLBACK_REGION = "#8c7a4e";
 
 // ---- the numbers -------------------------------------------------------------------------------
@@ -346,15 +346,28 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   // The year and the running total, HTML above the SVG so that the SVG holds nothing but the
   // grid; the unit on the right, in the space over the labels.
   const header = document.createElement("div");
-  header.style.cssText = "display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;padding:0 0 4px;";
+  header.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;padding:0 0 4px;";
   const yearLabel = document.createElement("span");
   yearLabel.style.cssText = "font-weight:bold;font-size:24px;color:#222;min-width:3.2em;";
+  // The year slider sits beside the year it sets.
+  const sliderRow = document.createElement("label");
+  sliderRow.style.cssText = "display:flex;flex:1 1 160px;align-items:center;gap:8px;font-size:13px;color:#666;cursor:pointer;";
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = firstYear;
+  slider.max = lastYear;
+  slider.step = 1;
+  slider.value = Math.floor(t + EPS);
+  slider.style.cssText = `flex:1 1 100px;margin:0;accent-color:${ACCENT};cursor:pointer;`;
+  slider.setAttribute("aria-label", `Year, ${firstYear} to ${lastYear}`);
+  slider.addEventListener("input", e => { e.stopPropagation(); stopTour(); setTime(Number(slider.value)); });
+  sliderRow.append(String(firstYear), slider, String(lastYear));
   const totalLabel = document.createElement("span");
   totalLabel.style.cssText = "color:#333;";
   const unitLabel = document.createElement("span");
   unitLabel.style.cssText = "margin-left:auto;color:#666;font-size:13px;";
   unitLabel.textContent = "1 square = 1 GtCO₂, a billion tonnes";
-  header.append(yearLabel, totalLabel, unitLabel);
+  header.append(yearLabel, sliderRow, totalLabel, unitLabel);
   container.appendChild(header);
 
   // The key: a swatch and running total per region, or the ramp with its end years.
@@ -394,7 +407,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   const rampItem = document.createElement("span");
   rampItem.style.cssText = "display:inline-flex;align-items:center;gap:6px;color:#666;";
   const rampBar = document.createElement("span");
-  rampBar.style.cssText = "display:inline-flex;width:160px;height:11px;border-radius:2px;overflow:hidden;gap:1px;";
+  rampBar.style.cssText = "display:inline-flex;width:160px;height:11px;border-radius:2px;overflow:hidden;";
   rampItem.append(String(firstYear), rampBar, String(lastYear));
 
   const svg = document.createElementNS(SVG_NS, "svg");
@@ -405,21 +418,6 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   scroller.style.cssText = "max-width:100%;overflow-x:auto;";
   scroller.appendChild(svg);
   container.appendChild(scroller);
-
-  // The year, a native slider under the grid, with the ends of the timeline marked.
-  const sliderRow = document.createElement("label");
-  sliderRow.style.cssText = "display:flex;align-items:center;gap:8px;padding:10px 0 0;font-size:13px;color:#666;cursor:pointer;";
-  const slider = document.createElement("input");
-  slider.type = "range";
-  slider.min = firstYear;
-  slider.max = lastYear;
-  slider.step = 1;
-  slider.value = Math.floor(t + EPS);
-  slider.style.cssText = `flex:1 1 120px;margin:0;accent-color:${ACCENT};cursor:pointer;`;
-  slider.setAttribute("aria-label", `Year, ${firstYear} to ${lastYear}`);
-  slider.addEventListener("input", e => { e.stopPropagation(); stopTour(); setTime(Number(slider.value)); });
-  sliderRow.append(String(firstYear), slider, String(lastYear));
-  container.appendChild(sliderRow);
 
   const status = document.createElement("div");
   status.setAttribute("aria-live", "polite");
@@ -553,6 +551,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
       // One swatch per class, in a row, with the first and last year at the ends.
       const size = mode === "decade" ? 10 : YEAR_CLASS;
       rampBar.replaceChildren();
+      rampBar.style.gap = size >= 10 ? "1px" : "0";
       for (let k = 0; k < classCount(size); k++) {
         const sw = document.createElement("span");
         sw.style.cssText = `flex:1 1 0;height:11px;background:${cssRgb(classRgb(firstYear + k * size, size))};`;
@@ -839,6 +838,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
     selected = null;
     hovered = null;
     applyColours();
+    updateHover();
     emit();
   }
 
@@ -948,6 +948,10 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
     tourWatcher?.disconnect();
     tourWatcher = null;
     touring = true;
+    // Nothing stays picked out while the years play through.
+    selected = null;
+    hovered = null;
+    updateHover();
     hint.textContent = HINT_TOUR;
     showTouring();
     tourTimer = setTimeout(() => tourStep(0), delay);
