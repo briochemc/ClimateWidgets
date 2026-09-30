@@ -11,11 +11,12 @@
 // has emitted, then Europe's, North America's, South America's, Africa's, the Middle East's
 // and the rest of the world's, each region one colour and growing as the years pass, so that
 // at any year the picture is a stacked bar of who has emitted what. Inside a region the
-// countries are stacked the same way, largest first, so every square belongs to a country,
-// and hovering one outlines that country's whole contribution and names it. By year (or by
-// decade) the fill is chronological instead: each year's emissions are one band, coloured on
-// a warm ramp from pale for 1850 to dark for the latest year (or in steps, one per decade,
-// alternate decades darkened so the bands can be counted). Either way the fill's height is
+// countries are columns across the region's block, largest first from the left, each holding
+// its share of the block's area, so every square belongs to a country and a country is a
+// block rather than a thin run; hovering one outlines that country's whole contribution and
+// names it. By year (or by decade) the fill is chronological instead: each year's emissions
+// are one band, coloured in steps of 25 years (or of a decade) on a warm ramp from pale for
+// 1850 to dark for the latest years, never a gradient. Either way the fill's height is
 // the same, since it is the same squares, and a square that a year or a country only partly
 // fills is cut at the exact fraction: nothing is rounded to fit the grid.
 //
@@ -45,17 +46,20 @@ export const COLOUR_MODES = ["none", "region", "year", "decade"];
 
 // Regions in the Okabe–Ito palette, which is safe for every kind of colour-vision
 // deficiency; its pale yellow is left out because it vanishes against the white lattice, and
-// the rest of the world is a grey darker than the unspent budget's. Years are on one warm
-// ramp from pale for 1850 to dark for the latest year, so the recent decades read as the
-// dark mass they are. With no colouring, the default, the fill is plain near-black. What is
-// left is grey, a shade lighter for each budget beyond the first.
+// the rest of the world is a grey darker than the unspent budget's. Time is coloured in
+// discrete steps, never a gradient: the ramp below is sampled at one colour per class, a
+// decade each in the decade layout and YEAR_CLASS years each in the year layout, from pale
+// for 1850 to dark for the latest years, so the recent past reads as the dark mass it is.
+// With no colouring, the default, the fill is a plain dark grey. What is left is a lighter
+// grey, a shade lighter again for each budget beyond the first.
 export const COLOURS = {
   regions: {asia: "#D55E00", europe: "#0072B2", namerica: "#E69F00", samerica: "#009E73", africa: "#CC79A7", mideast: "#56B4E9", rest: "#7a7a7a"},
-  ramp: ["#f9d9b8", "#f2ab74", "#e4713f", "#b93a24", "#6b1a15"],
+  ramp: ["#fde3b0", "#f8b95c", "#ee7f2f", "#d9482a", "#b0202f", "#7a1140", "#3d0c33"],
   bands: ["#c9c9c9", "#d9d9d9", "#e7e7e7"],
-  plain: "#1b1b1b",
+  plain: "#4a4a4a",
   line: "#222",
 };
+const YEAR_CLASS = 25;
 const FALLBACK_REGION = "#8c7a4e";
 
 // ---- the numbers -------------------------------------------------------------------------------
@@ -149,6 +153,33 @@ function rowRects(a, b, rows) {
   return out;
 }
 
+// The area of the rectangles left of x.
+function areaLeft(rects, x) {
+  let a = 0;
+  for (const r of rects) a += Math.max(0, Math.min(x, r.x1) - r.x0) * (r.y1 - r.y0);
+  return a;
+}
+
+// The x positions that cut a set of rectangles into vertical slabs holding the given
+// cumulative fractions of its area, found by bisection (the area left of x is monotone).
+function columnCuts(rects, fractions) {
+  const total = rects.reduce((a, r) => a + (r.x1 - r.x0) * (r.y1 - r.y0), 0);
+  return fractions.map(f => {
+    if (!(total > EPS)) return 0;
+    let lo = 0, hi = COLUMNS;
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2;
+      if (areaLeft(rects, mid) < f * total) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+  });
+}
+
+// The parts of the rectangles between x = xa and x = xb.
+function clipRects(rects, xa, xb) {
+  return rects.map(r => ({...r, x0: Math.max(r.x0, xa), x1: Math.min(r.x1, xb)})).filter(r => r.x1 > r.x0 + EPS);
+}
+
 function rectsPath(rects, cell) {
   const P = v => (v * cell).toFixed(2);
   return rects.map(r => `M${P(r.x0)},${P(r.y0)}H${P(r.x1)}V${P(r.y1)}H${P(r.x0)}Z`).join("");
@@ -213,7 +244,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 
 // `year` is where the slider starts (the last data year by default); `estimate` the id of
 // one of the data file's remaining-budget estimates (its first by default); `colour` one of
-// COLOUR_MODES ("none" by default: the fill in plain black, stacked by region and country).
+// COLOUR_MODES ("none" by default: the fill in plain dark grey, stacked by region and country).
 export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, estimate, colour} = {}) {
   if (!data?.years || !data?.budgets) throw new Error("createCarbonBudgetWidget needs {data}: the contents of data/carbon-budget.json");
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
@@ -363,7 +394,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   const rampItem = document.createElement("span");
   rampItem.style.cssText = "display:inline-flex;align-items:center;gap:6px;color:#666;";
   const rampBar = document.createElement("span");
-  rampBar.style.cssText = "display:inline-block;width:140px;height:11px;border-radius:2px;";
+  rampBar.style.cssText = "display:inline-flex;width:160px;height:11px;border-radius:2px;overflow:hidden;gap:1px;";
   rampItem.append(String(firstYear), rampBar, String(lastYear));
 
   const svg = document.createElementNS(SVG_NS, "svg");
@@ -495,21 +526,20 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
     return COLOURS.regions[id] ?? FALLBACK_REGION;
   }
 
-  // The ramp's stops are spread evenly over the data years.
-  function yearRgb(year) {
+  // The ramp sampled at a point s in [0, 1].
+  function rampRgb(s) {
     const stops = COLOURS.ramp;
-    const s = clamp((year - firstYear) / (lastYear - firstYear), 0, 1) * (stops.length - 1);
-    const i = Math.min(Math.floor(s), stops.length - 2);
-    return mixRgb(hexToRgb(stops[i]), hexToRgb(stops[i + 1]), s - i);
+    const p = clamp(s, 0, 1) * (stops.length - 1);
+    const i = Math.min(Math.floor(p), stops.length - 2);
+    return mixRgb(hexToRgb(stops[i]), hexToRgb(stops[i + 1]), p - i);
   }
 
-  // A decade is the ramp's colour at its middle; every other decade is darkened so that
-  // neighbouring decades stay apart at both ends of the ramp.
-  function decadeRgb(year) {
-    const d = Math.floor((year - firstYear) / 10);
-    const base = yearRgb(Math.min(firstYear + 10 * d + 5, lastYear));
-    return d % 2 ? mixRgb(base, [0, 0, 0], 0.22) : base;
-  }
+  // Time in classes: class k of n gets the ramp's colour at k / (n − 1), and every year in
+  // the class gets that one colour, so the fill steps rather than shades.
+  const classCount = size => Math.ceil((lastYear - firstYear + 1) / size);
+  const classRgb = (year, size) => rampRgb(Math.floor((year - firstYear) / size) / Math.max(1, classCount(size) - 1));
+  const yearRgb = year => classRgb(year, YEAR_CLASS);
+  const decadeRgb = year => classRgb(year, 10);
 
   function applyColours() {
     yearPaths.forEach((p, k) => p.setAttribute("fill", cssRgb(mode === "decade" ? decadeRgb(years[k].year) : yearRgb(years[k].year))));
@@ -520,12 +550,15 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
     if (mode === "region") {
       for (const {item} of legendItems.values()) legend.appendChild(item);
     } else if (!stacked()) {
-      const span = lastYear - firstYear + 1;
-      const stops = mode === "decade"
-        ? Array.from({length: Math.ceil(span / 10)}, (_, d) =>
-            `${cssRgb(decadeRgb(firstYear + 10 * d))} ${(100 * 10 * d / span).toFixed(1)}% ${(100 * Math.min(10 * (d + 1), span) / span).toFixed(1)}%`)
-        : COLOURS.ramp.map((c, i) => `${c} ${(100 * i / (COLOURS.ramp.length - 1)).toFixed(0)}%`);
-      rampBar.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
+      // One swatch per class, in a row, with the first and last year at the ends.
+      const size = mode === "decade" ? 10 : YEAR_CLASS;
+      rampBar.replaceChildren();
+      for (let k = 0; k < classCount(size); k++) {
+        const sw = document.createElement("span");
+        sw.style.cssText = `flex:1 1 0;height:11px;background:${cssRgb(classRgb(firstYear + k * size, size))};`;
+        sw.title = `${firstYear + k * size}–${Math.min(firstYear + (k + 1) * size - 1, lastYear)}`;
+        rampBar.appendChild(sw);
+      }
       legend.appendChild(rampItem);
     }
     shownYear = null;
@@ -556,7 +589,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
       regions.forEach((r, i) => {
         const fill = blockFill(r, t);
         regionPaths[i].setAttribute("d", rectsPath(rowRects(at[i], Math.min(at[i] + fill, top), rows), cell));
-        legendItems.get(r.id).text.textContent = `${r.short ?? r.name} ${formatGt(fill)}`;
+        legendItems.get(r.id).text.textContent = r.short ?? r.name;
       });
       shownYear = y;
     } else {
@@ -602,7 +635,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   // a country (with its region), or "grey" for a square not yet reached. Chronological: a
   // year, which for a square past the fill is the year that will emit it; past the data,
   // "grey". A block is identified by what it is, not where it is, since a country's block
-  // moves and grows as time passes; spanOf finds it again.
+  // moves and grows as time passes; rectsOf finds it again.
   function hitAt(square) {
     if (stacked()) {
       if (square >= fillAt(t) - EPS) return {square, kind: "grey"};
@@ -610,29 +643,48 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
       let i = regions.length - 1;
       while (i > 0 && square < at[i] - EPS) i--;
       const region = regions[i];
-      const cat = bases(region.countries, t), offset = square - at[i];
+      // Countries are columns across the region's block: which one is a matter of x.
+      const r = Math.floor(square / COLUMNS + EPS), along = square - r * COLUMNS;
+      const x = r % 2 ? COLUMNS - along : along;
+      const cuts = countryCuts(region, t);
       let j = region.countries.length - 1;
-      while (j > 0 && offset < cat[j] - EPS) j--;
+      while (j > 0 && (x < cuts[j] - EPS || blockFill(region.countries[j], t) <= EPS)) j--;
       return {square, kind: "country", country: region.countries[j], region};
     }
     if (square >= used - EPS) return {square, kind: "grey"};
     return {square, kind: "year", year: years[upperBound(yearEnds, square)]};
   }
 
-  // A block's [from, to) in the fill at the current time, or null if the layout has no block
-  // for it (a country in the chronological layout, a year in the stacked one, or grey).
-  function spanOf(h) {
-    if (h.kind === "region" && stacked()) {
-      const from = bases(regions, t)[regions.indexOf(h.region)];
-      return [from, from + blockFill(h.region, t)];
-    }
+  // A region's block at time tt as rectangles, and the x positions where its countries'
+  // columns begin: every country a vertical slab of the block, largest first from the left,
+  // each holding its share of the region's area, so that countries are blocks rather than the
+  // thin runs a snake would give them.
+  function regionRects(region, tt) {
+    const from = bases(regions, tt)[regions.indexOf(region)];
+    const top = thresholds[thresholds.length - 1].total;
+    return rowRects(from, Math.min(from + blockFill(region, tt), top), rows);
+  }
+  function countryCuts(region, tt) {
+    const fill = blockFill(region, tt);
+    return columnCuts(regionRects(region, tt), bases(region.countries, tt).map(c => (fill > EPS ? c / fill : 0)));
+  }
+
+  // A block's rectangles on the grid at the current time: a region, a country's column of
+  // it, or a year; none for a block the layout does not have (a country in the chronological
+  // layout, a year in the stacked one, or grey).
+  function rectsOf(h) {
+    const top = thresholds[thresholds.length - 1].total;
+    if (h.kind === "region" && stacked()) return regionRects(h.region, t);
     if (h.kind === "country" && stacked()) {
-      const i = regions.indexOf(h.region);
-      const from = bases(regions, t)[i] + bases(h.region.countries, t)[h.region.countries.indexOf(h.country)];
-      return [from, from + blockFill(h.country, t)];
+      const j = h.region.countries.indexOf(h.country);
+      const cuts = countryCuts(h.region, t);
+      const fill = blockFill(h.region, t);
+      const end = fill > EPS ? (bases(h.region.countries, t)[j] + blockFill(h.country, t)) / fill : 0;
+      const [xb] = columnCuts(regionRects(h.region, t), [end]);
+      return clipRects(regionRects(h.region, t), cuts[j], xb);
     }
-    if (h.kind === "year" && !stacked()) return [h.year.start, h.year.end];
-    return null;
+    if (h.kind === "year" && !stacked()) return rowRects(h.year.start, Math.min(h.year.end, top), rows);
+    return [];
   }
 
   const sameBlock = (a, b) => a === b || (a && b && a.kind === b.kind && a.country === b.country && a.year === b.year &&
@@ -736,9 +788,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
 
   function updateHover() {
     const h = shown();
-    const span = h === null ? null : spanOf(h);
-    const top = thresholds[thresholds.length - 1].total;
-    const rects = span === null ? [] : rowRects(span[0], Math.min(span[1], top), rows);
+    const rects = h === null ? [] : rectsOf(h);
     const d = outlinePath(rects, cell);
     hoverHalo.setAttribute("d", d);
     hoverPath.setAttribute("d", d);
