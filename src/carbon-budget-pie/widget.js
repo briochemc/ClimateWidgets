@@ -61,13 +61,15 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
   // ---- layout -----------------------------------------------------------------------------------
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
   let w, D, R, cx, cy, svgH, labelFont;
+  let side;
   function applyLayout(newW) {
     w = newW;
-    D = Math.min(PIE_MAX, w - 56);   // room either side for the limit ticks' labels
+    side = clamp(Math.round(w * 0.17), 60, 104);   // room either side for the slice labels
+    D = Math.min(PIE_MAX, w - 2 * side);
     R = D / 2;
     cx = w / 2;
-    cy = 22 + R;
-    svgH = D + 44;
+    cy = 26 + R;
+    svgH = D + 52;
     labelFont = w < 420 ? 12 : 13;
   }
   applyLayout(maxW);
@@ -243,7 +245,7 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
 
   // ---- drawing ----------------------------------------------------------------------------------
   let slices = [];
-  let sliceGroup, restPath, tickGroup, pickHalo, pickPath, pickLabel;
+  let sliceGroup, restPath, tickGroup, labelGroup, pickHalo, pickPath, pickLabel;
 
   function build() {
     svg.setAttribute("width", w.toFixed(0));
@@ -252,6 +254,7 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
     restPath = svgEl("path", {fill: COLOURS.bands[0], "data-rest": "1"}, svg);
     sliceGroup = svgEl("g", {stroke: "#fff", "stroke-width": 0.75, "stroke-linejoin": "round"}, svg);
     tickGroup = svgEl("g", {"pointer-events": "none"}, svg);
+    labelGroup = svgEl("g", {"pointer-events": "none", "font-size": 12, fill: "#333"}, svg);
     pickHalo = svgEl("path", {fill: "none", stroke: "#fff", "stroke-width": 4, "stroke-linejoin": "round", "pointer-events": "none"}, svg);
     pickPath = svgEl("path", {fill: "none", stroke: "#111", "stroke-width": 1.5, "stroke-linejoin": "round", "pointer-events": "none"}, svg);
     pickLabel = svgEl("text", {
@@ -270,11 +273,12 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
     });
     restPath.setAttribute("d", cum < W - EPS ? wedgePath(cum / W, 1) : "");
 
-    // The other limits, as ticks on the rim of the grey with their labels outside it.
+    // The limits as ticks on the rim with their labels outside it: the chosen one at twelve
+    // o'clock, where the circle closes, and the smaller ones on the grey.
     tickGroup.replaceChildren();
     thresholds.forEach((th, i) => {
-      if (i === limitIndex || th.total > W + EPS) return;
-      const f = th.total / W;
+      if (th.total > W + EPS) return;
+      const f = i === limitIndex ? 1 : th.total / W;
       const [x0, y0] = rim(f, R - 10), [x1, y1] = rim(f, R + 6), [lx, ly] = rim(f, R + 16);
       svgEl("path", {d: `M${x0.toFixed(1)},${y0.toFixed(1)}L${x1.toFixed(1)},${y1.toFixed(1)}`, stroke: "#222", "stroke-width": 1.5}, tickGroup);
       const label = svgEl("text", {
@@ -283,11 +287,49 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
       }, tickGroup);
       label.textContent = th.label;
     });
+    drawSliceLabels(W);
 
     yearLabel.textContent = Math.floor(t + EPS);
     totalLabel.textContent = `${formatGt(cum)} of ${formatGt(W)} GtCO₂ for ${thresholds[limitIndex].label} (${Math.round(100 * cum / W)}%)`;
     if (String(slider.value) !== String(Math.floor(t + EPS))) slider.value = Math.floor(t + EPS);
     updatePick();
+  }
+
+  // The ten biggest slices named outside the rim, with a leader from each slice's middle.
+  // Labels on each side of the circle are sorted by height and pushed a line apart, so the
+  // run of recent years that are all among the biggest still read.
+  const LABEL_GAP = 14;
+  function drawSliceLabels(W) {
+    labelGroup.replaceChildren();
+    if (mode === "none") return;
+    const top = slices.map(s => ({s, amount: Math.min(s.to, W) - s.from})).filter(d => d.amount > EPS)
+      .sort((a, b) => b.amount - a.amount).slice(0, 10);
+    const items = top.map(d => {
+      const mid = (d.s.from + Math.min(d.s.to, W)) / 2 / W;
+      const a = angle(mid);
+      return {s: d.s, mid, right: Math.sin(a) >= 0, y: cy - Math.cos(a) * (R + 12)};
+    });
+    for (const right of [true, false]) {
+      const list = items.filter(it => it.right === right).sort((p, q) => p.y - q.y);
+      for (let i = 1; i < list.length; i++) if (list[i].y < list[i - 1].y + LABEL_GAP) list[i].y = list[i - 1].y + LABEL_GAP;
+      for (let i = list.length - 1; i >= 0; i--) {
+        const lim = i === list.length - 1 ? cy + R + 14 : list[i + 1].y - LABEL_GAP;
+        if (list[i].y > lim) list[i].y = lim;
+      }
+      const dir = right ? 1 : -1;
+      for (const it of list) {
+        const [x0, y0] = rim(it.mid, R - 3);
+        const x1 = cx + dir * (R + 8), x2 = cx + dir * (R + 16);
+        svgEl("path", {
+          d: `M${x0.toFixed(1)},${y0.toFixed(1)}L${x1.toFixed(1)},${it.y.toFixed(1)}L${x2.toFixed(1)},${it.y.toFixed(1)}`,
+          fill: "none", stroke: "#777", "stroke-width": 0.8,
+        }, labelGroup);
+        const text = svgEl("text", {
+          x: (x2 + dir * 3).toFixed(1), y: it.y.toFixed(1), "dominant-baseline": "central", "text-anchor": right ? "start" : "end",
+        }, labelGroup);
+        text.textContent = nameOf(it.s);
+      }
+    }
   }
 
   // The slice picked out (by a click, or under the mouse): outlined and named at its middle.
@@ -312,7 +354,7 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
     updateStatus();
   }
 
-  const nameOf = s => s.kind === "country" ? s.block.name : s.kind === "region" ? s.block.name
+  const nameOf = s => s.kind === "country" ? (s.block.members ? `${s.block.name}, ${s.block.region.name}` : s.block.name) : s.kind === "region" ? s.block.name
     : s.kind === "year" ? String(s.block.year) : s.kind === "decade" ? s.block.label : "Emitted";
   const sameBlock = (a, b) => a && b && a.kind === b.kind && (a.kind === "all" || a.kind === "rest" ||
     (a.kind === "decade" ? a.block.from === b.block.from : a.block === b.block));
