@@ -18,7 +18,7 @@ const perCapita = view(createCo2PerCapitaWidget({data}));
 
 **Area is emissions.** China's wedge is the widest and not the longest; the United States' is a third as wide and twice as long; India's is nearly as wide as China's and a quarter as long. Read the area and the three come out at about 28%, 12% and 7.5% of the world's CO₂.
 
-**The tall slivers.** Qatar, Kuwait, Bahrain, the Emirates and Saudi Arabia are at the top of the ranking at twenty to forty tonnes a person, from gas flaring and oil as much as from what their people burn; they are so thin that the radial scale is set to fit every country of three million people or more, and the few that overshoot are marked with a dot at the rim.
+**The tall slivers.** Qatar, Kuwait, Bahrain, the Emirates and Saudi Arabia are at the top of the ranking at twenty to forty tonnes a person, from gas flaring and oil as much as from what their people burn; the radial scale is fixed at 25 tonnes a year (2,000 since 1850), so the frame never moves as the years play, and the few that overshoot it are cut at the rim and marked with a dot.
 
 **History changes the ranking.** Switch to *Since 1850*: Canada, the United States, Russia, Australia and the United Kingdom move to the top, at well over a thousand tonnes for each person alive today, while China's 250 is a sixth of the United States' and India's 73 a twentieth. The 1850 ranking is a different world again: land clearing, not coal, put New Zealand, the United States, Canada and Australia at the top.
 

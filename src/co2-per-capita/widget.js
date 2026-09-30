@@ -24,7 +24,10 @@ const FIGURE_WIDTH = 1280;   // twice the other widgets': the wedges need the ro
 const MIN_WIDTH = 320;
 const ACCENT = "#0b57d0";
 const EPS = 1e-9;
-const POP_MIN_FOR_SCALE = 3;   // millions: the radial scale fits every country at least this big
+// The radial scale's top, tonnes per person, fixed for each mode: 25 a year holds every big
+// emitter of today (the Gulf states overshoot, as did the land-clearing decades of a century
+// ago); 2,000 since 1850 holds Canada, the highest, at 1,950.
+const SCALE_MAX = {year: 25, cumulative: 2000};
 const FULL_TURN_POP = 10000;   // millions: a full turn of the circle is ten billion people
 
 export const MODES = ["year", "cumulative"];
@@ -228,10 +231,9 @@ export function createCo2PerCapitaWidget({data, width = FIGURE_WIDTH, year, mode
       co2 += e;
     }
     rows.sort((a, b) => b.v - a.v || b.pop - a.pop);
-    // The scale fits every country of some size; the tiny rich ones may overshoot and are clipped.
-    const fitted = rows.filter(r => r.pop >= POP_MIN_FOR_SCALE);
-    const vMax = niceCeil(Math.max(...(fitted.length ? fitted : rows).map(r => r.v), 1e-6));
-    return {rows, pop, co2, world: pop > 0 ? co2 / pop : 0, vMax};
+    // The radial scale is fixed per mode, so the frame never moves; whatever overshoots it is
+    // clipped at the rim and marked.
+    return {rows, pop, co2, world: pop > 0 ? co2 / pop : 0, vMax: SCALE_MAX[mode]};
   }
 
   // ---- geometry -------------------------------------------------------------------------------
@@ -538,6 +540,7 @@ export function createCo2PerCapitaWidget({data, width = FIGURE_WIDTH, year, mode
     updateModeButtons(mode);
     selected = null;
     hovered = null;
+    vMaxNow = null;   // the other mode's scale, snapped to rather than glided through
     requestRender();
     emit();
   }
@@ -662,12 +665,7 @@ function joinList(items) {
   return items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
-// The first of 1, 2, 2.5, 5, 10 × 10ⁿ at or above v.
-function niceCeil(v) {
-  const mag = Math.pow(10, Math.floor(Math.log10(v)));
-  for (const m of [1, 2, 2.5, 5, 10]) if (m * mag >= v - EPS) return m * mag;
-  return 10 * mag;
-}
+// The first of 1, 2, 5, 10 × 10ⁿ at or above v.
 function niceStep(v) {
   const mag = Math.pow(10, Math.floor(Math.log10(v)));
   for (const m of [1, 2, 5, 10]) if (m * mag >= v - EPS) return m * mag;
