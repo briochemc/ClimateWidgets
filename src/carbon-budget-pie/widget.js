@@ -216,7 +216,9 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
           if (yr.year < from || yr.year > to) continue;
           amount += yr.year <= y ? yr.total : yr.year === y + 1 ? clamp(tt - y, 0, 1) * yr.total : 0;
         }
-        push("decade", {from, to, label: `${from}s`}, amount, COLOURS.decades[d % COLOURS.decades.length]);
+        // The last decade is not a whole one: it is named by the years the data cover.
+        const partial = to > lastYear;
+        push("decade", {from, to, partial, label: partial ? `${from}–${lastYear}` : `${from}s`}, amount, COLOURS.decades[d % COLOURS.decades.length]);
       }
     }
     return out;
@@ -387,7 +389,7 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
         const b = s.block;
         return {head: `${b.year}${b.projected ? " (projected)" : ""}. `, body: `${formatGt(b.total)} GtCO₂ that year: ${formatGt(b.fossil)} from fossil fuels and cement, ${formatGt(b.landUse)} from land use; ${share}.`};
       }
-      if (s.kind === "decade") return {head: `The ${s.block.label}. `, body: `${formatGt(amount)} GtCO₂: ${share}.`};
+      if (s.kind === "decade") return {head: `${s.block.partial ? "" : "The "}${s.block.label}. `, body: `${formatGt(amount)} GtCO₂: ${share}.`};
     }
     const left = W - cum;
     return {
