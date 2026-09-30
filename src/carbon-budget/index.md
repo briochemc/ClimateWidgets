@@ -2,7 +2,7 @@
 
 Warming tracks the total amount of carbon dioxide ever emitted, so a limit on warming is a limit on the total: a carbon budget. Every square here is a billion tonnes of CO₂ (1 GtCO₂). The coloured squares are what has been emitted since 1850, about 2,770 of them by the end of 2025, stacked by region and, within a region, by country. The grey squares are what is left, and the three lines are where the budget runs out for 1.5, 1.7 and 2 °C of warming: 90, 450 and 1,010 GtCO₂ from the start of 2026, by the Global Carbon Budget 2025's update of Forster et al. (2025). At the 2025 rate of 42 GtCO₂ a year, that is about 2, 11 and 24 years.
 
-Left alone, the figure winds back to 1850 and plays the years through. Move the slider or click anything to stop it; *Play tour* starts it again. Hover a square to see whose it is: the country is named and its whole contribution outlined. The *Colour* toggle lays the same squares out by year instead, oldest at the bottom, or by decade.
+Left alone, the figure winds back to 1850 and plays the years through. Move the slider or click anything to stop it; *Play tour* starts it again. Click or tap a square to see whose it is: the country is named and its whole contribution outlined, and stays so until you click it again. The *Colour* toggle lays the same squares out by year instead, oldest at the bottom, or by decade.
 
 ```js
 import {createCarbonBudgetWidget, budgetSeries, budgetThresholds, formatGt} from "./widget.js";
@@ -16,11 +16,11 @@ const budget = view(createCarbonBudgetWidget({data}));
 
 ## What to look for
 
-**Three regions, three-quarters.** Asia, Europe and North America have emitted 30%, 24% and 24% of the total; South America 8%, Africa 6%, the Middle East 3%. Hover inside the blocks and the countries come out: the United States alone is a fifth of everything since 1850, China an eighth, and then Russia, Brazil, Germany, Indonesia and India at three to five percent each. Brazil and Indonesia are there for their forests, not their fuel: hover them and compare the two.
+**Three regions, three-quarters.** Asia, Europe and North America have emitted 30%, 24% and 24% of the total; South America 8%, Africa 6%, the Middle East 3%. Click inside the blocks and the countries come out: the United States alone is a fifth of everything since 1850, China an eighth, and then Russia, Brazil, Germany, Indonesia and India at three to five percent each. Brazil and Indonesia are there for their forests, not their fuel.
 
 **The pace.** Switch the colour to *Year* and play the tour. The years go by at a steady rate and the fill does not: the first fifty years lay down about two hundred squares, the last fifty about 1,650. Half of everything emitted since 1850 has been emitted since 1986, and a third of it since 2000. Each row of the grid is 60 GtCO₂, about a year and a half of today's emissions, and it takes the fill about three rows to add a tenth of a degree of warming.
 
-**Land use first.** In *Year* colouring, the palest squares along the bottom are mostly deforestation: in 1850 fossil fuels were 0.2 GtCO₂ a year and clearing land 2.7. Land use stayed the larger of the two until the late 1950s, and its total since 1850, some 900 GtCO₂, is a third of the whole. Hover a year and the read-out gives the two parts.
+**Land use first.** In *Year* colouring, the palest squares along the bottom are mostly deforestation: in 1850 fossil fuels were 0.2 GtCO₂ a year and clearing land 2.7. Land use stayed the larger of the two until the late 1950s, and its total since 1850, some 900 GtCO₂, is a third of the whole. Click a year and the read-out gives the two parts.
 
 **How long the budget looked.** Drag the slider to an earlier year and the read-out says how many years the 1.5 °C budget would have lasted at that year's rate: about 175 years in 1950, 48 in 1990, 34 in 2000, 2 at the end of 2025. The budget was never large; emissions grew into it.
 

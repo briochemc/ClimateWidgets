@@ -233,7 +233,9 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   const rows = Math.ceil(reach / COLUMNS - EPS);
   let t = clamp(Math.round(Number(year)) || lastYear, firstYear, lastYear);
   let shownYear = null; // the integer year last drawn in full, chronological layout
-  let hovered = null;   // what is under the pointer (see hitAt), or null
+  let selected = null;  // the block picked by a click or tap (see hitAt), or null
+  let hovered = null;   // the block under a mouse pointer, shown over the selection, or null
+  const shown = () => hovered ?? selected;
   let glide = null, raf = null; // the animation in flight
 
   const fillAt = tt => fillOf(series, worldByYear, worldCumulative, tt);
@@ -347,7 +349,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "carbon-budget");
   svg.setAttribute("role", "img");
-  svg.style.cssText = "display:block;overflow:visible;touch-action:pan-y;";
+  svg.style.cssText = "display:block;overflow:visible;touch-action:pan-y;cursor:pointer;";
   const scroller = document.createElement("div");
   scroller.style.cssText = "max-width:100%;overflow-x:auto;";
   scroller.appendChild(svg);
@@ -379,7 +381,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
 
   const hint = document.createElement("div");
   hint.style.cssText = "padding:8px 0 0;color:#888;font-size:14px;";
-  const HINT_IDLE = "Drag the slider to a year, or hover a square to see whose it is.";
+  const HINT_IDLE = "Click or tap a square to see whose it is; click it again to let go. Drag the slider to a year.";
   const HINT_TOUR = "Playing the years through — move the slider or click anything to take over; Play tour starts it again.";
   hint.textContent = HINT_IDLE;
   container.appendChild(hint);
@@ -548,8 +550,8 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
     yearLabel.textContent = y;
     totalLabel.textContent = `${formatGt(cum)} GtCO₂ since ${firstYear}${years[y - firstYear].projected ? " (projected)" : ""}`;
     if (String(slider.value) !== String(y)) slider.value = y;
-    if (hovered === null) updateStatus();
-    else updateHover(); // what is under the pointer may have moved or grown
+    if (shown() === null) updateStatus();
+    else updateHover(); // the outlined block may have moved or grown
   }
 
   // ---- hit-testing ------------------------------------------------------------------------------
@@ -565,14 +567,14 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
     return square < thresholds[thresholds.length - 1].total ? square : null;
   }
 
-  // What is at a position in the fill, for the current layout and time: {square, kind, ...}.
-  // Stacked: a country (with its region and the [from, to) of its block), or "grey" for a
-  // square not yet reached. Chronological: a year, which for a square past the fill is the
-  // year that will emit it; past the data, "grey".
+  // What is at a position in the fill, for the current layout and time: {kind, ...}. Stacked:
+  // a country (with its region), or "grey" for a square not yet reached. Chronological: a
+  // year, which for a square past the fill is the year that will emit it; past the data,
+  // "grey". A block is identified by what it is, not where it is, since a country's block
+  // moves and grows as time passes; spanOf finds it again.
   function hitAt(square) {
     if (stacked()) {
-      const cum = fillAt(t);
-      if (square >= cum - EPS) return {square, kind: "grey"};
+      if (square >= fillAt(t) - EPS) return {square, kind: "grey"};
       const at = bases(regions, t);
       let i = regions.length - 1;
       while (i > 0 && square < at[i] - EPS) i--;
@@ -580,28 +582,50 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
       const cat = bases(region.countries, t);
       let j = region.countries.length - 1;
       while (j > 0 && square < cat[j] - EPS) j--;
-      const country = region.countries[j];
-      const from = at[i] + cat[j];
-      return {square, kind: "country", country, region, from, to: from + blockFill(country, t)};
+      return {square, kind: "country", country: region.countries[j], region};
     }
     if (square >= used - EPS) return {square, kind: "grey"};
-    const yr = years[upperBound(yearEnds, square)];
-    return {square, kind: "year", year: yr, from: yr.start, to: yr.end};
+    return {square, kind: "year", year: years[upperBound(yearEnds, square)]};
   }
 
-  function hover(e) {
+  // A block's [from, to) in the fill at the current time, or null if the layout has no block
+  // for it (a country in the chronological layout, a year in the stacked one, or grey).
+  function spanOf(h) {
+    if (h.kind === "country" && stacked()) {
+      const i = regions.indexOf(h.region);
+      const from = bases(regions, t)[i] + bases(h.region.countries, t)[h.region.countries.indexOf(h.country)];
+      return [from, from + blockFill(h.country, t)];
+    }
+    if (h.kind === "year" && !stacked()) return [h.year.start, h.year.end];
+    return null;
+  }
+
+  const sameBlock = (a, b) => a === b || (a && b && a.kind === b.kind && a.country === b.country && a.year === b.year &&
+    (a.kind !== "grey" || Math.floor(a.square) === Math.floor(b.square)));
+
+  // A click or tap selects the block, and stays selected until the block is clicked again or
+  // a grey square is; this is what works on a touch screen. A mouse also previews the block
+  // it is over, on top of the selection, and lets go of the preview when it leaves the grid.
+  svg.addEventListener("click", e => {
+    const square = squareAt(e);
+    const hit = square === null ? null : hitAt(square);
+    const next = hit === null || hit.kind === "grey" || sameBlock(hit, selected) ? null : hit;
+    if (sameBlock(next, selected) && hovered === null) return;
+    selected = next;
+    hovered = null;
+    updateHover();
+    emit();
+  });
+  svg.addEventListener("pointerdown", () => stopTour());
+  svg.addEventListener("pointermove", e => {
+    if (e.pointerType !== "mouse") return;
     const square = squareAt(e);
     const next = square === null ? null : hitAt(square);
-    const same = (a, b) => a === b || (a && b && a.kind === b.kind && a.country === b.country && a.year === b.year &&
-      (a.kind !== "grey" || Math.floor(a.square) === Math.floor(b.square)));
-    if (!same(next, hovered)) {
+    if (!sameBlock(next, hovered)) {
       hovered = next;
       updateHover();
     }
-  }
-  svg.addEventListener("pointermove", hover);
-  svg.addEventListener("pointerdown", e => { stopTour(); hover(e); });
-  // A finger lifting off is not a mouse leaving: keep the last touched square's read-out.
+  });
   svg.addEventListener("pointerleave", e => {
     if (e.pointerType !== "mouse" || hovered === null) return;
     hovered = null;
@@ -622,9 +646,9 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
     };
   }
 
-  // The block under the pointer: a country and what it has emitted so far, or a year and
-  // what was emitted in it.
-  function describeHovered(h) {
+  // The block picked out: a country and what it has emitted so far, or a year and what was
+  // emitted in it.
+  function describeBlock(h) {
     const y = Math.floor(t + EPS);
     if (h.kind === "grey") {
       const i = thresholds.findIndex(th => h.square < th.total - EPS);
@@ -654,7 +678,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
 
   function updateStatus() {
     const dflt = describeDefault();
-    const {head, body} = hovered === null ? dflt : describeHovered(hovered);
+    const {head, body} = shown() === null ? dflt : describeBlock(shown());
     statusHead.textContent = head;
     statusBody.textContent = body;
     const th = thresholds.map(th => `${th.budget} GtCO₂ for ${th.label}`).join(", ");
@@ -665,14 +689,10 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
   }
 
   function updateHover() {
-    if (hovered === null) {
-      hoverPath.setAttribute("d", "");
-    } else {
-      // Re-find the block, since a country's block moves and grows as time passes.
-      if (hovered.kind === "country" || hovered.kind === "grey") hovered = hitAt(hovered.square);
-      const top = thresholds[thresholds.length - 1].total;
-      hoverPath.setAttribute("d", hovered.kind === "grey" ? "" : outlinePath(rowRects(hovered.from, Math.min(hovered.to, top), rows), cell));
-    }
+    const h = shown();
+    const span = h === null ? null : spanOf(h);
+    const top = thresholds[thresholds.length - 1].total;
+    hoverPath.setAttribute("d", span === null ? "" : outlinePath(rowRects(span[0], Math.min(span[1], top), rows), cell));
     updateStatus();
   }
 
@@ -698,7 +718,9 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
     if (m === mode || !modes.includes(m)) return;
     mode = m;
     updateModeButtons(mode);
-    if (hovered) hovered = hitAt(hovered.square); // the same square means something else now
+    // A country means nothing in the chronological layout, nor a year in the stacked one.
+    selected = null;
+    hovered = null;
     applyColours();
     emit();
   }
@@ -734,6 +756,7 @@ export function createCarbonBudgetWidget({data, width = FIGURE_WIDTH, year, esti
       year: y,
       estimate: estimateId,
       colour: mode,
+      selected: selected === null ? null : selected.kind === "country" ? {country: selected.country.name, region: selected.region.name} : {year: selected.year.year},
       emitted: Math.round(cum),
       remaining: Object.fromEntries(thresholds.map(th => [th.limit, Math.round(th.total - cum)])),
     };
