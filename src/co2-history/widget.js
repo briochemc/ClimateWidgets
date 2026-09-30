@@ -142,7 +142,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   // The milestones' ages, oldest last, and where the tour rests to show each one: the window
   // in which the event sits about two fifths of the way in from the left.
   const milestones = MILESTONES.map(m => ({...m, age: tEnd - m.t})).filter(m => m.age > 0 && m.age < LOOK_MAX)
-    .sort((a, b) => a.age - b.age);
+    .sort((a, b) => a.age - b.age).map((m, i) => ({...m, tier: 1 + (i % 3)}));
   const milestoneAlpha = m => fadeIn(m.age * 1.02, m.age * 1.06) * fadeOut(m.age * 5, m.age * 8);
   const tFirstObs = Math.min(mloMonthly[0]?.[0] ?? Infinity, spoMonthly[0]?.[0] ?? Infinity);
   const latest = mloMonthly[mloMonthly.length - 1];
@@ -438,7 +438,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     context.fill();
     haloText(latestLabel, Math.min(plotR - 4, endX + 4), endY - dotR - 3);
 
-    drawMilestones(a, t0, t1);
+    drawMilestones();
 
     // Hover cursor: a vertical rule at the pointer's time.
     if (hoverT !== null) {
@@ -476,41 +476,22 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   }
 
   // Short labels a little above the curve, each with a leader line down to the record's
-  // value at that moment, so the eye need not travel to the top of the plot. A label sits a
-  // tenth of the plot's height above its point, and moves up another tenth at a time until
-  // its box clears every label already placed, the legend's corner, and their leaders, and
-  // no placed label sits over its own leader.
-  function drawMilestones(a, t0, t1) {
-    const up = milestones.map(m => ({m, alpha: milestoneAlpha(m), mx: x(m.t)}))
-      .filter(d => d.alpha > 0.02).sort((p, q) => p.mx - q.mx);
+  // value at that moment, so the eye need not travel to the top of the plot. Each label has
+  // a fixed tier, one, two or three tenths of the plot's height above its point, cycling in
+  // order of age, so that neighbours in time, the ones that come close on screen, never
+  // share a height, and a label's position never jumps as the window widens: it only
+  // follows its own point.
+  function drawMilestones() {
+    const up = milestones.map(m => ({m, alpha: milestoneAlpha(m), mx: x(m.t)})).filter(d => d.alpha > 0.02);
     if (!up.length) return;
     context.font = noteFont;
-    const legend = legendItems(a, t0, t1);
-    const boxes = [];   // placed boxes {x0, x1, y0, y1} and, for labels, their leader {mx, yTop, yBot}
-    if (legend.length) {
-      const legendW = Math.max(...legend.map(([n]) => context.measureText(n).width)) + 32;
-      boxes.push({x0: plotL, x1: plotL + legendW, y0: PLOT_T, y1: PLOT_T + 4 + legend.length * 15});
-    }
-    // A tenth of the plot's height above the point, and another tenth per step up.
-    const LIFT = PLOT_H / 10, STEP = PLOT_H / 10, H = 7;
-    const clear = (x0, x1, y0, y1) => boxes.every(b => x1 < b.x0 || x0 > b.x1 || y1 < b.y0 || y0 > b.y1);
-    const crosses = (mx, yTop, yBot) => boxes.some(b => mx >= b.x0 - 2 && mx <= b.x1 + 2 && yBot >= b.y0 && yTop <= b.y1);
+    const H = 7;
     for (const d of up) {
       const v = co2At(d.m.t);
       d.py = v === null ? PLOT_B : y(v);
       const half = context.measureText(d.m.label).width / 2 + 4;
       d.lx = clamp(d.mx, plotL + half, plotR - half);
-      const x0 = d.lx - half, x1 = d.lx + half;
-      let ly = Math.min(d.py - LIFT, PLOT_B - LIFT);
-      for (let k = 0; k < 20; k++, ly -= STEP) {
-        if (ly - H < PLOT_T + 2) { ly = PLOT_T + 2 + H; break; }
-        const leaderOk = !crosses(d.mx, ly + H, d.py - 3) &&
-          // and no earlier leader passes through this box
-          boxes.every(b => b.mx === undefined || b.mx < x0 - 2 || b.mx > x1 + 2 || b.yBot < ly - H || b.yTop > ly + H);
-        if (clear(x0, x1, ly - H, ly + H) && leaderOk) break;
-      }
-      d.ly = ly;
-      boxes.push({x0, x1, y0: ly - H, y1: ly + H, mx: d.mx, yTop: ly + H, yBot: d.py - 3});
+      d.ly = clamp(d.py - d.m.tier * PLOT_H / 10, PLOT_T + H + 2, PLOT_B - H);
     }
     // Leaders first, then the labels, whose halos cover any leader passing under them.
     for (const d of up) {
