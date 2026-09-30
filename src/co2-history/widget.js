@@ -49,15 +49,15 @@ const PREINDUSTRIAL = 278, ICE_AGE = 185;
 // not about to fall off the left), so a few are up at a time and none collide. Times are
 // years CE; "years ago" events are counted from 1950, as the ice cores are.
 const MILESTONES = [
-  {t: 2015.95, label: "2015: Paris Agreement"},
   {t: 1958.2, label: "1958: Keeling begins at Mauna Loa"},
+  {t: 1936.7, label: "1936: the last thylacine dies"},
   {t: 1770, label: "c. 1770: Industrial Revolution begins"},
-  {t: 1000, label: "c. 1000: Vikings reach America"},
-  {t: -2560, label: "4,600 years ago: Great Pyramid built"},
-  {t: 1950 - 11700, label: "11,700 years ago: last ice age ends, farming begins"},
-  {t: 1950 - 21000, label: "21,000 years ago: last ice age at its peak"},
-  {t: 1950 - 65000, label: "65,000 years ago: humans reach Australia"},
-  {t: 1950 - 300000, label: "300,000 years ago: first Homo sapiens"},
+  {t: 1680, label: "c. 1680: the dodo is gone"},
+  {t: -2050, label: "4,000 years ago: the last woolly mammoths"},
+  {t: 1950 - 10000, label: "10,000 years ago: the last sabre-toothed cats"},
+  {t: 1950 - 11700, label: "11,700 years ago: the last ice age ends"},
+  {t: 1950 - 40000, label: "40,000 years ago: the last Neanderthals"},
+  {t: 1950 - 300000, label: "300,000 years ago: the first Homo sapiens"},
   {t: 1950 - 773000, label: "773,000 years ago: Earth's magnetic field last flips"},
 ];
 
@@ -138,7 +138,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   // in which the event sits about two fifths of the way in from the left.
   const milestones = MILESTONES.map(m => ({...m, age: tEnd - m.t})).filter(m => m.age > 0 && m.age < LOOK_MAX)
     .sort((a, b) => a.age - b.age);
-  const milestoneAlpha = m => fadeIn(m.age * 1.02, m.age * 1.06) * fadeOut(m.age * 8, m.age * 12);
+  const milestoneAlpha = m => fadeIn(m.age * 1.02, m.age * 1.06) * fadeOut(m.age * 5, m.age * 8);
   const tFirstObs = Math.min(mloMonthly[0]?.[0] ?? Infinity, spoMonthly[0]?.[0] ?? Infinity);
   const latest = mloMonthly[mloMonthly.length - 1];
   const latestLabel = `${monthName(latest[0])} ${Math.floor(latest[0])}: ${Math.round(latest[1])} ppm`;
@@ -472,12 +472,16 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
 
   // Dashed rules with their labels written upwards from the axis, to the right of the rule.
   function drawMilestones() {
+    // Two labels closer than a line of text would overprint; the fainter one gives way.
+    const up = milestones.map(m => ({m, alpha: milestoneAlpha(m), mx: x(m.t)}))
+      .filter(d => d.alpha > 0.02).sort((a, b) => a.mx - b.mx);
+    for (let i = 1; i < up.length; i++) {
+      if (up[i].mx - up[i - 1].mx < 16) (up[i].alpha < up[i - 1].alpha ? up[i] : up[i - 1]).alpha = 0;
+    }
     context.font = noteFont;
     context.textAlign = "left"; context.textBaseline = "top";
-    for (const m of milestones) {
-      const alpha = milestoneAlpha(m);
+    for (const {m, alpha, mx} of up) {
       if (alpha <= 0.02) continue;
-      const mx = x(m.t);
       context.globalAlpha = alpha;
       context.strokeStyle = "rgba(0,0,0,0.3)";
       context.lineWidth = 1;
@@ -764,7 +768,9 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   // years are on screen. One way, then it stops; any click or drag ends it early.
   const TOUR_HOLD = 3200;
   const TOUR_GLIDE = 1600;
-  const tourStops = [5, ...milestones.map(m => m.age * 2.5).filter(l => l < LOOK_MAX / 1.15), LOOK_MAX];
+  // Milestones close in age share a stop, so the tour does not pause twice on one view.
+  const tourStops = [5, ...milestones.map(m => m.age * 2.5).filter(l => l < LOOK_MAX / 1.5), LOOK_MAX]
+    .filter((l, i, arr) => i === 0 || l > arr[i - 1] * 1.5 || i === arr.length - 1);
   let touring = false, tourTimer = null, tourWatcher = null;
 
   function stopTour() {
