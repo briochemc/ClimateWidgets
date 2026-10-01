@@ -26,3 +26,6 @@ dist/
 
 # RADIS environment for scripts/atmospheric-transmission.py
 .venv-radis/
+
+# Static exports of the atmospheric-composition grids, generated outside the site
+/atmospheric-composition-zoom*.svg
