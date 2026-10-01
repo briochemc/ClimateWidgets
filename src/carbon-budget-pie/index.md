@@ -12,7 +12,7 @@ const data = await FileAttachment("../carbon-budget/data/carbon-budget.json").js
 const pie = view(createCarbonBudgetPieWidget({data}));
 ```
 
-Left alone, the figure winds back to 1850 and plays the years through. Move the slider or click anything to stop it; *Play tour* starts it again. *Slices* cuts the emitted part five ways: as one piece, by region, by country (every country its own slice, colours cycling so that neighbours never match), by year, or by decade. There is no key: click or tap a slice and it is named, with its share of what has been emitted and of the budget, until you click it again.
+Left alone, the figure winds back to 1850, plays the years through once and stops at the end. Move the slider or click anything to stop it early; *Play tour* runs it again. *Slices* cuts the emitted part four ways: by decade, by year, by region, or by country (every country its own slice, colours cycling so that neighbours never match). There is no key: click or tap a slice and it is outlined and named, until you click it again. The biggest slices are named outside the rim, and so is Australia's whatever its size. The year is written at the centre of the pie, and the slider above it is as wide as the pie.
 
 ## What to look for
 
@@ -31,12 +31,12 @@ import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
 ```js
 display(embedSnippets({
   embedPath: "carbon-budget-pie/embed",
-  height: 660,
+  height: 580,
   title: "The carbon budget as a pie",
   note: "The pie is 420&nbsp;px across in a frame 480&nbsp;px wide or more and shrinks with the frame below " +
-    "that; allow about 640&nbsp;px of height at phone width, where the buttons wrap. The embed page accepts " +
-    "<code>?year=1990</code> to open on that year, <code>?colour=region</code>, <code>country</code>, " +
-    "<code>year</code> or <code>decade</code> to open sliced that way, <code>?limit=2</code> for the 2 °C pie, " +
+    "that; allow about 560&nbsp;px of height at phone width, where the buttons wrap. The embed page accepts " +
+    "<code>?year=1990</code> to open on that year, <code>?colour=year</code>, <code>region</code> or " +
+    "<code>country</code> to open sliced that way (decades are the default), <code>?limit=2</code> for the 2 °C pie, " +
     "and <code>?estimate=ipcc</code> for the IPCC budgets.",
   script: `<div id="carbon-budget-pie"></div>
 
@@ -47,7 +47,7 @@ display(embedSnippets({
   const data = await fetch("${cdnUrl("carbon-budget/data/carbon-budget.json")}")
     .then(r => r.json());
 
-  // Options: {year: 1990}, {colour: "country"} (or "region", "year", "decade"),
+  // Options: {year: 1990}, {colour: "country"} (or "region", "year"; "decade" is the default),
   // {limit: 2} (or 1.5, 1.7), {estimate: "ipcc"}.
   document.getElementById("carbon-budget-pie")
     .appendChild(createCarbonBudgetPieWidget({data}));

@@ -1,11 +1,11 @@
 // Atmospheric CO₂ across every scale we have measured it on: the weekly Mauna Loa record,
 // the Keeling curve since 1958, two centuries of Law Dome and Siple Station ice, and the
 // 800,000-year Antarctic composite. One chart, one time axis that always ends at the latest
-// week, and a "look back" slider that stretches the axis from a year to 800,000 years, so
-// the reader zooms out from today's seasonal wiggle to the ice ages in one motion. The Play
-// tour does that zoom by itself, stop by stop, after the second half of Andy Jacobson's
-// NOAA animation (https://gml.noaa.gov/ccgg/trends/history.html); its first half, the
-// months sweeping past on a latitude panel, is the co2-latitude widget.
+// week, and a "look back" slider under that axis that stretches it from a year to 800,000
+// years, so the reader zooms out from today's seasonal wiggle to the ice ages in one motion.
+// The Play tour does that zoom by itself, stop by stop, and stops at the end, after the
+// second half of Andy Jacobson's NOAA animation (https://gml.noaa.gov/ccgg/trends/history.html);
+// its first half, the months sweeping past on a latitude panel, is the co2-latitude widget.
 //
 // Self-contained on purpose: no d3, no other imports, so the script-tag embed is a single
 // ES module import. The data file is built by scripts/co2-history.mjs; see its header for
@@ -27,8 +27,6 @@ const CORE_COLORS = {
   "WAIS Divide": "#17becf",
 };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August",
-  "September", "October", "November", "December"];
 
 // The figure fills its container up to FIGURE_WIDTH and reflows below it; below MIN_WIDTH
 // it stops shrinking and scrolls sideways inside its own wrapper.
@@ -147,7 +145,6 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   const milestones = MILESTONES.map(m => ({...m, age: tEnd - m.t})).filter(m => m.age > 0 && m.age < LOOK_MAX)
     .sort((a, b) => a.age - b.age).map((m, i) => ({...m, tier: 1 + (i % 3)}));
   const milestoneAlpha = m => fadeIn(m.age * 1.02, m.age * 1.06) * fadeOut(m.age * 5, m.age * 8);
-  const tFirstObs = Math.min(mloMonthly[0]?.[0] ?? Infinity, spoMonthly[0]?.[0] ?? Infinity);
   const latest = mloMonthly[mloMonthly.length - 1];
   const latestLabel = `${monthName(latest[0])} ${Math.floor(latest[0])}: ${Math.round(latest[1])} ppm`;
 
@@ -158,56 +155,30 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   })();
 
   // ---- state ----------------------------------------------------------------------------------
-  const presets = [
-    {label: "5 years", look: 5},
-    {label: "Since 1958", look: tEnd - 1957.9},
-    {label: "Since 1750", look: tEnd - 1749},
-    {label: "2,000 years", look: 2000},
-    {label: "10,000 years", look: 10000},
-    {label: "800,000 years", look: LOOK_MAX},
-  ];
-  let look = clamp(lookBack ?? presets[1].look, LOOK_MIN, LOOK_MAX);   // years shown, ending at tEnd
-  let hoverT = null;                    // where the pointer is over the chart, or null
+  const DEFAULT_LOOK = tEnd - 1957.9;   // the Keeling curve, since 1958
+  let look = clamp(lookBack ?? DEFAULT_LOOK, LOOK_MIN, LOOK_MAX);   // years shown, ending at tEnd
   let yLo = 0, yHi = 1, yTargetLo = 0, yTargetHi = 1, ySnap = true;   // y range, animated
 
   // ---- DOM ------------------------------------------------------------------------------------
   const container = document.createElement("div");
   container.style.cssText = "font:16px sans-serif;color:#333;";
 
-  const buttonCss =
-    "font:13px sans-serif;color:#333;background:#fff;border:1px solid #ccc;border-radius:999px;" +
-    "padding:3px 12px;cursor:pointer;";
-  const controls = document.createElement("div");
-  controls.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 0 8px;";
-  const presetButtons = presets.map(p => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = p.label;
-    b.style.cssText = buttonCss;
-    b.addEventListener("click", () => { stopTour(); glideLook(p.look); });
-    controls.appendChild(b);
-    return {el: b, preset: p};
-  });
-  const tourButton = document.createElement("button");
-  tourButton.type = "button";
-  tourButton.textContent = "Play tour";
-  tourButton.style.cssText = buttonCss + "margin-left:auto;";
-  tourButton.addEventListener("click", () => (touring ? stopTour() : startTour(0)));
-  controls.appendChild(tourButton);
-  container.appendChild(controls);
+  const canvas = document.createElement("canvas");
+  canvas.style.cssText = "display:block;touch-action:pan-y;";
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", "Atmospheric CO₂ against time");
+  const context = canvas.getContext("2d");
+  const scroller = document.createElement("div");
+  scroller.style.cssText = "max-width:100%;overflow-x:auto;";
+  scroller.appendChild(canvas);
+  container.appendChild(scroller);
 
-  // The look-back slider is logarithmic, the whole record at the left end and a year at the
-  // right, so pulling it left goes back in time.
+  // The look-back slider sits under the time axis, its track exactly as wide as the axis
+  // (laid out in applyLayout). It is logarithmic, the whole record at the left end and a year
+  // at the right, so pulling it left goes back in time, the way the axis does.
   const SLIDER_STEPS = 1000;
-  // The slider's track is exactly as wide as the plot's time axis (laid out in applyLayout),
-  // with the span it gives written above it.
-  const sliderField = document.createElement("div");
-  sliderField.style.cssText = "font-size:14px;color:#666;padding:0 0 4px;";
-  const sliderOut = document.createElement("span");
-  sliderOut.style.cssText = "color:#333;font-variant-numeric:tabular-nums;";
-  sliderField.append("Look back ", sliderOut);
   const sliderRow = document.createElement("div");
-  sliderRow.style.cssText = "position:relative;height:24px;";
+  sliderRow.style.cssText = "position:relative;height:24px;margin:2px 0 6px;";
   const slider = document.createElement("input");
   slider.type = "range";
   slider.min = 0;
@@ -222,33 +193,20 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     setLook(sliderToLook(Number(slider.value)));
     emit();
   });
-  container.appendChild(sliderField);
   container.appendChild(sliderRow);
 
-  const canvas = document.createElement("canvas");
-  canvas.style.cssText = "display:block;touch-action:pan-y;";
-  canvas.setAttribute("role", "img");
-  canvas.setAttribute("aria-label", "Atmospheric CO₂ against time");
-  const context = canvas.getContext("2d");
-  const scroller = document.createElement("div");
-  scroller.style.cssText = "max-width:100%;overflow-x:auto;";
-  scroller.appendChild(canvas);
-  container.appendChild(scroller);
-
-  const status = document.createElement("div");
-  status.style.cssText = "padding:8px 0 0;color:#555;min-height:1.4em;line-height:1.4;";
-  container.appendChild(status);
-
-  const HINT_IDLE =
-    "Drag the slider to look further back, or pick a span above; hover the chart to read " +
-    "the record under the cursor.";
-  const HINT_TOUR =
-    "Touring: zooming out from the last decades to the ice ages, pausing at each landmark — " +
-    "click anything to take over; Play tour starts it again.";
-  const hint = document.createElement("div");
-  hint.style.cssText = "padding:4px 0 0;color:#888;font-size:14px;";
-  hint.textContent = HINT_IDLE;
-  container.appendChild(hint);
+  // Under the slider, at the left: the Play tour button. The axis says what the slider did.
+  const footer = document.createElement("div");
+  footer.style.cssText = "display:flex;align-items:center;";
+  const tourButton = document.createElement("button");
+  tourButton.type = "button";
+  tourButton.textContent = "Play tour";
+  tourButton.style.cssText =
+    "font:13px sans-serif;color:#333;background:#fff;border:1px solid #ccc;border-radius:999px;" +
+    "padding:3px 12px;cursor:pointer;";
+  tourButton.addEventListener("click", () => (touring ? stopTour() : startTour(0)));
+  footer.append(tourButton);
+  container.appendChild(footer);
 
   // ---- layout ---------------------------------------------------------------------------------
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
@@ -284,7 +242,6 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   // ---- scales ---------------------------------------------------------------------------------
   const tStart = () => tEnd - look;
   const x = t => plotL + ((t - tStart()) / look) * (plotR - plotL);
-  x.invert = px => tStart() + ((px - plotL) / (plotR - plotL)) * look;
   const y = v => PLOT_B - ((v - yLo) / (yHi - yLo)) * PLOT_H;
 
   function sliderToLook(s) {
@@ -334,17 +291,6 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     return [lo - pad, hi + pad * 1.6];   // extra room above for the labels
   }
 
-  // ---- lookups --------------------------------------------------------------------------------
-  // The monthly value nearest a time, if there is one within a month of it.
-  function seriesAt(pts, t) {
-    if (!pts.length) return null;
-    const i = lowerBound(pts, t);
-    const cands = [pts[i - 1], pts[i]].filter(Boolean);
-    let best = null;
-    for (const p of cands) if (!best || Math.abs(p[0] - t) < Math.abs(best[0] - t)) best = p;
-    return best && Math.abs(best[0] - t) < 1 / 12 + 1e-6 ? best : null;
-  }
-
   // ---- rendering ------------------------------------------------------------------------------
   let raf = null;
   function requestRender() { if (raf === null) raf = requestAnimationFrame(frame); }
@@ -370,8 +316,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     context.fillStyle = "#fff";
     context.fillRect(0, 0, w, TOTAL_H);
     drawChart();
-    updateStatus();
-    updateButtons();
+    updateTourButton();
   }
 
   function drawChart() {
@@ -452,12 +397,6 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     haloText(latestLabel, Math.min(plotR - 4, endX + 4), endY - dotR - 3);
 
     drawMilestones();
-
-    // Hover cursor: a vertical rule at the pointer's time.
-    if (hoverT !== null) {
-      context.strokeStyle = "rgba(0,0,0,0.35)";
-      line(x(hoverT), PLOT_T, x(hoverT), PLOT_B);
-    }
     context.restore();
 
     // Axes and tick labels.
@@ -716,48 +655,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     return `${formatInt(Number(l.toPrecision(l < 1000 ? 2 : 3)))} years`;
   }
 
-  // How the read-out names a time: by month wherever there are monthly data, otherwise by
-  // calendar year or, for the ice cores, years ago.
-  function formatTime(t) {
-    if (t >= tFirstObs - 1) return `${MONTHS_LONG[Math.min(11, Math.floor((t - Math.floor(t)) * 12))]} ${Math.floor(t)}`;
-    if (look <= 12000) {
-      const yr = Math.round(t);
-      return yr > 0 ? `${yr}` : yr === 0 ? "1 BCE" : `${formatInt(-yr)} BCE`;
-    }
-    return `about ${formatInt(Number((tEnd - t).toPrecision(3)))} years ago`;
-  }
-
-  // ---- status line ----------------------------------------------------------------------------
-  function updateStatus() {
-    const t = hoverT ?? latest[0];
-    const parts = [];
-    if (t >= tFirstObs - 1) {
-      const mlo = seriesAt(mloMonthly, t), spo = seriesAt(spoMonthly, t);
-      if (mlo) parts.push(`Mauna Loa ${mlo[1].toFixed(1)} ppm`);
-      if (spo) parts.push(`South Pole ${spo[1].toFixed(1)} ppm`);
-    }
-    if (!parts.length) {
-      // Nearest ice-core value to the hovered time, from the composite or Law Dome.
-      const pts = look > 3000 ? composite : lawSamples.length ? lawSamples : composite;
-      const i = lowerBound(pts, t);
-      const p = [pts[i - 1], pts[i]].filter(Boolean).sort((u, v) => Math.abs(u[0] - t) - Math.abs(v[0] - t))[0];
-      if (p) {
-        const src = pts === composite ? coreNames[p[3]] : "Law Dome";
-        status.textContent = `${capitalise(formatTime(p[0]))}: ${Math.round(p[1])} ppm (${src} ice core)`;
-      } else status.textContent = "";
-      return;
-    }
-    status.textContent = `${capitalise(formatTime(t))}: ${parts.join(", ")}.`;
-  }
-
-  function updateButtons() {
-    for (const b of presetButtons) {
-      const on = Math.abs(Math.log(b.preset.look / look)) < 0.02;
-      b.el.style.borderColor = on ? ACCENT : "#ccc";
-      b.el.style.color = on ? ACCENT : "#333";
-      b.el.style.background = on ? hexToRgba(ACCENT, 0.08) : "#fff";
-      b.el.setAttribute("aria-pressed", on);
-    }
+  function updateTourButton() {
     tourButton.textContent = touring ? "Stop tour" : "Play tour";
     tourButton.style.borderColor = touring ? ACCENT : "#ccc";
     tourButton.style.color = touring ? ACCENT : "#333";
@@ -768,7 +666,7 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   function setLook(l) {
     look = clamp(l, LOOK_MIN, LOOK_MAX);
     slider.value = lookToSlider(look);
-    sliderOut.textContent = formatLook(look);
+    slider.setAttribute("aria-valuetext", `${formatLook(look)} back`);
     [yTargetLo, yTargetHi] = targetRange();
     requestRender();
   }
@@ -789,30 +687,14 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
   }
 
   // ---- pointer --------------------------------------------------------------------------------
-  function pointerAt(e) {
-    const r = canvas.getBoundingClientRect();
-    return {px: (e.clientX - r.left) * (w / r.width), py: (e.clientY - r.top) * (TOTAL_H / r.height)};
-  }
-
-  // Hovering reads the record under the cursor; it does not interrupt the tour, a click does.
-  canvas.addEventListener("pointermove", e => {
-    const {px, py} = pointerAt(e);
-    if (touring) { canvas.style.cursor = "pointer"; return; }
-    const over = py >= PLOT_T && py <= PLOT_B + 24 && px >= plotL - 4 && px <= plotR + 4;
-    hoverT = over ? clamp(x.invert(px), tOldest, tEnd) : null;
-    canvas.style.cursor = over ? "crosshair" : "default";
-    requestRender();
-  });
-  canvas.addEventListener("pointerleave", () => {
-    hoverT = null;
-    requestRender();
-  });
+  // A click or a touch on the chart ends the tour; there is nothing else to point at.
   canvas.addEventListener("pointerdown", () => stopTour());
 
   // ---- tour -----------------------------------------------------------------------------------
   // The video's zoom out, paced by the milestones: from the last five years, the chart widens
   // to show each landmark in turn, resting long enough to read it, until the whole 800,000
-  // years are on screen. One way, then it stops; any click or drag ends it early.
+  // years are on screen. One way, then it stops and stays there; any click or drag ends it
+  // early. It starts by itself once, when the figure first scrolls into view.
   const TOUR_HOLD = 3200;
   const TOUR_GLIDE = 1600;
   // Milestones close in age share a stop, so the tour does not pause twice on one view.
@@ -827,7 +709,6 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     touring = false;
     clearTimeout(tourTimer);
     tourTimer = null;
-    hint.textContent = HINT_IDLE;
     requestRender();
   }
 
@@ -836,7 +717,6 @@ export function createCo2HistoryWidget({data, width = FIGURE_WIDTH, lookBack = n
     tourWatcher?.disconnect();
     tourWatcher = null;
     touring = true;
-    hint.textContent = HINT_TOUR;
     requestRender();
     tourTimer = setTimeout(() => zoomStep(0), delay);
   }
@@ -932,10 +812,6 @@ function formatInt(n) {
   return Math.round(n).toLocaleString("en-US");
 }
 
-function capitalise(s) {
-  return s ? s[0].toUpperCase() + s.slice(1) : s;
-}
-
 function smooth(k) {
   const s = clamp(k, 0, 1);
   return s * s * (3 - 2 * s);
@@ -947,9 +823,4 @@ function easeInOut(k) {
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
-}
-
-function hexToRgba(hex, alpha) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }

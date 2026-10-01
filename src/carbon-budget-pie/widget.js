@@ -5,14 +5,15 @@
 // of the 1.5 °C pie and three quarters of the 2 °C one. The two other limits are marked on
 // the grey as thin radial ticks, so where each would run out is always in view.
 //
-// The emitted part can be sliced five ways: as one piece; by region; by country (every
-// country its own slice, colours cycling through a palette so that neighbours never match,
-// and a click names one); by year, alternating two greys so that each year is a band of its
-// own, every tenth one labelled; or by decade. Regions are not subdivided and decades are
+// The emitted part can be sliced four ways: by decade (the default); by year, alternating
+// two greys so that each year is a band of its own, every tenth one labelled; by region; or
+// by country (every country its own slice, colours cycling through a palette so that
+// neighbours never match, and a click names one). Regions are not subdivided and decades are
 // not split into years: each way is one ring of slices. None has a key: the slices are
-// there to be clicked. Time runs on the same slider as the grid widget, and the tour plays
-// the years through in the same manner. The budget arithmetic, the palettes and the number
-// formats are the grid widget's, imported from it, so the two never disagree.
+// there to be clicked, and the year sits large at the centre. The slider, as wide as the pie,
+// runs the years, and the tour plays them through once, from 1850 to the end, and stops
+// there. The budget arithmetic, the palettes and the number formats are the grid widget's,
+// imported from it, so the two never disagree.
 
 import {COLOURS, budgetSeries, budgetThresholds, formatGt, formatLimit} from "../carbon-budget/widget.js";
 
@@ -22,9 +23,10 @@ const PIE_MAX = 420;      // the pie's diameter cap, px
 const ACCENT = "#0b57d0";
 const EPS = 1e-9;
 
-export const SLICE_MODES = ["none", "region", "country", "year", "decade"];
+export const SLICE_MODES = ["decade", "year", "region", "country"];
 
 const YEAR_ALT = "#767676";   // the year layout alternates the plain fill with this
+const PINNED_COUNTRY = "Australia";   // always named when sliced by country: the course is Australian
 
 // Countries cycle through tab20's vibrant hues, all the darks first and then all the lights,
 // so that neighbouring slices differ in hue and not only in shade.
@@ -42,7 +44,7 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
   let estimateId = ESTIMATES.some(e => e.id === estimate) ? estimate : ESTIMATES[0].id;
   let thresholds = budgetThresholds(data, series, estimateId);
   let limitIndex = Math.max(0, thresholds.findIndex(th => Number(th.limit) === Number(limit)));
-  const modes = regions.length ? SLICE_MODES : ["none", "year", "decade"];
+  const modes = regions.length ? SLICE_MODES : ["decade", "year"];
   let mode = modes.includes(colour) ? colour : modes[0];
   let t = clamp(Math.round(Number(year)) || lastYear, firstYear, lastYear);
   let selected = null, hovered = null;
@@ -115,7 +117,7 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
     return update;
   }
 
-  const MODE_LABELS = {none: "None", region: "Region", country: "Country", year: "Year", decade: "Decade"};
+  const MODE_LABELS = {decade: "Decade", year: "Year", region: "Region", country: "Country"};
   const updateModeButtons = buttonRow("Slices", modes.map(m => ({id: m, label: MODE_LABELS[m]})), setMode);
   const updateLimitButtons = buttonRow("Limit", thresholds.map((th, i) => ({id: i, label: th.label})), setLimit);
   const updateEstimateButtons = buttonRow("Budget", ESTIMATES.map(e => ({
@@ -131,27 +133,21 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
   tourButton.addEventListener("click", () => (touring ? stopTour() : startTour(0)));
   controls.appendChild(tourButton);
 
-  // The year, its slider, and the running total against the whole.
-  const header = document.createElement("div");
-  header.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;padding:0 0 4px;";
-  const yearLabel = document.createElement("span");
-  yearLabel.style.cssText = "font-weight:bold;font-size:24px;color:#222;min-width:3.2em;";
-  const sliderRow = document.createElement("label");
-  sliderRow.style.cssText = "display:flex;flex:1 1 160px;align-items:center;gap:8px;font-size:13px;color:#666;cursor:pointer;";
+  // The year slider, its track exactly as wide as the pie below it (laid out in build); the
+  // year itself is read at the centre of the pie.
+  const sliderRow = document.createElement("div");
+  sliderRow.style.cssText = "position:relative;height:24px;margin:0 0 4px;";
   const slider = document.createElement("input");
   slider.type = "range";
   slider.min = firstYear;
   slider.max = lastYear;
   slider.step = 1;
   slider.value = t;
-  slider.style.cssText = `flex:1 1 100px;margin:0;accent-color:${ACCENT};cursor:pointer;`;
+  slider.style.cssText = `position:absolute;top:0;margin:0;accent-color:${ACCENT};cursor:pointer;`;
   slider.setAttribute("aria-label", `Year, ${firstYear} to ${lastYear}`);
   slider.addEventListener("input", e => { e.stopPropagation(); stopTour(); setTime(Number(slider.value)); });
-  sliderRow.append(String(firstYear), slider, String(lastYear));
-  const totalLabel = document.createElement("span");
-  totalLabel.style.cssText = "color:#333;";
-  header.append(yearLabel, sliderRow, totalLabel);
-  container.appendChild(header);
+  sliderRow.appendChild(slider);
+  container.appendChild(sliderRow);
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "carbon-budget-pie");
@@ -161,22 +157,6 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
   scroller.style.cssText = "max-width:100%;overflow-x:auto;";
   scroller.appendChild(svg);
   container.appendChild(scroller);
-
-  const status = document.createElement("div");
-  status.setAttribute("aria-live", "polite");
-  status.style.cssText = "padding:10px 0 0;color:#555;min-height:2.8em;line-height:1.4;";
-  const statusHead = document.createElement("strong");
-  statusHead.style.color = "#222";
-  const statusBody = document.createElement("span");
-  status.append(statusHead, statusBody);
-  container.appendChild(status);
-
-  const hint = document.createElement("div");
-  hint.style.cssText = "padding:8px 0 0;color:#888;font-size:14px;";
-  const HINT_IDLE = "Click or tap a slice to see what it is; click again to let go. Drag the slider to a year.";
-  const HINT_TOUR = "Playing the years through — move the slider or click anything to take over; Play tour starts it again.";
-  hint.textContent = HINT_IDLE;
-  container.appendChild(hint);
 
   function svgEl(tag, attrs = {}, parent) {
     const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -195,8 +175,7 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
       if (amount > EPS) out.push({kind, block, from: at, to: at + amount, colour});
       at += amount;
     };
-    if (mode === "none") push("all", null, fillAt(tt), COLOURS.plain);
-    else if (mode === "region") for (const r of regions) push("region", r, blockFill(r, tt), COLOURS.regions[r.id] ?? "#8c7a4e");
+    if (mode === "region") for (const r of regions) push("region", r, blockFill(r, tt), COLOURS.regions[r.id] ?? "#8c7a4e");
     else if (mode === "country") {
       countries.forEach((c, i) => push("country", c, blockFill(c, tt), COUNTRY_COLOURS[i % COUNTRY_COLOURS.length]));
       // The ring closes on itself: the last slice must not match the first.
@@ -246,6 +225,10 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
   function build() {
     svg.setAttribute("width", w.toFixed(0));
     svg.setAttribute("height", svgH.toFixed(0));
+    // The thumb's centre reaches half a thumb short of the track's ends, so the track
+    // overhangs the pie by that much on each side.
+    slider.style.left = `${(cx - R - 8).toFixed(0)}px`;
+    slider.style.width = `${(D + 16).toFixed(0)}px`;
     svg.replaceChildren();
     restPath = svgEl("path", {fill: COLOURS.bands[0], "data-rest": "1"}, svg);
     sliceGroup = svgEl("g", {}, svg);   // no outlines: at 176 slices they would be most of the ink
@@ -291,24 +274,23 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
     });
     drawSliceLabels(W);
 
-    yearLabel.textContent = Math.floor(t + EPS);
     centreYear.textContent = Math.floor(t + EPS);
-    totalLabel.textContent = `${formatGt(cum)} of ${formatGt(W)} GtCO₂ for ${thresholds[limitIndex].label} (${Math.round(100 * cum / W)}%)`;
     if (String(slider.value) !== String(Math.floor(t + EPS))) slider.value = Math.floor(t + EPS);
     updatePick();
   }
 
   // Slices named outside the rim, with a leader from each slice's middle: every decade, every
-  // tenth year, and the regions and countries with more than a twentieth of the pie. Labels
-  // on each side of the circle are sorted by height and pushed a line apart.
+  // tenth year, the regions and countries with more than a twentieth of the pie, and
+  // Australia whatever its share. Labels on each side of the circle are sorted by height and
+  // pushed a line apart.
   const LABEL_GAP = 14;
   const LABEL_SHARE = 0.05;
   function drawSliceLabels(W) {
     labelGroup.replaceChildren();
-    if (mode === "none") return;
     const top = slices.map(s => ({s, amount: Math.min(s.to, W) - s.from})).filter(d => d.amount > EPS && (
       d.s.kind === "decade" ? true
       : d.s.kind === "year" ? d.s.block.year % 10 === 0
+      : d.s.kind === "country" && d.s.block.name === PINNED_COUNTRY ? true
       : d.amount / W >= LABEL_SHARE));
     const items = top.map(d => {
       const mid = (d.s.from + Math.min(d.s.to, W)) / 2 / W;
@@ -365,7 +347,7 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
   const sameBlock = (a, b) => a && b && a.kind === b.kind && (a.kind === "all" || a.kind === "rest" ||
     (a.kind === "decade" ? a.block.from === b.block.from : a.block === b.block));
 
-  // ---- read-outs ------------------------------------------------------------------------------
+  // ---- read-outs (for assistive technology only; nothing is printed) --------------------------
   function describe() {
     const y = Math.floor(t + EPS), yr = years[y - firstYear], cum = fillAt(t), W = whole(), th = thresholds[limitIndex];
     const h = shown();
@@ -402,8 +384,6 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
 
   function updateStatus() {
     const {head, body} = describe();
-    statusHead.textContent = head;
-    statusBody.textContent = body;
     svg.setAttribute("aria-label", `The carbon budget for ${thresholds[limitIndex].label} as a pie, filled clockwise from the top to the end of ${Math.floor(t + EPS)}, sliced by ${mode}. ${head}${body}`);
   }
 
@@ -517,18 +497,19 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
   }
 
   // ---- tour -------------------------------------------------------------------------------------
-  // The grid widget's: back to 1850, then the years at a steady pace, a rest, and round again.
+  // Back to 1850, then the years at a steady pace to the end, where it stops; Play tour runs
+  // it again. It starts by itself once, when the figure first scrolls into view.
   const MS_PER_YEAR = 65;
   const TOUR_HOLD = 2600;
-  const TOUR_STOPS = [{to: firstYear, ms: 0, hold: 900}, {to: lastYear, ms: (lastYear - firstYear) * MS_PER_YEAR, hold: TOUR_HOLD}];
+  const TOUR_STOPS = [{to: firstYear, ms: 0, hold: 900}, {to: lastYear, ms: (lastYear - firstYear) * MS_PER_YEAR, hold: 0}];
   let touring = false, tourTimer = null, tourWatcher = null;
 
   function tourStep(i) {
     if (!touring) return;
-    if (container.isConnected === false) return stopTour();
-    const stop = TOUR_STOPS[i % TOUR_STOPS.length];
+    if (container.isConnected === false || i >= TOUR_STOPS.length) return stopTour();
+    const stop = TOUR_STOPS[i];
     glideTo(stop.to, stop.ms);
-    tourTimer = setTimeout(() => tourStep((i + 1) % TOUR_STOPS.length), (reduceMotion ? 0 : stop.ms) + stop.hold);
+    tourTimer = setTimeout(() => tourStep(i + 1), (reduceMotion ? 0 : stop.ms) + stop.hold);
   }
   function stopTour() {
     tourWatcher?.disconnect();
@@ -538,7 +519,6 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
     clearTimeout(tourTimer);
     tourTimer = null;
     if (glide) { glide = null; setTime(Math.round(t)); }
-    hint.textContent = HINT_IDLE;
     showTouring();
   }
   function showTouring() {
@@ -555,7 +535,6 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
     selected = null;
     hovered = null;
     updatePick();
-    hint.textContent = HINT_TOUR;
     showTouring();
     tourTimer = setTimeout(() => tourStep(0), delay);
   }

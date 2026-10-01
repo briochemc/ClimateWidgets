@@ -1,6 +1,6 @@
 # The history of atmospheric CO₂
 
-Carbon dioxide in the air, on every timescale we have measured it: the seasonal breathing of the northern hemisphere in the weekly Mauna Loa record, the Keeling curve since 1958, two centuries of air trapped in Antarctic ice, and the ice ages. The chart always ends at the latest week; the **Look back** slider stretches its time axis from a year to 800,000 years, and the buttons jump to the spans worth stopping at.
+Carbon dioxide in the air, on every timescale we have measured it: the seasonal breathing of the northern hemisphere in the weekly Mauna Loa record, the Keeling curve since 1958, two centuries of air trapped in Antarctic ice, and the ice ages. The chart always ends at the latest week; the slider under its time axis stretches that axis from a year to 800,000 years, pulling left to look further back.
 
 ```js
 import {createCo2HistoryWidget, updateMaunaLoa} from "./widget.js";
@@ -24,7 +24,7 @@ const history = view(createCo2HistoryWidget({data}));
 
 Mauna Loa (red) and the South Pole (blue) are direct measurements of the air; before 1958 every point is air recovered from ice, dated by how long it took the snow to seal it in. Law Dome (orange) and Siple Station (brown) cover the last two centuries at a resolution of years to decades, and the 800,000-year composite is stitched from seven Antarctic cores, each in its own colour. Zooming out, the modern rise folds into a vertical line: two centuries against the eight glacial cycles it sits on.
 
-The small labels are landmarks for the scale of the axis, from the Paris Agreement back to the last time Earth's magnetic field flipped, 773,000 years ago, by way of Arrhenius's 1896 calculation that burning coal would warm the planet, the dodo, the dip in CO₂ after the depopulation of the Americas (forests regrew on abandoned farmland), the first writing, the last woolly mammoths (on Wrangel Island, when the pyramids were already old), the first farmers, the last Neanderthals, the last interglacial, when the sea stood 6–9 m higher than today, and the long interglacial of 405,000 years ago, when it stood 6–13 m higher, both at CO₂ below 300 ppm; each points down to the CO₂ of its moment, and shows only while it sits comfortably in the window. (The last dinosaurs, 66 million years ago, would be eighty times further left than the axis goes.) The **Play tour** does the zoom by itself, pausing at each landmark. For where in the world these numbers come from, and how the air breathes in and out each year, see [CO₂ around the world, month by month](../co2-latitude/).
+The small labels are landmarks for the scale of the axis, from the Paris Agreement back to the last time Earth's magnetic field flipped, 773,000 years ago, by way of Arrhenius's 1896 calculation that burning coal would warm the planet, the dodo, the dip in CO₂ after the depopulation of the Americas (forests regrew on abandoned farmland), the first writing, the last woolly mammoths (on Wrangel Island, when the pyramids were already old), the first farmers, the last Neanderthals, the last interglacial, when the sea stood 6–9 m higher than today, and the long interglacial of 405,000 years ago, when it stood 6–13 m higher, both at CO₂ below 300 ppm; each points down to the CO₂ of its moment, and shows only while it sits comfortably in the window. (The last dinosaurs, 66 million years ago, would be eighty times further left than the axis goes.) The **Play tour** does the zoom by itself, pausing at each landmark, and stops on the whole record; it plays once when the page opens, and again whenever you press it. For where in the world these numbers come from, and how the air breathes in and out each year, see [CO₂ around the world, month by month](../co2-latitude/).
 
 ## Embed this widget
 
@@ -35,12 +35,11 @@ import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
 ```js
 display(embedSnippets({
   embedPath: "co2-history/embed",
-  height: 540,
+  height: 430,
   title: "The history of atmospheric CO₂",
   note: "The figure fills its column up to 640&nbsp;px wide and reflows down to about " +
     "320&nbsp;px, so it works on phones; narrower than that it scrolls sideways inside " +
-    "the frame. In a narrow column the buttons wrap onto extra rows, so allow about 590 " +
-    "of height there. The bundled data are refreshed now and then; the page also fetches " +
+    "the frame. The bundled data are refreshed now and then; the page also fetches " +
     "NOAA's latest Mauna Loa weeks live, and falls back to the bundled data if it cannot.",
   script: `<div id="co2-history"></div>
 
