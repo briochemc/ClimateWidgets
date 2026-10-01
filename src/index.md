@@ -9,11 +9,11 @@ Small, self-contained interactive figures for teaching climate science. Each wid
   </a>
   <a class="card" href="./co2-history/">
     <h2>The history of atmospheric CO₂</h2>
-    <img class="thumb" src="./assets/thumbnails/co2-history.png" alt="Atmospheric CO₂ since 1958 as the rising red Mauna Loa and blue South Pole curves, with buttons above that stretch the time axis out to 800,000 years and a look-back slider">
+    <img class="thumb" src="./assets/thumbnails/co2-history.png" alt="Atmospheric CO₂ since 1958 as the rising red Mauna Loa and blue South Pole curves, with a look-back slider under the time axis that stretches it out to 800,000 years">
   </a>
   <a class="card" href="./co2-latitude/">
     <h2>CO₂ around the world</h2>
-    <img class="thumb" src="./assets/thumbnails/co2-latitude.png" alt="A world map dotted with CO₂ stations, and beside it a thin plot of CO₂ against latitude lined up with the map, a black curve leaning towards the north with the stations as dots and the January 1979 curve as a grey ghost; underneath, the Mauna Loa and South Pole records since 1957 with a scrubber and a small clock riding the red curve">
+    <img class="thumb" src="./assets/thumbnails/co2-latitude.png" alt="An Equal Earth world map dotted with CO₂ stations, and beside it a thin plot of CO₂ against latitude lined up with the map, a black curve leaning towards the north with the stations as dots; underneath, the Mauna Loa and South Pole records since 1957 with a scrubber and a small clock riding the red curve">
   </a>
   <a class="card" href="./temperature-trend/">
     <h2>Temperature trends</h2>
@@ -63,21 +63,32 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Atmospheric transmission</h2>
     <img class="thumb" src="./assets/thumbnails/atmospheric-transmission.png" alt="Three panels on a logarithmic wavelength axis: the Sun's and the Earth's glow curves in faint gold and red, filled solidly where the light gets through the atmosphere, below them the fraction the atmosphere absorbs as a grey area with a wide gap in the visible and a narrower one near 10 micrometres, and below that one coloured row per gas showing where each one absorbs">
   </a>
+  <a class="card" href="./carbon-budget-pie/">
+    <h2>The carbon budget as a pie</h2>
+    <img class="thumb" src="./assets/thumbnails/carbon-budget-pie.png" alt="A pie chart filled clockwise from the top with slices in bands of colour, one per decade, nearly all the way round, leaving a thin grey wedge for what is left of the 1.5 °C budget, with ticks on the rim where the 1.7 and 2 °C budgets would end and the year large at the centre">
+  </a>
+  <a class="card" href="./co2-per-capita-bars/">
+    <h2>CO₂ per person, as bars</h2>
+    <img class="thumb" src="./assets/thumbnails/co2-per-capita-bars.png" alt="A stack of horizontal bars rising from the bottom of the plot, each country a bar as tall as its population and as long as its CO₂ per person, the longest at the top, thin long bars for the Gulf states, a big United States rectangle, a wider shorter China one with notes around it explaining height, length and area, and a tall thin India one lower down, coloured by region">
+  </a>
+  <a class="card" href="./co2-per-capita-today/">
+    <h2>CO₂ per person today</h2>
+    <img class="thumb" src="./assets/thumbnails/co2-per-capita-today.png" alt="The same stack of bars for the latest year only, with no slider: each country a bar as tall as its population and as long as its CO₂ per person, coloured by region, with notes around China's bar explaining height, length and area">
+  </a>
+</div>
+
+## Archive
+
+Widgets kept for reference but no longer developed or used in the course; each has a successor above.
+
+<div class="grid grid-cols-3 widget-cards">
   <a class="card" href="./carbon-budget/">
     <h2>The carbon budget</h2>
     <img class="thumb" src="./assets/thumbnails/carbon-budget.png" alt="A grid of small squares, one per billion tonnes of CO₂, filled from the bottom in warm colours from pale for 1850 to dark red for 2025, with grey squares above the fill and three labelled lines across them where the budgets for 1.5, 1.7 and 2 °C of warming run out">
   </a>
-  <a class="card" href="./carbon-budget-pie/">
-    <h2>The carbon budget as a pie</h2>
-    <img class="thumb" src="./assets/thumbnails/carbon-budget-pie.png" alt="A pie chart filled clockwise from the top with slices of many colours, one per country, nearly all the way round, leaving a thin grey wedge for what is left of the 1.5 °C budget, with ticks on the rim where the 1.7 and 2 °C budgets would end">
-  </a>
   <a class="card" href="./co2-per-capita/">
     <h2>CO₂ per person by country</h2>
     <img class="thumb" src="./assets/thumbnails/co2-per-capita.png" alt="A polar chart of wedges running clockwise from the top, each country a wedge whose angle is its population and whose length is its CO₂ per person, tall slivers for the Gulf states first, then a long United States wedge and a wide, shorter China wedge, coloured by region with labels along the outer edges and radiating from the tips">
-  </a>
-  <a class="card" href="./co2-per-capita-bars/">
-    <h2>CO₂ per person, as bars</h2>
-    <img class="thumb" src="./assets/thumbnails/co2-per-capita-bars.png" alt="A stack of horizontal bars, each country a bar as tall as its population and as long as its CO₂ per person, the longest at the top, thin long bars for the Gulf states, a big United States rectangle, a wider shorter China one, and a tall thin India one lower down, coloured by region">
   </a>
 </div>
 

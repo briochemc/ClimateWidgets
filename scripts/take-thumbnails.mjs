@@ -63,7 +63,14 @@ const WIDGETS = [
   // squares around them say more than the first grid's plain nitrogen and oxygen.
   {name: "atmospheric-composition", query: "?level=2"},
   {name: "atmospheric-transmission"},
+  {name: "co2-history", figure: "canvas"},
+  {name: "co2-latitude", figure: "canvas"},
+  {name: "carbon-budget-pie"},
+  {name: "co2-per-capita-bars"},
+  {name: "co2-per-capita-today"},
+  // Archived, but still on the homepage.
   {name: "carbon-budget"},
+  {name: "co2-per-capita"},
 ].map(w => ({figure: `.${w.name}`, ...w}));
 
 // A blank 640x640 capture comes out near 7 kB, a real one 150 kB and up. Playwright waits

@@ -3,7 +3,9 @@ export default {
   root: "src",
   base: process.env.OBS_BASE ?? "/",
   // Drives the sidebar and the prev/next pager. Embed pages are deliberately left
-  // out: they exist only to be iframed, and they disable the chrome themselves.
+  // out: they exist only to be iframed, and they disable the chrome themselves. The
+  // Archive section at the end holds widgets that are kept but not developed or used in
+  // the course any more, each superseded by one above it.
   pages: [
     {name: "Draw the future", path: "/draw-the-future/"},
     {name: "The history of atmospheric CO\u2082", path: "/co2-history/"},
@@ -20,10 +22,17 @@ export default {
     {name: "Blackbody radiation", path: "/blackbody-radiation/"},
     {name: "What the air is made of", path: "/atmospheric-composition/"},
     {name: "Atmospheric transmission", path: "/atmospheric-transmission/"},
-    {name: "The carbon budget", path: "/carbon-budget/"},
     {name: "The carbon budget as a pie", path: "/carbon-budget-pie/"},
-    {name: "CO\u2082 per person, country by country", path: "/co2-per-capita/"},
     {name: "CO\u2082 per person, as bars", path: "/co2-per-capita-bars/"},
+    {name: "CO\u2082 per person today", path: "/co2-per-capita-today/"},
+    {
+      name: "Archive",
+      open: false,
+      pages: [
+        {name: "The carbon budget", path: "/carbon-budget/"},
+        {name: "CO\u2082 per person, country by country", path: "/co2-per-capita/"},
+      ],
+    },
   ],
   head: "",
   // Embed pages disable the footer themselves, so this only shows on the regular pages.

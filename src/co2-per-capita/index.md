@@ -1,5 +1,7 @@
 # CO₂ per person, country by country
 
+<div class="note">Archived: kept for reference, not developed further or used in the course. <a href="../co2-per-capita-bars/">CO₂ per person, as bars</a> and <a href="../co2-per-capita-today/">CO₂ per person today</a> are the live widgets on these data.</div>
+
 Every country is a wedge. Its angle is its population, its length is its CO₂ emissions per person, so its area is its emissions in all. The wedges run clockwise from the top in order of emissions per person, the highest first: the thin tall wedges of the small rich emitters come first, then the fat ones of the populous countries. Click or tap a wedge for the country's numbers, or a group in the key to see only its countries.
 
 ```js

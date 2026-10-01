@@ -1,5 +1,7 @@
 # The carbon budget
 
+<div class="note">Archived: kept for reference, not developed further or used in the course. <a href="../carbon-budget-pie/">The carbon budget as a pie</a> is the live widget on this budget, and draws from the same data.</div>
+
 Warming tracks the total amount of carbon dioxide ever emitted, so a limit on warming is a limit on the total: a carbon budget. Every square here is a billion tonnes of CO₂ (1 GtCO₂). The dark squares are what has been emitted since 1850, about 2,770 of them by the end of 2025, stacked by region and, within a region, by country. The grey squares are what is left, and the three lines are where the budget runs out for 1.5, 1.7 and 2 °C of warming: 90, 450 and 1,010 GtCO₂ from the start of 2026, by the Global Carbon Budget 2025's update of Forster et al. (2025). At the 2025 rate of 42 GtCO₂ a year, that is about 2, 11 and 24 years.
 
 Left alone, the figure winds back to 1850 and plays the years through. Move the slider or click anything to stop it; *Play tour* starts it again. Click or tap a square to see whose it is: the country is named and its whole contribution outlined, and stays so until you click it again. The *Colour* toggle paints the squares by region, with a key whose entries outline a whole region when clicked, or lays the same squares out by year instead, oldest at the bottom, or by decade.
