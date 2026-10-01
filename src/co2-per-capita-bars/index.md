@@ -1,6 +1,6 @@
 # CO₂ per person, country by country, as bars
 
-Every country is a bar: its height is its population, its length is its CO₂ emissions per person, so its area is its emissions in all, and that is the number written in it. The bars are stacked from the bottom in order of emissions per person, the lowest at the bottom, so the population axis starts at zero and the stack reaches 8.2 billion people today. Click or tap a bar for its label, or a region in the key to see only its countries; drag the slider to another year, or press **Play tour** to see the years from 1850 play through.
+Every country is a bar: its height is its population, its length is its CO₂ emissions per person, so its area is its emissions in all, and that is the number written in it. The bars are stacked from the bottom in order of emissions per person, the lowest at the bottom, so the population axis starts at zero and the stack reaches 8.2 billion people today. Click or tap a bar for its label (the arrow keys then walk the selection up and down the ranking), or a region in the key to see only its countries; drag the slider to another year, or press **Play tour** to see the years from 1850 play through.
 
 ```js
 import {createCo2PerCapitaBarsWidget} from "./widget.js";

@@ -1,6 +1,6 @@
 # CO₂ per person today
 
-[The bars widget](../co2-per-capita-bars/) with the year fixed to the latest one, and nothing that moves: no slider, no tour. Every country is a bar, as tall as its population and as long as its CO₂ emissions per person, so its area is its emissions in all; the bars are stacked from the bottom in order of emissions per person, the lowest at the bottom. Click or tap a bar for its label, or a region in the key to see only its countries.
+[The bars widget](../co2-per-capita-bars/) with the year fixed to the latest one, and nothing that moves: no slider, no tour. Every country is a bar, as tall as its population and as long as its CO₂ emissions per person, so its area is its emissions in all; the bars are stacked from the bottom in order of emissions per person, the lowest at the bottom. Click or tap a bar for its label (the arrow keys then walk the selection up and down the ranking), or a region in the key to see only its countries.
 
 ```js
 import {createCo2PerCapitaTodayWidget} from "./widget.js";

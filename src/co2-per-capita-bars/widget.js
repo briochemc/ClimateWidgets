@@ -212,7 +212,9 @@ export function createCo2PerCapitaBarsWidget({data, width = FIGURE_WIDTH, year, 
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "co2-per-capita-bars");
   svg.setAttribute("role", "img");
-  svg.style.cssText = "display:block;overflow:visible;touch-action:pan-y;cursor:pointer;";
+  svg.setAttribute("tabindex", "0");   // focusable, so the arrow keys can walk the ranking
+  svg.setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown ArrowLeft ArrowRight");
+  svg.style.cssText = "display:block;overflow:visible;touch-action:pan-y;cursor:pointer;outline:none;";
   const scroller = document.createElement("div");
   scroller.style.cssText = "max-width:100%;overflow-x:auto;";
   scroller.appendChild(svg);
@@ -561,6 +563,27 @@ export function createCo2PerCapitaBarsWidget({data, width = FIGURE_WIDTH, year, 
     if (e.pointerType !== "mouse") return;
     const code = codeOf(e);
     if (code !== hovered) { hovered = code; requestRender(); }
+  });
+  // The arrow keys walk the selection through the ranking: up or left to the bar above (more
+  // CO₂ per person), down or right to the one below; with nothing selected, the top of the
+  // stack. Bars too thin to see (under a pixel: fewer than about twelve million people) are
+  // stepped over, so that from China the next bar up is Iran and not Bermuda. A region
+  // picked in the key limits the walk to its countries.
+  svg.addEventListener("keydown", e => {
+    const step = {ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1}[e.key];
+    if (!step) return;
+    e.preventDefault();
+    stopTour();
+    dismissHelpers();
+    const ranking = stateAt(t).rows.filter(r => (hOf(r.pop) >= 1 || r.c.code === selected) && (!keyRegion || r.c.region === keyRegion)).map(r => r.c);
+    if (!ranking.length) return;
+    const i = ranking.findIndex(c => c.code === selected);
+    const next = i < 0 ? ranking[0] : ranking[clamp(i + step, 0, ranking.length - 1)];
+    if (next.code === selected) return;
+    selected = next.code;
+    hovered = null;
+    requestRender();
+    emit();
   });
   svg.addEventListener("pointerleave", e => {
     if (e.pointerType !== "mouse" || hovered === null) return;
