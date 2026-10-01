@@ -13,7 +13,8 @@
 // (the course is taught there); the bar under the pointer, or the one clicked, always gets
 // its label, and any neighbour's that would clash fades. Until the reader touches anything,
 // three annotations around China's bar say what height, length and area mean, with every
-// other bar veiled so that China stands out; they come back whenever the view is switched. The tour, from 1850 to the latest year, plays only when asked, and stops
+// other bar veiled so that China stands out; they come back whenever the view is switched
+// with nothing picked out. The tour, from 1850 to the latest year, plays only when asked, and stops
 // at the end.
 //
 // The countries fall into five regions: the Americas, Europe and Russia, Asia and the Middle
@@ -609,10 +610,11 @@ export function createCo2PerCapitaBarsWidget({data, width = FIGURE_WIDTH, year, 
     if (m === mode || !MODES.includes(m)) return;
     mode = m;
     updateModeButtons(mode);
-    selected = null;
     hovered = null;
-    // Either view is a new picture, so the annotations come back to read it by.
-    showHelpers();
+    // Either view is a new picture, so the annotations come back to read it by, unless the
+    // reader has a country or a region picked out: then that is what they are looking at,
+    // and it stays selected across the switch.
+    if (!selected && !keyRegion) showHelpers();
     requestRender();
     emit();
   }

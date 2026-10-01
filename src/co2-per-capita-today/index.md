@@ -12,7 +12,7 @@ const data = await FileAttachment("../co2-per-capita/data/co2-per-capita.json").
 const today = view(createCo2PerCapitaTodayWidget({data}));
 ```
 
-**Yearly emissions** divides the year's emissions by the year's population; **Cumulative emissions** divides everything a country has emitted since 1850 by its population today. The three notes around China's bar, there until you touch anything (and back whenever you switch view), say what height, length and area mean; the large corner text says which view the year is of. Australia is labelled whenever its label fits. For the same picture with the years from 1850 playing through, see [the bars widget](../co2-per-capita-bars/).
+**Yearly emissions** divides the year's emissions by the year's population; **Cumulative emissions** divides everything a country has emitted since 1850 by its population today. The three notes around China's bar, there until you touch anything (and back when you switch view with nothing selected), say what height, length and area mean; the large corner text says which view the year is of. Australia is labelled whenever its label fits. For the same picture with the years from 1850 playing through, see [the bars widget](../co2-per-capita-bars/).
 
 ## Embed this widget
 
