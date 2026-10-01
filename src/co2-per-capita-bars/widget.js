@@ -418,7 +418,9 @@ export function createCo2PerCapitaBarsWidget({data, width = FIGURE_WIDTH, year, 
       const yc = cur.y0 + cur.h / 2;
       const insideFont = Math.min(14, cur.h * 0.8, (cur.x - plotL - 8) / (CHAR * text.length));
       if (insideFont >= 9) {
-        const tx = svgEl("text", {x: F(plotL + 6), y: F(yc), "font-size": insideFont.toFixed(1), "font-weight": "bold", fill: "#fff", "dominant-baseline": "central"}, labelGroup);
+        // White on the bar, or black with a halo when the bar is picked out, like the labels outside.
+        const tx = svgEl("text", {x: F(plotL + 6), y: F(yc), "font-size": insideFont.toFixed(1), "font-weight": "bold", "dominant-baseline": "central",
+          ...(code === pick ? {fill: "#111", stroke: "#fff", "stroke-width": 2.5, "paint-order": "stroke", "stroke-linejoin": "round"} : {fill: "#fff"})}, labelGroup);
         tx.textContent = text;
         inside.set(code, {numX: plotL + 6 + CHAR * insideFont * (name.length + 1 + number.length / 2), yc, font: insideFont, text});
       } else {
