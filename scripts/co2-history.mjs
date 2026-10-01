@@ -26,7 +26,6 @@ import {fileURLToPath} from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_HISTORY = join(ROOT, "src/co2-history/data/co2-history.json");
 const OUT_LATITUDE = join(ROOT, "src/co2-latitude/data/co2-latitude.json");
-const LAND = join(ROOT, "src/data/countries-110m.json");
 
 const NOAA_TRENDS = "https://gml.noaa.gov/webdata/ccgg/trends/co2/";
 const NOAA_FLASK = "https://gml.noaa.gov/aftp/data/trace_gases/co2/flask/surface/co2_surface-flask_ccgg_text.tar.gz";
@@ -327,44 +326,6 @@ async function composite() {
   return {cores: names, rows};
 }
 
-// ---- land outline for the inset map -----------------------------------------------------
-
-// Decodes the `land` object of the 110 m TopoJSON already in the repo into one SVG path in
-// plate carrée coordinates (x = longitude + 180, y = 90 - latitude), so the widget draws the
-// map with a scale transform and no topojson-client at runtime.
-function landPath() {
-  const topo = JSON.parse(readFileSync(LAND, "utf8"));
-  const {scale, translate} = topo.transform;
-  const arcs = topo.arcs.map(arc => {
-    let x = 0, y = 0;
-    return arc.map(([dx, dy]) => [(x += dx) * scale[0] + translate[0], (y += dy) * scale[1] + translate[1]]);
-  });
-  const ring = indices => {
-    const pts = [];
-    for (const i of indices) {
-      const arc = i < 0 ? arcs[~i].slice().reverse() : arcs[i];
-      for (const p of arc) if (!pts.length || pts[pts.length - 1][0] !== p[0] || pts[pts.length - 1][1] !== p[1]) pts.push(p);
-    }
-    return pts;
-  };
-  // `land` is a GeometryCollection holding one MultiPolygon in this file; the loop below
-  // also accepts a bare Polygon or MultiPolygon in case the TopoJSON is ever regenerated.
-  const land = topo.objects.land;
-  const geometries = land.type === "GeometryCollection" ? land.geometries : [land];
-  const polygons = geometries.flatMap(g => g.type === "MultiPolygon" ? g.arcs : [g.arcs]);
-  let d = "";
-  for (const poly of polygons) {
-    for (const ringIdx of poly) {
-      const pts = ring(ringIdx).map(([lon, lat]) => [r1(lon + 180), r1(90 - lat)]);
-      // Drop points that would not move the pen by a tenth of a degree.
-      const kept = pts.filter((p, i) => i === 0 || Math.abs(p[0] - pts[i - 1][0]) >= 0.1 || Math.abs(p[1] - pts[i - 1][1]) >= 0.1);
-      if (kept.length < 3) continue;
-      d += "M" + kept.map(p => `${p[0]} ${p[1]}`).join("L") + "Z";
-    }
-  }
-  return d;
-}
-
 // ---- main -------------------------------------------------------------------------------
 
 const now = new Date();
@@ -409,7 +370,7 @@ const latitude = {
   spo,
   mbl,
   sites: [...flaskSites, ...scripps].sort((a, b) => b.lat - a.lat),
-  land: landPath(),
+  // The land outline is not baked in: the widget draws src/data/countries-110m.json with d3-geo.
 };
 
 mkdirSync(dirname(OUT_HISTORY), {recursive: true});
@@ -428,4 +389,4 @@ process.stderr.write(
   `  mbl ${mbl.t.length} steps × ${mbl.sinlat.length} bins, ${mbl.t[0]}–${mbl.t[mbl.t.length - 1]} (${kb(JSON.stringify(mbl).length)})\n` +
   `  sites ${latitude.sites.length} (${flaskSites.length} NOAA, ${scripps.length} Scripps; ${kb(JSON.stringify(latitude.sites).length)})\n` +
   `  law dome ${data.lawDome.samples.length} samples, spline ${data.lawDome.spline.length}; siple ${SIPLE_NEFTEL.length + SIPLE_FRIEDLI.length}\n` +
-  `  composite ${data.composite.rows.length} rows (${kb(JSON.stringify(data.composite).length)}); land ${kb(latitude.land.length)}\n`);
+  `  composite ${data.composite.rows.length} rows (${kb(JSON.stringify(data.composite).length)})\n`);

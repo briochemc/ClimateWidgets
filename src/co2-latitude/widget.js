@@ -1,35 +1,56 @@
 // Where in the world CO₂ is measured, and what it looks like month by month. A world map
-// with the flask-sampling stations on it; to its right, and lined up with its parallels, a
-// thin plot of CO₂ against latitude with NOAA's marine boundary layer reference as a curve
-// and the stations as dots; and under both the Mauna Loa and South Pole records since 1957
-// with a scrubber that picks the month, and a clock face for the month that rides along the
-// Mauna Loa curve. Play sweeps the months, which is the point: the northern hemisphere
-// breathes in and out every year, and the whole curve climbs, north first. After the first
-// half of Andy Jacobson's NOAA animation (https://gml.noaa.gov/ccgg/trends/history.html);
-// the second half, the zoom out to the ice ages, is the co2-history widget.
+// (Equal Earth) with the flask-sampling stations on it; to its right, and lined up with its
+// parallels, a thin plot of CO₂ against latitude with NOAA's marine boundary layer reference
+// as a curve and the stations as dots; and under both the Mauna Loa and South Pole records
+// since 1957 with a scrubber that picks the month, and a clock face for the month that rides
+// along the Mauna Loa curve. Play sweeps the months, which is the point: the northern
+// hemisphere breathes in and out every year, and the whole curve climbs, north first. As it
+// sweeps, the January curve of each decade's first year (1980, 1990, ...) stays behind as a
+// light grey trace, so the climb is always in view; the traces fade the moment the reader
+// takes over. After the first half of Andy Jacobson's NOAA animation
+// (https://gml.noaa.gov/ccgg/trends/history.html); the second half, the zoom out to the ice
+// ages, is the co2-history widget.
 //
-// Self-contained on purpose: no d3, no other imports, so the script-tag embed is a single
-// ES module import. The data file is built by scripts/co2-history.mjs; see its header for
-// the layout of the packed monthly series.
+// The three panels share their edges: the map's left edge is the time series' y axis, and
+// the latitude plot's right edge is the time series' right end. The CO₂ scale is one fixed
+// range for the latitude plot and the time series alike, set once from the whole record, so
+// nothing rescales as the months go by.
+//
+// The map needs d3-geo (the projection, and the clipping at the antimeridian that a hand-made
+// plate carrée smeared across) and topojson-client, both from a CDN, and the land outline
+// from the repo's countries-110m.json, passed in as `world`; everything else is self-made.
+// The data file is built by scripts/co2-history.mjs; see its header for the layout of the
+// packed monthly series.
+
+import {geoEqualEarth, geoPath} from "https://cdn.jsdelivr.net/npm/d3-geo@3/+esm";
+import {feature} from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
 
 const ACCENT = "#0b57d0";
 const MLO_COLOR = "#d62728";
 const SPO_COLOR = "#1f4fd6";
 const MBL_COLOR = "#333";
 const SITE_COLOR = "#8a8f96";
-const GHOST_COLOR = "#b5b5b5";
+const TRACE_COLOR = "#b5b5b5";
 const MUTED = "#9a9a9a";
 const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August",
   "September", "October", "November", "December"];
 
 // The figure fills its container up to FIGURE_WIDTH and reflows below it; below MIN_WIDTH
-// it stops shrinking and scrolls sideways inside its own wrapper. The map keeps a 2:1 shape
-// (a degree of longitude as long as a degree of latitude), so the height follows the width.
+// it stops shrinking and scrolls sideways inside its own wrapper. The map keeps Equal Earth's
+// own shape (about 2:1), so the height follows the width.
 const FIGURE_WIDTH = 640;
 const MIN_WIDTH = 320;
 const ROW_T = 10;                // top of the map and the latitude plot
 const SER_H = 160;               // height of the time series
 const SWEEP_YEARS_PER_S = 2;     // how fast Play moves through the record
+const TRACE_FADE_MS = 600;       // how long the decade traces take to go
+
+const SPHERE = {type: "Sphere"};
+const PARALLEL_LATS = [-60, -30, 0, 30, 60];
+const PARALLELS = Object.fromEntries(PARALLEL_LATS.map(lat => [lat, {
+  type: "LineString",
+  coordinates: Array.from({length: 181}, (_, i) => [-180 + 2 * i, lat]),
+}]));
 
 // Unpacks a monthly series {year, month, v: [...]} into [[decimalYear, ppm], ...],
 // dropping the missing months.
@@ -45,7 +66,7 @@ export function unpackMonthly(packed) {
   return out;
 }
 
-export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = null}) {
+export function createCo2LatitudeWidget({data, world, width = FIGURE_WIDTH, month = null}) {
   // ---- data -----------------------------------------------------------------------------------
   const mloMonthly = unpackMonthly(data.mlo.monthly);
   const spoMonthly = unpackMonthly(data.spo.monthly);
@@ -55,7 +76,7 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   const sites = data.sites.map(s => ({...s, start: s.year * 12 + (s.month - 1)}));
   const mloSite = sites.find(s => s.code === "MLO");
   const spoSite = sites.find(s => s.code === "SPO");
-  const landPath = typeof Path2D === "function" && data.land ? new Path2D(data.land) : null;
+  const land = world?.objects?.land ? feature(world, world.objects.land) : null;
 
   // The time axis runs from the first monthly mean to the last, whole years.
   const all = [...mloMonthly, ...spoMonthly];
@@ -66,8 +87,8 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   const lastMonth = Math.floor(tLast * 12);
 
   // One CO₂ range for the whole widget and the whole record, shared by the latitude plot and
-  // the time series, so nothing rescales as the months go by: the two long records, the
-  // reference, and the stations short of their rare outliers.
+  // the time series and fixed at load, so nothing rescales as the months go by: the two long
+  // records, the reference, and the stations short of their rare outliers.
   const [co2Lo, co2Hi] = (() => {
     const vals = [...all.map(p => p[1])];
     for (const row of mbl.v) for (const v of row) vals.push(v);
@@ -87,50 +108,26 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     return tLast;
   })();
 
-  const ghostProfile = mbl.v.length ? mbl.v[0] : [];
-  const ghostT = mbl.t.length ? mbl.t[0] : null;
-  const ghostLabel = ghostT === null ? "" : `${MONTHS_LONG[Math.floor((ghostT % 1) * 12)].slice(0, 3)} ${Math.floor(ghostT)}`;
-
   // ---- state ----------------------------------------------------------------------------------
   let cursorT = month ?? tLatestFull;   // the month shown, as a decimal year
   let hoverSite = null;                 // station under the pointer
   let dragging = false;
+  let traces = [];                      // {year, profile, mloAt, spoAt}: the decade Januaries Play has passed
+  let traceFade = null;                 // when the traces started fading, or null
 
   // ---- DOM ------------------------------------------------------------------------------------
   const container = document.createElement("div");
   container.style.cssText = "font:16px sans-serif;color:#333;";
 
-  const buttonCss =
-    "font:13px sans-serif;color:#333;background:#fff;border:1px solid #ccc;border-radius:999px;" +
-    "padding:3px 12px;cursor:pointer;";
   const controls = document.createElement("div");
   controls.style.cssText = "display:flex;align-items:center;gap:8px;padding:0 0 8px;font-size:14px;";
   const playButton = document.createElement("button");
   playButton.type = "button";
-  playButton.style.cssText = buttonCss;
+  playButton.style.cssText =
+    "font:13px sans-serif;color:#333;background:#fff;border:1px solid #ccc;border-radius:999px;" +
+    "padding:3px 12px;cursor:pointer;";
   playButton.addEventListener("click", () => (playing ? stopPlay() : startPlay(0)));
-  // The month slider sits under the time series, its track exactly as wide as the series'
-  // axis (laid out in applyLayout), so the thumb is over the month it picks; the month's
-  // name goes beside the Play button.
-  const sliderRow = document.createElement("div");
-  sliderRow.style.cssText = "position:relative;height:24px;";
-  const slider = document.createElement("input");
-  slider.type = "range";
-  slider.min = firstMonth;
-  slider.max = lastMonth;
-  slider.step = 1;
-  slider.style.cssText = `position:absolute;top:0;margin:0;accent-color:${ACCENT};cursor:pointer;`;
-  slider.setAttribute("aria-label", "Month shown");
-  sliderRow.appendChild(slider);
-  const sliderOut = document.createElement("span");
-  sliderOut.style.cssText = "color:#333;font-variant-numeric:tabular-nums;";
-  controls.append(playButton, sliderOut);
-  slider.addEventListener("input", e => {
-    e.stopPropagation();
-    stopPlay();
-    setCursor((Number(slider.value) + 0.5) / 12);
-    emit();
-  });
+  controls.append(playButton);
   container.appendChild(controls);
 
   const canvas = document.createElement("canvas");
@@ -142,43 +139,58 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   scroller.style.cssText = "max-width:100%;overflow-x:auto;";
   scroller.appendChild(canvas);
   container.appendChild(scroller);
+
+  // The month slider sits under the time series, its track exactly as wide as the series'
+  // axis (laid out in applyLayout), so the thumb is over the month it picks.
+  const sliderRow = document.createElement("div");
+  sliderRow.style.cssText = "position:relative;height:24px;";
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = firstMonth;
+  slider.max = lastMonth;
+  slider.step = 1;
+  slider.style.cssText = `position:absolute;top:0;margin:0;accent-color:${ACCENT};cursor:pointer;`;
+  slider.setAttribute("aria-label", "Month shown");
+  sliderRow.appendChild(slider);
+  slider.addEventListener("input", e => {
+    e.stopPropagation();
+    stopPlay();
+    fadeTraces();
+    setCursor((Number(slider.value) + 0.5) / 12);
+    emit();
+  });
   container.appendChild(sliderRow);
-
-  const status = document.createElement("div");
-  status.style.cssText = "padding:8px 0 0;color:#555;min-height:1.4em;line-height:1.4;";
-  container.appendChild(status);
-
-  const HINT_IDLE =
-    "Drag across the lower chart, or the slider, to pick a month; hover a station's dot on " +
-    "the map or the latitude plot for its name.";
-  const HINT_PLAY = "Playing through the months — click anything to take over; Play starts it again.";
-  const hint = document.createElement("div");
-  hint.style.cssText = "padding:4px 0 0;color:#888;font-size:14px;";
-  hint.textContent = HINT_IDLE;
-  container.appendChild(hint);
 
   // ---- layout ---------------------------------------------------------------------------------
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
   let w, totalH, mapL, mapW, mapH, rowB, latL, latW, latR, serL, serR, serT, serB;
   let tickFont, noteFont, labelFont, mutedFont, dotR;
+  let projection, mapPath;
 
   function applyLayout(newW) {
     w = newW;
     const k = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
     const lerp = (a, b) => Math.round(a + (b - a) * k);
-    // Top row: the map, a gap, the thin latitude plot, and room for its latitude labels.
+    // The time series' axis box sets the edges for everything: its y axis is the map's left
+    // edge, and its right end is the latitude plot's right edge, with the latitude labels
+    // beyond that.
     const gap = lerp(10, 16), latLabels = lerp(30, 38), edge = 8;
-    const avail = w - edge - gap - latLabels - edge;
-    mapL = edge;
-    mapW = Math.round(avail * 0.66);
-    mapH = Math.round(mapW / 2);
-    rowB = ROW_T + mapH;
-    latL = mapL + mapW + gap;
-    latW = avail - mapW;
-    latR = latL + latW;
-    // The time series, full width, under both.
     serL = lerp(52, 62);
-    serR = w - 12;
+    serR = w - edge - latLabels;
+    mapL = serL;
+    latR = serR;
+    const avail = serR - serL - gap;
+    mapW = Math.round(avail * 0.66);
+    latL = mapL + mapW + gap;
+    latW = latR - latL;
+    // Equal Earth, as wide as the map's slot, its top left at the row's top left.
+    projection = geoEqualEarth().fitWidth(mapW, SPHERE);
+    const bounds = geoPath(projection).bounds(SPHERE);
+    const [tx, ty] = projection.translate();
+    projection.translate([tx - bounds[0][0] + mapL, ty - bounds[0][1] + ROW_T]);
+    mapPath = geoPath(projection, context);
+    mapH = Math.round(bounds[1][1] - bounds[0][1]);
+    rowB = ROW_T + mapH;
     serT = rowB + 44;
     serB = serT + SER_H;
     totalH = serB + 30;
@@ -202,9 +214,10 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   applyLayout(maxW);
 
   // ---- scales ---------------------------------------------------------------------------------
-  // The map is plate carrée, so the latitude plot's vertical scale is the map's.
-  const mapX = lon => mapL + ((lon + 180) / 360) * mapW;
-  const mapY = lat => ROW_T + ((90 - lat) / 180) * mapH;
+  // Equal Earth's parallels are straight and level, so one height per latitude serves the
+  // map and the latitude plot alike.
+  const mapY = lat => projection([0, lat])[1];
+  const mapPoint = (lon, lat) => projection([lon, lat]);
   const xLat = v => latL + ((v - co2Lo) / (co2Hi - co2Lo)) * latW;
   const xSer = t => serL + ((t - tFirst) / (tEnd - tFirst)) * (serR - serL);
   xSer.invert = px => tFirst + ((px - serL) / (serR - serL)) * (tEnd - tFirst);
@@ -257,9 +270,15 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
 
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
   let latFrame = {profile: null, dots: [], mloAt: null, spoAt: null};
+  let traceAlpha = 1;
 
-  function render() {
+  function render(now = performance.now()) {
     raf = null;
+    if (traceFade !== null) {
+      traceAlpha = reduceMotion ? 0 : 1 - (now - traceFade) / TRACE_FADE_MS;
+      if (traceAlpha <= 0) { traces = []; traceFade = null; traceAlpha = 1; }
+      else requestRender();
+    }
     latFrame = latitudeData(cursorT);
     context.clearRect(0, 0, w, totalH);
     context.fillStyle = "#fff";
@@ -267,59 +286,76 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     drawMap();
     drawLatitudePlot();
     drawSeries();
-    updateStatus();
     playButton.textContent = playing ? "Pause" : "Play";
     playButton.style.borderColor = playing ? ACCENT : "#ccc";
     playButton.style.color = playing ? ACCENT : "#333";
     playButton.setAttribute("aria-pressed", playing);
     slider.value = monthIndexOf(cursorT);
-    sliderOut.textContent = formatMonth(cursorT);
   }
 
   // The map: ocean, land, faint parallels every 30° (which the latitude plot shares), and
-  // the stations reporting this month.
+  // the stations reporting this month, the one under the pointer named.
   function drawMap() {
     const {dots} = latFrame;
+    context.beginPath();
+    mapPath(SPHERE);
     context.fillStyle = "#e6eef6";
-    context.fillRect(mapL, ROW_T, mapW, mapH);
-    if (landPath) {
-      context.save();
+    context.fill();
+    if (land) {
       context.beginPath();
-      context.rect(mapL, ROW_T, mapW, mapH);
-      context.clip();
-      context.translate(mapL, ROW_T);
-      context.scale(mapW / 360, mapH / 180);
+      mapPath(land);
       context.fillStyle = "#c9d3c0";
-      context.fill(landPath);
-      context.restore();
+      context.fill();
     }
     context.lineWidth = 1;
-    for (const lat of [-60, -30, 0, 30, 60]) {
+    for (const lat of PARALLEL_LATS) {
+      context.beginPath();
+      mapPath(PARALLELS[lat]);
       context.strokeStyle = lat === 0 ? "rgba(0,0,0,0.18)" : "rgba(0,0,0,0.1)";
-      line(mapL, mapY(lat), mapL + mapW, mapY(lat));
+      context.stroke();
     }
+    context.beginPath();
+    mapPath(SPHERE);
     context.strokeStyle = "#bbb";
-    context.strokeRect(mapL + 0.5, ROW_T + 0.5, mapW - 1, mapH - 1);
+    context.stroke();
     for (const pass of [false, true]) {
       for (const d of dots) {
         if (!!d.big !== pass || d.site.lon === null) continue;
+        const [x, y] = mapPoint(d.site.lon, d.site.lat);
         context.fillStyle = d.color ?? (d.site === hoverSite ? ACCENT : SITE_COLOR);
         context.strokeStyle = "#fff";
         context.lineWidth = 0.8;
         context.beginPath();
-        context.arc(mapX(d.site.lon), mapY(d.site.lat), d.big ? 3.5 : 2.4, 0, 2 * Math.PI);
+        context.arc(x, y, d.big ? 3.5 : 2.4, 0, 2 * Math.PI);
         context.fill();
         context.stroke();
       }
     }
+    if (hoverSite && hoverSite.lon !== null) {
+      const [x, y] = mapPoint(hoverSite.lon, hoverSite.lat);
+      nameSite(hoverSite, x, y, mapL, latR);
+    }
+  }
+
+  // A station's name beside its dot, haloed, kept inside [x0, x1].
+  function nameSite(site, x, y, x0, x1) {
+    context.font = noteFont;
+    context.fillStyle = "#222";
+    context.textBaseline = "middle";
+    const text = `${site.name} (${site.code})`;
+    const width = context.measureText(text).width;
+    const right = x + 7 + width <= x1;
+    context.textAlign = right ? "left" : "right";
+    haloText(text, right ? x + 7 : Math.max(x0 + width, x - 7), y);
   }
 
   // CO₂ across, latitude up, on the map's own vertical scale; the axes are kept quiet because
-  // the parallels on the map already say where the latitudes are.
+  // the parallels on the map already say where the latitudes are. The decade traces go
+  // under the month's curve, each named at its northern end.
   function drawLatitudePlot() {
     const {profile, dots} = latFrame;
     context.lineWidth = 1;
-    for (const lat of [-60, -30, 0, 30, 60]) {
+    for (const lat of PARALLEL_LATS) {
       context.strokeStyle = lat === 0 ? "rgba(0,0,0,0.18)" : "rgba(0,0,0,0.1)";
       line(latL, mapY(lat), latR, mapY(lat));
     }
@@ -331,12 +367,36 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     context.beginPath();
     context.rect(latL - 5, ROW_T - 6, latW + 10, mapH + 12);
     context.clip();
-    // The first profile of the reference stays as a ghost, so the climb since is visible.
-    if (ghostProfile.length) {
-      context.strokeStyle = GHOST_COLOR;
-      context.lineWidth = 1.5;
-      strokeProfile(ghostProfile);
-    }
+    context.globalAlpha = traceAlpha;
+    context.font = mutedFont;
+    // The years are a decade apart but only a dozen pixels apart on this scale, so their
+    // labels alternate between two rows.
+    traces.forEach((tr, i) => {
+      const row = (i % 2) * 11;
+      if (tr.profile) {
+        context.strokeStyle = TRACE_COLOR;
+        context.lineWidth = 1.5;
+        strokeProfile(tr.profile);
+        context.fillStyle = "#888";
+        context.textAlign = "center"; context.textBaseline = "top";
+        haloText(tr.year, xLat(tr.profile[tr.profile.length - 1]), ROW_T + 3 + row);
+      } else {
+        // Before the reference begins there is no curve to leave, only the two long records.
+        context.fillStyle = TRACE_COLOR;
+        for (const [p, site] of [[tr.mloAt, mloSite], [tr.spoAt, spoSite]]) {
+          if (!p || !site) continue;
+          context.beginPath();
+          context.arc(xLat(p[1]), mapY(site.lat), dotR - 0.5, 0, 2 * Math.PI);
+          context.fill();
+        }
+        if (tr.mloAt && mloSite) {
+          context.fillStyle = "#888";
+          context.textAlign = "left"; context.textBaseline = "middle";
+          haloText(tr.year, xLat(tr.mloAt[1]) + 5, mapY(mloSite.lat) - 6 + row);
+        }
+      }
+    });
+    context.globalAlpha = 1;
     if (profile) {
       context.strokeStyle = MBL_COLOR;
       context.lineWidth = 2;
@@ -356,6 +416,8 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
       }
     }
     context.restore();
+    const hovered = hoverSite && dots.find(d => d.site === hoverSite);
+    if (hovered) nameSite(hoverSite, xLat(hovered.v), mapY(hoverSite.lat), mapL, w - 4);
 
     // Muted axes: a frame, CO₂ ticks along the bottom, latitudes down the right.
     context.strokeStyle = "#ccc";
@@ -400,18 +462,6 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     context.beginPath();
     context.rect(serL, serT - 1, serR - serL, SER_H + 2);
     context.clip();
-
-    // The month the ghost profile belongs to, so the grey curve above has a date.
-    if (ghostT !== null) {
-      context.strokeStyle = GHOST_COLOR;
-      context.setLineDash([3, 3]);
-      line(xSer(ghostT), serT, xSer(ghostT), serB);
-      context.setLineDash([]);
-      context.font = noteFont;
-      context.fillStyle = "#888";
-      context.textAlign = "left"; context.textBaseline = "top";
-      haloText(ghostLabel, xSer(ghostT) + 4, serB - 16);
-    }
 
     strokeSeries(spoMonthly, SPO_COLOR);
     strokeSeries(mloMonthly, MLO_COLOR);
@@ -536,31 +586,26 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     return out;
   }
 
-  function formatMonth(t) {
-    return `${MONTHS_LONG[Math.min(11, Math.floor((t - Math.floor(t)) * 12))]} ${Math.floor(t)}`;
-  }
-
-  function updateStatus() {
-    if (hoverSite) {
-      const v = hoverSite.v[monthIndexOf(cursorT) - hoverSite.start];
-      status.textContent = `${hoverSite.name} (${hoverSite.code}), ${formatMonth(cursorT)}: ${v} ppm`;
-      return;
-    }
-    const {profile, mloAt, spoAt, dots} = latFrame;
-    const parts = [];
-    if (mloAt) parts.push(`Mauna Loa ${mloAt[1].toFixed(1)} ppm`);
-    if (spoAt) parts.push(`South Pole ${spoAt[1].toFixed(1)} ppm`);
-    // The reference's bins are equal in sine latitude, so their plain mean is the area-weighted global one.
-    if (profile) parts.push(`global surface mean ${(profile.reduce((s, v) => s + v, 0) / profile.length).toFixed(1)} ppm`);
-    else if (ghostT !== null && cursorT < ghostT) parts.push(`no background reference before ${Math.floor(ghostT)}`);
-    const n = dots.filter(d => !d.big).length;
-    const others = n ? `${n} other station${n === 1 ? "" : "s"} reporting` : "no other stations reported yet";
-    status.textContent = `${formatMonth(cursorT)}: ${parts.join(", ")}${parts.length ? "; " : ""}${others}.`;
-  }
-
   // ---- state changes --------------------------------------------------------------------------
   function setCursor(t) {
     cursorT = clamp(t, (firstMonth + 0.5) / 12, tLast);
+    requestRender();
+  }
+
+  // ---- decade traces --------------------------------------------------------------------------
+  // As Play sweeps from `from` to `to`, every January of a year ending in 0 that it passes
+  // leaves its curve behind (or, before the reference begins in 1979, its two long-record
+  // dots). They fade on the reader's first move.
+  function collectTraces(from, to) {
+    for (let year = Math.ceil(from / 10) * 10; year <= to; year += 10) {
+      const t = year + 0.5 / 12;
+      if (t <= from || t > to) continue;
+      traces.push({year, profile: mblProfile(t), mloAt: seriesAt(mloMonthly, t), spoAt: seriesAt(spoMonthly, t)});
+    }
+  }
+  function fadeTraces() {
+    if (!traces.length || traceFade !== null) return;
+    traceFade = performance.now();
     requestRender();
   }
 
@@ -574,8 +619,9 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
 
   canvas.addEventListener("pointerdown", e => {
     const {px, py} = pointerAt(e);
-    if (!onSeries(px, py)) return;
     stopPlay();
+    fadeTraces();
+    if (!onSeries(px, py)) return;
     dragging = true;
     canvas.setPointerCapture(e.pointerId);
     setCursor(xSer.invert(px));
@@ -616,7 +662,7 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     for (const d of latFrame.dots) {
       if (d.big) continue;
       const spots = [[xLat(d.v), mapY(d.site.lat)]];
-      if (d.site.lon !== null) spots.push([mapX(d.site.lon), mapY(d.site.lat)]);
+      if (d.site.lon !== null) spots.push(mapPoint(d.site.lon, d.site.lat));
       for (const [x, y] of spots) {
         const dd = (x - px) ** 2 + (y - py) ** 2;
         if (dd < bestD) { bestD = dd; best = d.site; }
@@ -627,8 +673,8 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
 
   // ---- play -----------------------------------------------------------------------------------
   // Sweeps the months from where the scrubber is (or from the start, if it is at the end) to
-  // the latest month, then stops. It starts by itself once the figure is in view, and any
-  // click or drag ends it, because a control that moves under your cursor is maddening.
+  // the latest month, then stops there. It starts by itself once the figure is in view, and
+  // any click or drag ends it, because a control that moves under your cursor is maddening.
   const PLAY_DELAY = 1500;
   let playing = false, playTimer = null, playFrame = null, playWatcher = null;
 
@@ -640,7 +686,6 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     clearTimeout(playTimer);
     cancelAnimationFrame(playFrame);
     playTimer = playFrame = null;
-    hint.textContent = HINT_IDLE;
     requestRender();
   }
 
@@ -650,7 +695,6 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
     playWatcher = null;
     playing = true;
     hoverSite = null;
-    hint.textContent = HINT_PLAY;
     requestRender();
     playTimer = setTimeout(sweep, delay);
   }
@@ -658,16 +702,21 @@ export function createCo2LatitudeWidget({data, width = FIGURE_WIDTH, month = nul
   function sweep() {
     if (!playing) return;
     if (container.isConnected === false) return stopPlay();
-    const from = cursorT >= tLatestFull - 1 / 12 ? (firstMonth + 0.5) / 12 : cursorT;
+    const fromStart = cursorT >= tLatestFull - 1 / 12;
+    const from = fromStart ? (firstMonth + 0.5) / 12 : cursorT;
     const to = tLatestFull;
+    if (fromStart) { traces = []; traceFade = null; traceAlpha = 1; }
     const duration = reduceMotion ? 0 : ((to - from) / SWEEP_YEARS_PER_S) * 1000;
     const start = performance.now();
+    let passed = from;   // how far the sweep has got, for the traces it leaves on the way
     const step = now => {
       if (!playing) return;
       const k = duration ? Math.min(1, (now - start) / duration) : 1;
       setCursor(from + (to - from) * k);
+      collectTraces(passed, cursorT);
+      passed = cursorT;
       if (k < 1) playFrame = requestAnimationFrame(step);
-      else { playing = false; hint.textContent = HINT_IDLE; emit(); requestRender(); }
+      else { playing = false; emit(); requestRender(); }
     };
     playFrame = requestAnimationFrame(step);
   }

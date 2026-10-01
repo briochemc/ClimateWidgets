@@ -30,8 +30,9 @@ body {
 import {createCo2LatitudeWidget} from "./widget.js";
 
 const data = await FileAttachment("data/co2-latitude.json").json();
+const world = await FileAttachment("../data/countries-110m.json").json();
 ```
 
 ```js
-const month = view(createCo2LatitudeWidget({data}));
+const month = view(createCo2LatitudeWidget({data, world}));
 ```
