@@ -9,8 +9,8 @@
 // cumulative view); whatever overshoots the length is cut at the edge and marked. Labels
 // give the country and its emissions in all, the area of its bar: inside a bar tall and long
 // enough to hold them, and beyond the end of a thinner one, as many as fit without touching,
-// the top of the ranking and the biggest emitters first, and Australia's whenever it fits
-// (the course is taught there); the bar under the pointer, or the one clicked, always gets
+// the top of the ranking and the biggest emitters first, and Australia's and New Zealand's
+// whenever they fit (the course is taught there); the bar under the pointer, or the one clicked, always gets
 // its label, and any neighbour's that would clash fades. Until the reader touches anything,
 // three annotations around China's bar say what height, length and area mean, with every
 // other bar veiled so that China stands out; they come back whenever the view is switched
@@ -34,7 +34,7 @@ const EPS = 1e-9;
 const PX_PER_BILLION = 80;   // the population axis's scale; its top comes from the data
 const SCALE_MAX = {year: 35, cumulative: 2000};   // tonnes per person, the plot's full length
 const HELPER_CODE = "CHN";   // the bar the opening annotations hang on
-const PINNED_CODE = "AUS";   // always labelled when its label fits: the course is Australian
+const PINNED = new Set(["AUS", "NZL"]);   // always labelled when the label fits, however thin the bar: the course is Australian
 
 export const MODES = ["year", "cumulative"];
 
@@ -403,7 +403,8 @@ export function createCo2PerCapitaBarsWidget({data, width = FIGURE_WIDTH, year, 
   // ranking and the biggest emitters first, the font shrunk for one that would run off the
   // edge. The bar picked out (hovered or clicked) always gets its label, in the same type but
   // bold and black, and the neighbours it would clash with fade instead of it; Australia's
-  // comes next in line, so it is there whenever it fits at all. `keepOut` is where the
+  // and New Zealand's come next in line, so they are there whenever they fit at all, and
+  // fade like any other when they clash with the pick. `keepOut` is where the
   // opening annotations are, which no label may cross. Returns, for each label drawn inside
   // its bar, where the number sits, for the annotations' arrow.
   const OUT_FONT = 10, OUT_MIN_FONT = 7, CHAR = 0.56;
@@ -415,7 +416,9 @@ export function createCo2PerCapitaBarsWidget({data, width = FIGURE_WIDTH, year, 
     const outside = [];
     for (const [code, cur] of layout) {
       const row = rowByCode.get(code);
-      if (!row || cur.alpha < 0.5 || cur.h < 0.5) continue;
+      if (!row || cur.alpha < 0.5) continue;
+      // A bar too thin to see gets no label, unless it is pinned or picked out.
+      if (cur.h < 0.5 && code !== pick && !PINNED.has(code)) continue;
       if (keyRegion && row.c.region !== keyRegion && code !== pick) continue;
       const name = row.c.name, number = totalText(row.co2), text = `${name} ${number}`;
       const yc = cur.y0 + cur.h / 2;
@@ -427,7 +430,7 @@ export function createCo2PerCapitaBarsWidget({data, width = FIGURE_WIDTH, year, 
         tx.textContent = text;
         inside.set(code, {numX: plotL + 6 + CHAR * insideFont * (name.length + 1 + number.length / 2), yc, font: insideFont, text});
       } else {
-        outside.push({row, cur, text, yc, pick: code === pick, pinned: code === PINNED_CODE});
+        outside.push({row, cur, text, yc, pick: code === pick, pinned: PINNED.has(code)});
       }
       if (row.v > vMax + EPS) svgEl("circle", {cx: F(plotR + 3), cy: F(yc), r: 2, fill: "#111"}, labelGroup);
     }
@@ -565,18 +568,17 @@ export function createCo2PerCapitaBarsWidget({data, width = FIGURE_WIDTH, year, 
     const code = codeOf(e);
     if (code !== hovered) { hovered = code; requestRender(); }
   });
-  // The arrow keys walk the selection through the ranking: up or left to the bar above (more
-  // CO₂ per person), down or right to the one below; with nothing selected, the top of the
-  // stack. Bars too thin to see (under a pixel: fewer than about twelve million people) are
-  // stepped over, so that from China the next bar up is Iran and not Bermuda. A region
-  // picked in the key limits the walk to its countries.
+  // The arrow keys walk the selection through the ranking, every country included, however
+  // thin its bar: up or left to the bar above (more CO₂ per person), down or right to the one
+  // below; with nothing selected, the top of the stack. A region picked in the key limits
+  // the walk to its countries. This is the only way to reach the bars too thin to click.
   svg.addEventListener("keydown", e => {
     const step = {ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1}[e.key];
     if (!step) return;
     e.preventDefault();
     stopTour();
     dismissHelpers();
-    const ranking = stateAt(t).rows.filter(r => (hOf(r.pop) >= 1 || r.c.code === selected) && (!keyRegion || r.c.region === keyRegion)).map(r => r.c);
+    const ranking = stateAt(t).rows.filter(r => !keyRegion || r.c.region === keyRegion).map(r => r.c);
     if (!ranking.length) return;
     const i = ranking.findIndex(c => c.code === selected);
     const next = i < 0 ? ranking[0] : ranking[clamp(i + step, 0, ranking.length - 1)];

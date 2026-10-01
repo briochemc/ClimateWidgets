@@ -12,7 +12,7 @@ const data = await FileAttachment("../carbon-budget/data/carbon-budget.json").js
 const pie = view(createCarbonBudgetPieWidget({data}));
 ```
 
-Left alone, the figure winds back to 1850, plays the years through once and stops at the end. Move the slider or click anything to stop it early; *Play tour* runs it again. *Slices* cuts the emitted part four ways: by decade, by year, by region, or by country (every country its own slice, colours cycling so that neighbours never match). There is no key: click or tap a slice and it is outlined and named, until you click it again. The biggest slices are named outside the rim, and so is Australia's whatever its size. The year is written at the centre of the pie, and the slider above it is as wide as the pie.
+Left alone, the figure winds back to 1850, plays the years through once and stops at the end. Move the slider or click anything to stop it early; *Play tour* runs it again. *Slices* cuts the emitted part four ways: by decade, by year, by region, or by country (every country its own slice, colours cycling so that neighbours never match). There is no key: click or tap a slice and it is outlined and named, until you click it again. The biggest slices are named outside the rim, and so are Australia's and New Zealand's whatever their size. The year is written at the centre of the pie, and the slider above it is as wide as the pie.
 
 ## What to look for
 

@@ -26,7 +26,7 @@ const EPS = 1e-9;
 export const SLICE_MODES = ["decade", "year", "region", "country"];
 
 const YEAR_ALT = "#767676";   // the year layout alternates the plain fill with this
-const PINNED_COUNTRY = "Australia";   // always named when sliced by country: the course is Australian
+const PINNED_COUNTRIES = new Set(["Australia", "New Zealand"]);   // always named when sliced by country: the course is Australian
 
 // Countries cycle through tab20's vibrant hues, all the darks first and then all the lights,
 // so that neighbouring slices differ in hue and not only in shade.
@@ -281,8 +281,8 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
 
   // Slices named outside the rim, with a leader from each slice's middle: every decade, every
   // tenth year, the regions and countries with more than a twentieth of the pie, and
-  // Australia whatever its share. Labels on each side of the circle are sorted by height and
-  // pushed a line apart.
+  // Australia and New Zealand whatever their share. Labels on each side of the circle are
+  // sorted by height and pushed a line apart.
   const LABEL_GAP = 14;
   const LABEL_SHARE = 0.05;
   function drawSliceLabels(W) {
@@ -290,7 +290,7 @@ export function createCarbonBudgetPieWidget({data, width = FIGURE_WIDTH, year, e
     const top = slices.map(s => ({s, amount: Math.min(s.to, W) - s.from})).filter(d => d.amount > EPS && (
       d.s.kind === "decade" ? true
       : d.s.kind === "year" ? d.s.block.year % 10 === 0
-      : d.s.kind === "country" && d.s.block.name === PINNED_COUNTRY ? true
+      : d.s.kind === "country" && PINNED_COUNTRIES.has(d.s.block.name) ? true
       : d.amount / W >= LABEL_SHARE));
     const items = top.map(d => {
       const mid = (d.s.from + Math.min(d.s.to, W)) / 2 / W;
