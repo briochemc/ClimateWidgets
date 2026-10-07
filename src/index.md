@@ -75,6 +75,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>CO₂ per person today</h2>
     <img class="thumb" src="./assets/thumbnails/co2-per-capita-today.png" alt="The same stack of bars for the latest year only, with no slider: each country a bar as tall as its population and as long as its CO₂ per person, coloured by region, with notes around China's bar explaining height, length and area">
   </a>
+  <a class="card" href="./extreme-events/">
+    <h2>Extreme events</h2>
+    <img class="thumb" src="./assets/thumbnails/extreme-events.png" alt="A gray bell curve and a black one on a gray plate, over a bare axis reading cold, average, hot; beyond a red handle under the axis the black curve's tail is filled vivid red, with four sliders for the mean, spread, skewness and kurtosis below">
+  </a>
 </div>
 
 ## Archive
