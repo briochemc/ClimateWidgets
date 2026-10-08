@@ -279,14 +279,14 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, tail 
 
   // Vertical layout is constant; only horizontal metrics and fonts follow the width. Below
   // the axis: the three words, the σ scale (numbers mode), then the two brackets with their
-  // names under them, with a third line kept free for the figures in numbers mode, so that
+  // names under them, with a second line kept free for the figures in numbers mode, so that
   // nothing below the axis ever moves.
   const plotT = 12, plotH = 236, plotB = plotT + plotH;
   const wordsY = plotB + 18;   // the three words on the axis
   const ticksY = plotB + 32;   // the σ scale, numbers mode only
   const bracketY = plotB + 40; // the brackets' upturned ends
   const LINE_H = 17;           // the label lines under a bracket, at the largest label font
-  const totalH = bracketY + 6 + 15 + 2 * LINE_H + 8;
+  const totalH = bracketY + 6 + 15 + LINE_H + 8;
 
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
   let w, plotL, plotR, plotW, wordFont, tickFont, labelFont, titleFont;
@@ -609,18 +609,18 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, tail 
         d: `M${x1.toFixed(1)},${bracketY}L${x1.toFixed(1)},${bracketY + 6}L${x2.toFixed(1)},${bracketY + 6}L${x2.toFixed(1)},${bracketY}`,
         fill: "none", stroke: "#000", "stroke-width": 1.5,
       }, g);
-      const lines = [hi ? "high" : "low", "extremes", ""];
-      const halfW = Math.max(...lines.map(s => labelHalfWidth(s, labelFont)), labelHalfWidth("0.00% (was 0.00%)", labelFont));
-      const cx = clamp((x1 + x2) / 2, plotL + halfW, plotR - halfW);
-      lines.forEach((text, i) => {
-        const el = svgEl("text", {
-          x: cx.toFixed(1), y: bracketY + 6 + 15 + i * LINE_H, "text-anchor": "middle", "font-size": labelFont,
-          fill: i < 2 ? colour : "#555", "font-weight": i < 2 ? "bold" : "normal", ...halo,
-        }, g);
-        el.textContent = text;
-        t.lines.push(el);
-      });
+      // The label lines are centred on the bracket; a line only moves off centre when it
+      // would otherwise run past the edge of the figure.
+      t.cx = (x1 + x2) / 2;
       tails[side] = t;
+      [hi ? "high extremes" : "low extremes", ""].forEach((text, i) => {
+        const el = svgEl("text", {
+          y: bracketY + 6 + 15 + i * LINE_H, "text-anchor": "middle", "font-size": labelFont,
+          fill: i === 0 ? colour : "#555", "font-weight": i === 0 ? "bold" : "normal", ...halo,
+        }, g);
+        t.lines.push(el);
+        fitLine(side, i, text);
+      });
     }
 
     refLabel = svgEl("text", {"font-size": labelFont, fill: GRAY_CURVE, ...halo}, svg);
@@ -656,8 +656,8 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, tail 
     const stats = {lo: tailStats("lo"), hi: tailStats("hi")};
     for (const side of ["lo", "hi"]) {
       placeLeader(side, stats[side]);
-      // The third line under the bracket: the figures, with the numbers.
-      tails[side].lines[2].textContent = numbers ? `${formatShare(stats[side].fNow)} (was ${formatShare(stats[side].fWas)})` : "";
+      // The second line under the bracket: the figures, with the numbers.
+      fitLine(side, 1, numbers ? `${formatShare(stats[side].fNow)} (was ${formatShare(stats[side].fWas)})` : "");
     }
     placeCurveLabels(refPts, curPts);
 
@@ -665,6 +665,14 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, tail 
       `${fam.long ?? fam.name} distribution, with the extremes beyond the baseline's ${formatShare(tailShare)} tails. ` +
       `High extremes happen ${formatShare(stats.hi.fNow)} of the time, ${formatRatio(stats.hi.ratio)}; ` +
       `low extremes ${formatShare(stats.lo.fNow)} of the time, ${formatRatio(stats.lo.ratio)}.`);
+  }
+
+  // A label line under a bracket: centred on it, nudged inward only if it would overflow.
+  function fitLine(side, i, text) {
+    const el = tails[side].lines[i];
+    el.textContent = text;
+    const hw = labelHalfWidth(text, labelFont) + 2;
+    el.setAttribute("x", clamp(tails[side].cx, hw, w - hw).toFixed(1));
   }
 
   // A tail's fractions, from the cdfs rather than the picture, and the centroid of the area

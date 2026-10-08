@@ -69,6 +69,7 @@ const WIDGETS = [
   {name: "co2-per-capita-bars"},
   {name: "co2-per-capita-today"},
   {name: "extreme-events"},
+  {name: "extreme-events-simple"},
   // Archived, but still on the homepage.
   {name: "carbon-budget"},
   {name: "co2-per-capita"},

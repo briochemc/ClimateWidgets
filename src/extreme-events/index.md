@@ -54,8 +54,8 @@ display(embedSnippets({
   embedPath: "extreme-events/embed",
   height: 600,
   title: "Extreme events",
-  note: "The figure is a fixed 350&nbsp;px tall; the rest is the title, the tabs and the three " +
-    "sliders above it and the note below. Allow about 760&nbsp;px for a 320&nbsp;px phone-width " +
+  note: "The figure is a fixed 334&nbsp;px tall; the rest is the title, the tabs and the three " +
+    "sliders above it and the note below. Allow about 745&nbsp;px for a 320&nbsp;px phone-width " +
     "frame, where the tabs wrap onto more rows.",
   script: `<div id="extreme-events"></div>
 

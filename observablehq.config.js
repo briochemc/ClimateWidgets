@@ -26,6 +26,7 @@ export default {
     {name: "CO\u2082 per person, as bars", path: "/co2-per-capita-bars/"},
     {name: "CO\u2082 per person today", path: "/co2-per-capita-today/"},
     {name: "Extreme events", path: "/extreme-events/"},
+    {name: "Extreme events, simply", path: "/extreme-events-simple/"},
     {
       name: "Archive",
       open: false,
