@@ -18,7 +18,7 @@
 // the same fit to the window, so it follows the slider. There are no curve sliders here:
 // the reader's controls are the city and the years.
 //
-// The extremes are the baseline's hottest and coldest 1% of days, rounded to whole degrees,
+// The extremes are the baseline's hottest and coldest 1% of days, to a tenth of a degree,
 // so each city gets thresholds of its own. The temperature axis is the same for every city,
 // so that nothing jumps when one is picked, except that the two polar stations slide it
 // down by 25 degrees (same width, animated, so the ticks are seen to move); the vertical
@@ -43,6 +43,11 @@ const TINT_BASE = 0.38, TINT_LOSS = 0.16;
 const LEADER_BAND = 2;
 const BASELINE_YEARS = 30;
 const WINDOW_YEARS = 10;      // the window the slider opens on: the last ten years
+// The record starts in 1950, although the data file runs from 1940: ERA5's 1940s rest on
+// the sparse observations of the war years and come out a degree or two too warm at
+// several unrelated cities (Sydney, Beijing, Islamabad), which, as a third of the baseline,
+// inflated every "was" figure.
+const FIRST_YEAR = 1950;
 const TAIL = 0.01;
 const X_RANGE = [0, 50];      // the temperature axis, °C, the same for every city but the polar ones,
 const POLAR_RANGE = [-25, 25]; // which slide it down by 25 degrees: same width, so the ticks just move
@@ -72,11 +77,19 @@ export function moments(v) {
 
 // `data` is the parsed data/hot-season-tmax.json, `world` the parsed countries-110m.json
 // (without it the map has no land). `city` is a name from the data; `xRange` the
-// temperature axis in °C, and `polarRange` the one for cities beyond 60° of latitude.
-export function createCityExtremesWidget({data, world, city = "Sydney", xRange = X_RANGE, polarRange = POLAR_RANGE, showNumbers = false, width = FIGURE_WIDTH} = {}) {
+// temperature axis in °C, and `polarRange` the one for cities beyond 60° of latitude;
+// `firstYear` is where the record starts.
+export function createCityExtremesWidget({data, world, city = "Sydney", xRange = X_RANGE, polarRange = POLAR_RANGE, firstYear = FIRST_YEAR, showNumbers = false, width = FIGURE_WIDTH} = {}) {
   if (!data?.cities?.length) throw new Error("createCityExtremesWidget needs the hot-season-tmax data");
   const uid = `extreme-events-cities-${++instances}`;
-  const cities = data.cities.map(c => ({...c, seasons: c.days.map(d => d.map(t => t / 10))}));
+  const cities = data.cities.map(c => {
+    const keep = c.years.map(y => y >= firstYear);
+    return {
+      ...c,
+      years: c.years.filter((_, i) => keep[i]),
+      seasons: c.days.filter((_, i) => keep[i]).map(d => d.map(t => t / 10)),
+    };
+  });
   const land = world?.objects?.land ? feature(world, world.objects.land) : null;
 
   // Vertical layout as in the simple widget, with two caption lines at the top of the plot.
@@ -138,9 +151,12 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
     const y0 = c.years[0], y1 = c.years[Math.min(BASELINE_YEARS, c.years.length) - 1];
     const days = daysIn(y0, y1);
     base = {from: y0, to: y1, ...moments(days)};
+    // The thresholds are the baseline's 1% quantiles to a tenth of a degree: rounding to a
+    // whole degree looked friendlier but, in a tropical city where the spread is under two
+    // degrees, it could move the baseline share from 1% to 0.1% and the multiplier tenfold.
     const [lo, hi] = rangeFor(c);
-    thrHi = clamp(Math.round(quantileOf(days, 1 - TAIL)), lo, hi);
-    thrLo = clamp(Math.round(quantileOf(days, TAIL)), lo, hi);
+    thrHi = clamp(Math.round(10 * quantileOf(days, 1 - TAIL)) / 10, lo, hi);
+    thrLo = clamp(Math.round(10 * quantileOf(days, TAIL)) / 10, lo, hi);
     base.hiShare = share(days, true);
     base.loShare = share(days, false);
     ref = pearson3(base.mean, base.sd, base.skew);
@@ -171,7 +187,7 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
   container.appendChild(header);
   const title = document.createElement("div");
   title.style.cssText = "font-weight:bold;color:#111;line-height:1.2;white-space:pre-line;padding:0 0 6px;flex:1 1 200px;";
-  title.textContent = "The hottest days of the year\nare getting more common";
+  title.textContent = "The hottest days\nare getting more common";
   header.appendChild(title);
 
   const mapSvg = document.createElementNS(SVG_NS, "svg");
@@ -221,9 +237,12 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
   right.append(numbersField, resetButton);
   toolRow.appendChild(right);
 
-  // The two-handle slider: a track, the span between the handles, and the handles.
+  // The two-handle slider: a track, the span between the handles, a wide invisible strip over
+  // the span by which the whole window is dragged along, and the handles.
   const rangeTrack = svgEl("line", {y1: RANGE_H / 2, y2: RANGE_H / 2, stroke: "#c8c8c8", "stroke-width": 4, "stroke-linecap": "round"}, yearsSvg);
   const rangeSpan = svgEl("line", {y1: RANGE_H / 2, y2: RANGE_H / 2, stroke: BAR_STROKE, "stroke-width": 4, "stroke-linecap": "round"}, yearsSvg);
+  const rangeGrip = svgEl("line", {y1: RANGE_H / 2, y2: RANGE_H / 2, stroke: "#000", "stroke-opacity": 0, "stroke-width": RANGE_H}, yearsSvg);
+  rangeGrip.style.cursor = "grab";
   const handles = {};
   for (const key of ["from", "to"]) {
     const h = svgEl("circle", {cy: RANGE_H / 2, r: HANDLE_R, fill: "#fff", stroke: BAR_STROKE, "stroke-width": 2, tabindex: 0,
@@ -247,8 +266,32 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
     });
     handles[key] = h;
   }
+  // A press between the handles grabs the whole window and drags it along, its width kept;
+  // a press on the track outside them jumps the nearer handle there. Decided by position,
+  // not by which element was hit, since an invisible stroke is not hit-tested everywhere.
   yearsSvg.addEventListener("pointerdown", e => {
     if (e.target.tagName === "circle") return;
+    e.preventDefault();
+    const x = e.clientX - yearsSvg.getBoundingClientRect().left;
+    if (x > yearX(from) + HANDLE_R && x < yearX(to) - HANDLE_R) {
+      yearsSvg.setPointerCapture(e.pointerId);
+      rangeGrip.style.cursor = "grabbing";
+      const y0 = yearAt(e.clientX), from0 = from, span = to - from;
+      const first = c.years[0], last = c.years[c.years.length - 1];
+      const move = ev => {
+        const d = clamp(yearAt(ev.clientX) - y0, first - from0, last - span - from0);
+        if (from0 + d === from) return;
+        from = from0 + d;
+        to = from + span;
+        update();
+      };
+      yearsSvg.addEventListener("pointermove", move);
+      yearsSvg.addEventListener("pointerup", () => {
+        yearsSvg.removeEventListener("pointermove", move);
+        rangeGrip.style.cursor = "grab";
+      }, {once: true});
+      return;
+    }
     const y = yearAt(e.clientX);
     const key = Math.abs(y - from) <= Math.abs(y - to) ? "from" : "to";
     setYear(key, y);
@@ -270,6 +313,7 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
     const x0 = yearX(from), x1 = yearX(to), W = rangeWidth();
     setAttrs(rangeTrack, {x1: HANDLE_R, x2: W - HANDLE_R});
     setAttrs(rangeSpan, {x1: x0.toFixed(1), x2: x1.toFixed(1)});
+    setAttrs(rangeGrip, {x1: x0.toFixed(1), x2: x1.toFixed(1)});
     handles.from.setAttribute("cx", x0.toFixed(1));
     handles.to.setAttribute("cx", x1.toFixed(1));
     for (const key of ["from", "to"]) {
@@ -292,8 +336,8 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
   note.textContent =
     "Click a city on the map. The bars are its real days in the three hottest months of the year, one bar per degree, " +
     "for the years chosen with the slider; the black curve is fitted to them, and the gray curve to the first thirty " +
-    "years on record, the baseline. Extreme heat and cold are the hottest and coldest 1% of baseline days, rounded to " +
-    "the degree. Data: ERA5 reanalysis via Open-Meteo, at the city's grid point, from 1940.";
+    "years of the record, the baseline. Extreme heat and cold are the hottest and coldest 1% of baseline days. " +
+    "Data: ERA5 reanalysis via Open-Meteo, at the city's grid point, from 1950.";
   container.appendChild(note);
 
   function svgEl(tag, attrs = {}, parent) {
@@ -557,8 +601,8 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
       ? `${win.mean.toFixed(1)} ± ${win.sd.toFixed(1)} °C (was ${base.mean.toFixed(1)} ± ${base.sd.toFixed(1)})`
       : `fits: ${win.mean.toFixed(1)} ± ${win.sd.toFixed(1)} °C, skewness ${signed(win.skew, 2)} (baseline ${base.mean.toFixed(1)} ± ${base.sd.toFixed(1)} °C, ${signed(base.skew, 2)})`;
 
-    const stats = {lo: tailStats("lo"), hi: tailStats("hi")};
     const dataShare = {hi: share(days, true), lo: share(days, false)};
+    const stats = {lo: tailStats("lo", dataShare.lo), hi: tailStats("hi", dataShare.hi)};
     for (const side of ["lo", "hi"]) placeLeader(side, stats[side]);
     const of = narrow() ? "" : " of days"; // two full lines do not fit side by side on a phone
     fitLines(2, {
@@ -591,11 +635,14 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
   }
   const narrow = () => w < 480;
 
-  function tailStats(side) {
+  // A tail's multiplier is the data's: the window's share of days beyond the threshold over
+  // the baseline's. (The fitted curves' shares would do in the middle, but a skewed fit has
+  // a hard bound that can sit past a threshold where the data still have days.) The leader
+  // still stands where the area between the two curves is.
+  function tailStats(side, fNow) {
     const hi = side === "hi";
     const t = hi ? thrHi : thrLo;
-    const fNow = clamp(hi ? 1 - cur.cdf(t) : cur.cdf(t), 0, 1);
-    const fWas = clamp(hi ? 1 - ref.cdf(t) : ref.cdf(t), 0, 1);
+    const fWas = hi ? base.hiShare : base.loShare;
     const ratio = fWas > 0 ? fNow / fWas : fNow > 0 ? Infinity : 1;
     let sw = 0, sx = 0, sy = 0;
     for (const x of samples) {
@@ -607,8 +654,8 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
     return {t, fNow, fWas, ratio, cx: sw > 1e-12 ? sx / sw : null, cy: sw > 1e-12 ? sy / sw : 0};
   }
 
-  // The multiplier over a tail is the fitted curves', shown once it is outside the band from
-  // half to double, and always with the numbers.
+  // The multiplier over a tail, shown once it is outside the band from half to double, and
+  // always with the numbers; "0×" when the window has no such days at all.
   function placeLeader(side, st) {
     const t = tails[side];
     const show = st.cx != null && Number.isFinite(st.ratio) && (numbers || st.ratio >= LEADER_BAND || st.ratio <= 1 / LEADER_BAND);
@@ -618,7 +665,7 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
     const top = Math.max(plotT + labelFont + 4, ys(Math.max(cur.pdf(st.cx), ref.pdf(st.cx))) - 10);
     setAttrs(t.leader, {x1: px.toFixed(1), x2: px.toFixed(1), y1: ys(st.cy).toFixed(1), y2: top.toFixed(1)});
     setAttrs(t.leaderLabel, {x: px.toFixed(1), y: (top - 4).toFixed(1)});
-    t.leaderLabel.textContent = `${formatMultiplier(st.ratio)}×`;
+    t.leaderLabel.textContent = st.fNow === 0 ? "0×" : `${formatMultiplier(st.ratio)}×`;
   }
 
   // The curves are named by their years, each label on the side away from the other and
