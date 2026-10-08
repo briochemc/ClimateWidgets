@@ -1,20 +1,24 @@
 // Extreme events — how a change in a probability distribution changes the odds of its extremes.
 //
 // One panel: the probability density of a climate quantity, drawn twice. The gray curve is the
-// distribution as it was; the black curve is the same family after the reader has moved its
-// mean, spread, skewness or tail weight with the sliders. A handle under the x-axis sets a
-// threshold, and everything under the black curve beyond it is painted red. The same tail of
-// the gray curve stays gray, so what the eye lands on is the change: a sliver of gray turning
-// into a wedge of red when the mean shifts by a fraction of the spread.
+// baseline distribution; the black curve is the same family after the reader has moved its
+// mean, spread or skewness with the sliders. The extremes are the 1% tails of the baseline:
+// everything beyond its 99th percentile (high, red) and below its 1st (low, blue). The
+// baseline's tails are painted in a faded red and blue; where the perturbed curve rises above
+// the baseline in a tail the extra is painted in the full colour, and where it falls below,
+// the loss is painted paler still. So what the eye lands on is the change: a sliver of pale
+// red turning into a wedge of vivid red when the mean shifts by a fraction of the spread.
 //
 // This is the schematic of IPCC SREX (2012) Fig. SPM.3 and AR5 WGI Fig. 1.8 made interactive,
 // in the format of the Economist's version (11 Feb 2023): no y-axis, no ticks, just the x spine
-// with three words on it. The numbers (the two tail fractions, their ratio, the slider values,
-// a tick scale) are hidden until the reader asks for them, because the shapes are the lesson.
+// with three words on it. A square bracket over each tail names it; the numbers (the two tail
+// fractions, the slider values, a tick scale) are hidden until the reader asks for them,
+// because the shapes are the lesson. The one number always shown is the multiplier over a
+// tail, and only once it is outside the band from half to double.
 //
-// Units are those of the original distribution: its standard deviation is 1, and its mean is
+// Units are those of the baseline distribution: its standard deviation is 1, and its mean is
 // 0, or 2 for the families bounded at zero so that the bound is in the frame. The controls are
-// always the same four moments. A family that does not have one of them as a free parameter
+// always the same three moments. A family that does not have skewness as a free parameter
 // (the skewness of a gamma from zero follows from its mean and spread) greys that slider out
 // and shows the implied value. Where a one-to-one mapping from the moments to the family's
 // own parameters exists, it is used, so the reader never meets a shape parameter.
@@ -211,58 +215,81 @@ export function weibull(mean, sd) {
   };
 }
 
-// The menu. `mean0` is the original mean in units of the original standard deviation; the
-// families bounded at zero sit at 2 so that the bound is in the frame. `free` says which of
-// the skewness and kurtosis sliders are live. `words` go on the axis: at the left end, at the
-// original mean, at the right end.
+// The quantile of a distribution, by bisection on its cdf. The thresholds for the extremes
+// are the baseline's 1st and 99th percentiles, found this way once per family.
+export function quantile(dist, p, lo = -60, hi = 60) {
+  lo = Math.max(lo, dist.lower);
+  for (let i = 0; i < 200; i++) {
+    const mid = (lo + hi) / 2;
+    if (dist.cdf(mid) < p) lo = mid; else hi = mid;
+    if (hi - lo < 1e-9) break;
+  }
+  return (lo + hi) / 2;
+}
+
+// The tabs. `mean0` is the baseline mean in units of the baseline standard deviation; the
+// families bounded at zero sit at 2 so that the bound is in the frame. `freeSkew` says whether
+// the skewness slider is live. `words` go on the axis: at the left end, at the baseline mean,
+// at the right end. The heavy-tailed family has no slider of its own any more: it is a
+// Student's t with excess kurtosis 1 (ten degrees of freedom), tails fatter than the normal's.
 export const FAMILIES = [
-  {id: "normal", name: "Normal", uses: "temperature, pressure", mean0: 0, free: {skew: false, kurt: false},
+  {id: "normal", name: "Normal", uses: "temperature, pressure", mean0: 0, freeSkew: false,
     words: ["cold", "average", "hot"], make: (m, s) => normal(m, s)},
-  {id: "pearson3", name: "Skewed (Pearson III)", uses: "temperature with a skew", mean0: 0, free: {skew: true, kurt: false},
+  {id: "pearson3", name: "Skewed", long: "Skewed (Pearson III)", uses: "temperature with a skew", mean0: 0, freeSkew: true,
     words: ["cold", "average", "hot"], skew0: 0.6, make: (m, s, g) => pearson3(m, s, g)},
-  {id: "student", name: "Heavy-tailed (Student's t)", uses: "temperature with fat tails", mean0: 0, free: {skew: false, kurt: true},
+  {id: "student", name: "Heavy-tailed", long: "Heavy-tailed (Student's t)", uses: "temperature with fat tails", mean0: 0, freeSkew: false,
     words: ["cold", "average", "hot"], kurt0: 1, make: (m, s, g, k) => studentT(m, s, k)},
-  {id: "gamma", name: "Gamma", uses: "rainfall", mean0: 2, free: {skew: false, kurt: false},
+  {id: "gamma", name: "Gamma", uses: "rainfall", mean0: 2, freeSkew: false,
     words: ["dry", "average", "wet"], make: (m, s) => gammaFromZero(m, s)},
-  {id: "lognormal", name: "Lognormal", uses: "rainfall, wind", mean0: 2, free: {skew: false, kurt: false},
+  {id: "lognormal", name: "Lognormal", uses: "rainfall, wind", mean0: 2, freeSkew: false,
     words: ["dry", "average", "wet"], make: (m, s) => lognormal(m, s)},
-  {id: "weibull", name: "Weibull", uses: "wind speed", mean0: 2, free: {skew: false, kurt: false},
+  {id: "weibull", name: "Weibull", uses: "wind speed", mean0: 2, freeSkew: false,
     words: ["calm", "average", "windy"], make: (m, s) => weibull(m, s)},
 ];
 
-// Slider ranges, in units of the original standard deviation (the mean's is relative to the
-// original mean). Skewness stops at ±1.5, where a Pearson III is still a bell: at ±2 it is an
-// exponential with its mode on the bound. Kurtosis 6 is a t with 5 degrees of freedom.
-const MEAN_RANGE = 2, SD_MIN = 0.5, SD_MAX = 2, SKEW_MAX = 1.5, KURT_MAX = 6;
-const AXIS_SPAN = 4.5;      // the axis reaches this far beyond the original mean, both ways
-const THRESHOLD0 = 2;       // default threshold, standard deviations above the original mean
+// Slider ranges, in units of the baseline standard deviation (the mean's is relative to the
+// baseline mean). Skewness stops at ±1.5, where a Pearson III is still a bell: at ±2 it is an
+// exponential with its mode on the bound.
+const MEAN_RANGE = 2, SD_MIN = 0.5, SD_MAX = 2, SKEW_MAX = 1.5;
+const AXIS_SPAN = 4.5;      // the axis reaches this far beyond the baseline mean, both ways
+const TAIL = 0.01;          // an extreme is beyond the baseline's 1st or 99th percentile
+const LEADER_BAND = 2;      // a tail's multiplier is labelled outside [1/LEADER_BAND, LEADER_BAND]
 
 const BACKGROUND = "#f2f2f2"; // the plate the survey widgets sit on
-const RED = "#e3120b";        // the extremes
+const RED = "#e3120b";        // the high extremes
+const BLUE = "#0b57d0";       // the low extremes
 const ACCENT = "#0b57d0";     // focus ring, active controls
-const GRAY_CURVE = "#9a9a9a", GRAY_TAIL = "#c4c4c4", BLACK_CURVE = "#222";
+const GRAY_CURVE = "#9a9a9a", BLACK_CURVE = "#222";
+const MID_FILL = "#e3e3e3";   // under both curves between the extremes
+// A tail's fills are opaque tints of its colour on the plate, so that they layer predictably:
+// the baseline's tail, and the loss where the perturbed curve dips below it.
+const TINT_BASE = 0.38, TINT_LOSS = 0.16;
 
 const FIGURE_WIDTH = 640;
 const MIN_WIDTH = 320;
 const SVG_NS = "http://www.w3.org/2000/svg";
 let instances = 0;
 
-// `shift` is where the mean slider starts, in standard deviations above the original mean: a
+// `shift` is where the mean slider starts, in standard deviations above the baseline mean: a
 // little to the right by default, so that the black curve is not drawn on top of the gray one
 // and the red wedge is there to be seen before anything is touched. Reset puts it back to 0.
-export function createExtremeEventsWidget({family = "normal", shift = 0.5, threshold = THRESHOLD0, showNumbers = false, words, width = FIGURE_WIDTH} = {}) {
+// `tail` is the share of the baseline beyond each threshold.
+export function createExtremeEventsWidget({family = "normal", shift = 0.5, tail = TAIL, showNumbers = false, words, width = FIGURE_WIDTH} = {}) {
   const uid = `extreme-events-${++instances}`;
 
-  // Vertical layout is constant; only horizontal metrics and fonts follow the width.
+  // Vertical layout is constant; only horizontal metrics and fonts follow the width. Below
+  // the axis: the three words, the σ scale (numbers mode), then the two brackets with their
+  // names under them, with a third line kept free for the figures in numbers mode, so that
+  // nothing below the axis ever moves.
   const plotT = 12, plotH = 236, plotB = plotT + plotH;
-  const wordsY = plotB + 20;   // the three words on the axis
-  const ticksY = plotB + 36;   // the σ scale, numbers mode only
-  const trackY = plotB + 62;   // threshold slider
-  const trackH = 6, handleR = 8;
-  const totalH = trackY + 40;
+  const wordsY = plotB + 18;   // the three words on the axis
+  const ticksY = plotB + 32;   // the σ scale, numbers mode only
+  const bracketY = plotB + 40; // the brackets' upturned ends
+  const LINE_H = 17;           // the label lines under a bracket, at the largest label font
+  const totalH = bracketY + 6 + 15 + 2 * LINE_H + 8;
 
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
-  let w, plotL, plotR, plotW, wordFont, tickFont, labelFont;
+  let w, plotL, plotR, plotW, wordFont, tickFont, labelFont, titleFont;
   function applyLayout(newW) {
     w = newW;
     const t = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
@@ -273,17 +300,18 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
     wordFont = lerp(12, 14);
     tickFont = lerp(10, 11);
     labelFont = lerp(12, 14);
+    titleFont = lerp(14, 20); // as the Hickman et al. widget's in-plot title
   }
   applyLayout(maxW);
 
   // ---- state ----------------------------------------------------------------------------------
   let fam = FAMILIES.find(f => f.id === family) ?? FAMILIES[0];
   let mean, sd, skew, kurt;       // the black curve's moments (the free ones; others implied)
-  let thr;                        // threshold, in x units
+  let thrLo, thrHi;               // the thresholds, in x units: the baseline's tail quantiles
   let numbers = Boolean(showNumbers);
   let axisWords = words;          // an override from the caller, else the family's own
   let ref, cur;                   // the gray and black distributions
-  let dragging = false;
+  const tailShare = clamp(Number(tail) || TAIL, 1e-4, 0.25);
 
   const defaults = () => ({mean: fam.mean0, sd: 1, skew: fam.skew0 ?? 0, kurt: fam.kurt0 ?? 0});
   const xMin = () => (fam.mean0 > 0 ? 0 : fam.mean0 - AXIS_SPAN);
@@ -294,9 +322,13 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
   function makeDistributions() {
     const d = defaults();
     ref = fam.make(d.mean, d.sd, d.skew, d.kurt);
-    cur = fam.make(mean, sd, fam.free.skew ? skew : d.skew, fam.free.kurt ? kurt : d.kurt);
-    if (!fam.free.skew) skew = cur.skew;
-    if (!fam.free.kurt) kurt = cur.kurt;
+    cur = fam.make(mean, sd, fam.freeSkew ? skew : d.skew, d.kurt);
+    if (!fam.freeSkew) skew = cur.skew;
+    kurt = cur.kurt;
+  }
+  function makeThresholds() {
+    thrLo = clamp(quantile(ref, tailShare), xMin(), xMax());
+    thrHi = clamp(quantile(ref, 1 - tailShare), xMin(), xMax());
   }
 
   function resetParams() {
@@ -304,41 +336,70 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
   }
   resetParams();
   mean = clamp(fam.mean0 + (Number(shift) || 0), meanMin(), meanMax());
-  thr = clamp(fam.mean0 + threshold, xMin(), xMax());
   makeDistributions();
+  makeThresholds();
 
   // ---- DOM ------------------------------------------------------------------------------------
-  // The plate runs under the whole widget, controls included, so it reads as one card.
+  // The plate runs under the whole widget, controls included, so it reads as one card. It is
+  // capped at the figure's width so that the controls never run on past the axis.
   const container = document.createElement("div");
   container.style.cssText =
-    `font:16px sans-serif;color:#333;background:${BACKGROUND};padding:10px 12px 12px;border-radius:6px;box-sizing:border-box;`;
+    `font:16px sans-serif;color:#333;background:${BACKGROUND};padding:10px 12px 12px;border-radius:6px;` +
+    `box-sizing:border-box;max-width:${maxW + 24}px;`;
 
-  const controls = document.createElement("div");
-  controls.style.cssText =
-    "display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 16px;padding:0 0 8px;font-size:13px;color:#666;";
-  container.appendChild(controls);
+  // The title, two lines, in the format of the Hickman et al. widget's: bold, flush with the
+  // left end of the axis.
+  const title = document.createElement("div");
+  title.style.cssText = "font-weight:bold;color:#111;line-height:1.2;white-space:pre-line;padding:0 0 10px;";
+  title.textContent = "Small changes in the distribution\ncan mean big changes in extremes";
+  container.appendChild(title);
 
-  const famField = document.createElement("label");
-  famField.style.cssText = "display:flex;align-items:center;gap:6px;";
-  const famSelect = document.createElement("select");
-  famSelect.style.cssText =
-    "font:13px sans-serif;color:#222;padding:3px 6px;border:1px solid #ccc;border-radius:6px;background:#fff;max-width:100%;";
-  for (const f of FAMILIES) {
-    const o = document.createElement("option");
-    o.value = f.id;
-    o.textContent = `${f.name} — ${f.uses}`;
-    famSelect.appendChild(o);
+  // The tabs, one per family, with the numbers toggle and the reset button at the right end.
+  const tabRow = document.createElement("div");
+  tabRow.style.cssText =
+    "display:flex;flex-wrap:wrap;align-items:flex-end;gap:0 2px;border-bottom:1px solid #cfcfcf;font-size:13px;color:#666;";
+  container.appendChild(tabRow);
+
+  const tabList = document.createElement("div");
+  tabList.setAttribute("role", "tablist");
+  tabList.setAttribute("aria-label", "Distribution");
+  tabList.style.cssText = "display:flex;flex-wrap:wrap;gap:0 2px;";
+  const tabs = FAMILIES.map(f => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("role", "tab");
+    b.textContent = f.name;
+    b.title = `${f.long ?? f.name}: ${f.uses}`;
+    b.style.cssText =
+      "font:13px sans-serif;padding:5px 9px;margin-bottom:-1px;border:0;border-bottom:2px solid transparent;" +
+      "background:none;color:#555;cursor:pointer;white-space:nowrap;";
+    b.addEventListener("click", () => setFamily(f.id));
+    b.addEventListener("keydown", e => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      const i = FAMILIES.indexOf(fam) + (e.key === "ArrowLeft" ? -1 : 1);
+      const next = FAMILIES[(i + FAMILIES.length) % FAMILIES.length];
+      setFamily(next.id);
+      tabs[FAMILIES.indexOf(next)].el.focus();
+    });
+    tabList.appendChild(b);
+    return {el: b, f};
+  });
+  function updateTabs() {
+    for (const {el, f} of tabs) {
+      const on = f === fam;
+      el.setAttribute("aria-selected", on);
+      el.tabIndex = on ? 0 : -1;
+      el.style.color = on ? ACCENT : "#555";
+      el.style.borderBottomColor = on ? ACCENT : "transparent";
+    }
   }
-  famSelect.value = fam.id;
-  famSelect.addEventListener("change", () => setFamily(famSelect.value));
-  famSelect.addEventListener("input", e => e.stopPropagation());
-  famField.append("Distribution", famSelect);
-  controls.appendChild(famField);
+  tabRow.appendChild(tabList);
 
   const right = document.createElement("div");
-  right.style.cssText = "display:flex;align-items:center;gap:14px;margin-left:auto;";
+  right.style.cssText = "display:flex;align-items:center;gap:14px;margin-left:auto;padding:0 0 5px 8px;";
   const numbersField = document.createElement("label");
-  numbersField.style.cssText = "display:flex;align-items:center;gap:5px;cursor:pointer;";
+  numbersField.style.cssText = "display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;";
   const numbersBox = document.createElement("input");
   numbersBox.type = "checkbox";
   numbersBox.checked = numbers;
@@ -351,45 +412,29 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
   resetButton.textContent = "Reset";
   resetButton.style.cssText =
     "font:13px sans-serif;color:#333;background:#fff;border:1px solid #ccc;border-radius:999px;padding:3px 12px;cursor:pointer;";
-  resetButton.addEventListener("click", () => {
-    resetParams();
-    thr = clamp(fam.mean0 + THRESHOLD0, xMin(), xMax());
-    update();
-  });
+  resetButton.addEventListener("click", () => { resetParams(); update(); });
   right.append(numbersField, resetButton);
-  controls.appendChild(right);
+  tabRow.appendChild(right);
 
-  const scroller = document.createElement("div");
-  scroller.style.cssText = "max-width:100%;overflow-x:auto;";
-  const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("class", "extreme-events");
-  svg.setAttribute("role", "slider");
-  svg.style.display = "block";
-  svg.style.outline = "none";
-  svg.style.touchAction = "pan-y";
-  svg.tabIndex = 0;
-  scroller.appendChild(svg);
-  container.appendChild(scroller);
-
-  // The four moment sliders, one row each: name, slider, read-out.
+  // The three moment sliders, one row each: name, slider, read-out. The block is set flush
+  // with the two ends of the axis below it (see build).
   const sliderBox = document.createElement("div");
-  sliderBox.style.cssText = "display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;padding:10px 0 0;font-size:13px;color:#555;";
+  sliderBox.style.cssText =
+    "display:grid;grid-template-columns:auto 1fr auto;gap:5px 10px;align-items:center;padding:8px 0 2px;font-size:13px;color:#555;";
   container.appendChild(sliderBox);
 
   const SLIDERS = [
     {key: "mean", name: "Mean", step: 0.05, min: meanMin, max: meanMax, get: () => mean, set: v => (mean = v),
       format: v => `${signed(v - fam.mean0)} σ`, free: () => true},
-    {key: "sd", name: "Spread", step: 0.02, min: () => SD_MIN, max: () => SD_MAX, get: () => sd, set: v => (sd = v),
+    {key: "sd", name: "Variance (spread)", step: 0.02, min: () => SD_MIN, max: () => SD_MAX, get: () => sd, set: v => (sd = v),
       format: v => `× ${v.toFixed(2)}`, free: () => true},
-    {key: "skew", name: "Skewness", step: 0.05, min: () => -SKEW_MAX, max: () => SKEW_MAX, get: () => skew, set: v => (skew = v),
-      format: v => signed(v), free: () => fam.free.skew},
-    {key: "kurt", name: "Kurtosis", step: 0.1, min: () => 0, max: () => KURT_MAX, get: () => kurt, set: v => (kurt = v),
-      format: v => signed(v), free: () => fam.free.kurt},
+    {key: "skew", name: "Skewness (asymmetry)", step: 0.05, min: () => -SKEW_MAX, max: () => SKEW_MAX, get: () => skew, set: v => (skew = v),
+      format: v => signed(v), free: () => fam.freeSkew},
   ];
   const sliderRows = SLIDERS.map(s => {
     const name = document.createElement("label");
     name.textContent = s.name;
-    name.style.cssText = "color:#333;";
+    name.style.cssText = "color:#333;white-space:nowrap;";
     const input = document.createElement("input");
     input.type = "range";
     input.step = s.step;
@@ -424,11 +469,22 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
     }
   }
 
+  const scroller = document.createElement("div");
+  scroller.style.cssText = "max-width:100%;overflow-x:auto;";
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", "extreme-events");
+  svg.setAttribute("role", "img");
+  svg.style.display = "block";
+  scroller.appendChild(svg);
+  container.appendChild(scroller);
+
   const hint = document.createElement("div");
   hint.style.cssText = "padding:10px 0 0;color:#888;font-size:14px;";
   hint.textContent =
-    "The gray curve is the original distribution; move the sliders to change it. Drag the red handle under " +
-    "the axis to set the threshold for an extreme (with the figure focused, ← and → move it too).";
+    "The gray curve is the baseline distribution; move the sliders to perturb it. Here an extreme is anything " +
+    `in the baseline's ${formatShare(tailShare)} tails, high in red and low in blue. That cut-off is arbitrary: ` +
+    "with real data, what counts as extreme depends on the context, such as a heat-health warning, a flood " +
+    "defence or a crop's tolerance.";
   container.appendChild(hint);
 
   function svgEl(tag, attrs = {}, parent) {
@@ -441,7 +497,6 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
 
   // ---- scales and sampling ----------------------------------------------------------------------
   const xs = x => plotL + ((x - xMin()) / (xMax() - xMin())) * plotW;
-  const xInv = px => xMin() + ((px - plotL) / plotW) * (xMax() - xMin());
   let yMax = 1;
   const ys = v => plotB - (Math.min(v, 1e3) / yMax) * plotH;
 
@@ -452,7 +507,7 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
     for (let i = 0; i <= n; i++) samples.push(xMin() + ((xMax() - xMin()) * i) / n);
   }
 
-  // The density as a path, with the support's lower bound added as an exact point so a J- or
+  // The density as points, with the support's lower bound added as an exact point so a J- or
   // L-shaped curve rises from it rather than from the next sample over.
   function curvePoints(dist) {
     const pts = [];
@@ -464,17 +519,18 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
     }
     return pts;
   }
-  const toPath = pts => pts.map(([x, v], i) => `${i ? "L" : "M"}${xs(x).toFixed(1)},${ys(v).toFixed(1)}`).join("");
-  // The tail beyond the threshold: the curve from the threshold to the right edge, closed on the axis.
-  function tailPath(dist, pts) {
-    let d = `M${xs(thr).toFixed(1)},${plotB}L${xs(thr).toFixed(1)},${ys(dist.pdf(thr)).toFixed(1)}`;
-    for (const [x, v] of pts) if (x > thr) d += `L${xs(x).toFixed(1)},${ys(v).toFixed(1)}`;
-    return d + `L${plotR},${plotB}Z`;
-  }
+  const P = ([x, v]) => `${xs(x).toFixed(1)},${ys(v).toFixed(1)}`;
+  const toPath = pts => pts.map((p, i) => `${i ? "L" : "M"}${P(p)}`).join("");
+  // The area under a curve, closed on the axis. Which part of it shows is left to clip paths.
+  const areaPath = pts => `M${xs(pts[0][0]).toFixed(1)},${plotB}${pts.map(p => `L${P(p)}`).join("")}L${xs(pts[pts.length - 1][0]).toFixed(1)},${plotB}Z`;
+  // The region between the two curves: out along one, back along the other. Where they cross
+  // the polygon turns over, and every lobe is still filled under the nonzero rule.
+  const betweenPath = (a, b) => `M${a.map(P).join("L")}L${[...b].reverse().map(P).join("L")}Z`;
 
   // ---- scaffolding, rebuilt on resize and family change ---------------------------------------
-  let refCurve, refTail, curCurve, curTail, thrTick, handleG, focusRing, thrLabel, legend;
-  let labelHead, labelNow, labelWas, labelRatio, tickG, wordEls;
+  let refCurve, curCurve, areaEls, betweenEls, clipRefArea, clipCurArea, clipRects, tickG, caption;
+  let refLabel, curLabel;
+  const tails = {}; // per side: the label lines under its bracket, and its leader line and label
 
   function build() {
     svg.setAttribute("width", w);
@@ -484,21 +540,45 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
 
     svgEl("rect", {width: w, height: totalH, fill: BACKGROUND}, svg);
     const defs = svgEl("defs", {}, svg);
-    svgEl("rect", {x: plotL - 1, y: plotT, width: plotW + 2, height: plotH}, svgEl("clipPath", {id: `${uid}-plot`}, defs));
+    const clip = (name, child) => {
+      const c = svgEl("clipPath", {id: `${uid}-${name}`}, defs);
+      c.appendChild(child);
+      return child;
+    };
+    const url = name => `url(#${uid}-${name})`;
+    clip("plot", svgEl("rect", {x: plotL - 1, y: plotT, width: plotW + 2, height: plotH}));
+    // The three bands of the axis: below the low threshold, between, beyond the high one.
+    const xLo = xs(thrLo), xHi = xs(thrHi);
+    clipRects = {
+      lo: clip("lo", svgEl("rect", {x: plotL - 1, y: plotT, width: xLo - plotL + 1, height: plotH})),
+      mid: clip("mid", svgEl("rect", {x: xLo, y: plotT, width: xHi - xLo, height: plotH})),
+      hi: clip("hi", svgEl("rect", {x: xHi, y: plotT, width: plotR + 1 - xHi, height: plotH})),
+    };
+    // The areas under each curve, as clips: between ∩ under-perturbed is where the perturbed
+    // curve is the higher, between ∩ under-baseline where it is the lower.
+    clipRefArea = clip("ref-area", svgEl("path", {}));
+    clipCurArea = clip("cur-area", svgEl("path", {}));
 
-    const plot = svgEl("g", {"clip-path": `url(#${uid}-plot)`}, svg);
-    refTail = svgEl("path", {fill: GRAY_TAIL}, plot);
-    curTail = svgEl("path", {fill: RED}, plot);
+    const plot = svgEl("g", {"clip-path": url("plot")}, svg);
+    // Between the extremes: a very light gray under both curves.
+    const mid = svgEl("g", {"clip-path": url("mid")}, plot);
+    areaEls = [svgEl("path", {fill: MID_FILL}, mid), svgEl("path", {fill: MID_FILL}, mid)];
+    betweenEls = [];
+    for (const [side, colour] of [["lo", BLUE], ["hi", RED]]) {
+      const g = svgEl("g", {"clip-path": url(side)}, plot);
+      areaEls.push(svgEl("path", {fill: tint(colour, TINT_BASE)}, g));        // the baseline's tail
+      betweenEls.push(svgEl("path", {fill: tint(colour, TINT_LOSS), "clip-path": url("ref-area")}, g)); // the loss
+      betweenEls.push(svgEl("path", {fill: colour, "clip-path": url("cur-area")}, g));          // the gain
+    }
     refCurve = svgEl("path", {fill: "none", stroke: GRAY_CURVE, "stroke-width": 2, "stroke-linejoin": "round"}, plot);
     curCurve = svgEl("path", {fill: "none", stroke: BLACK_CURVE, "stroke-width": 2.5, "stroke-linejoin": "round"}, plot);
 
     // The spine, the three words, and a σ scale that only shows with the numbers.
     svgEl("line", {x1: plotL, x2: plotR, y1: plotB, y2: plotB, stroke: "#555", "stroke-width": 1.25}, svg);
     const wordsNow = axisWords ?? fam.words;
-    wordEls = [[xMin(), "start"], [fam.mean0, "middle"], [xMax(), "end"]].map(([x, anchor], i) => {
+    [[xMin(), "start"], [fam.mean0, "middle"], [xMax(), "end"]].forEach(([x, anchor], i) => {
       const t = svgEl("text", {x: xs(x).toFixed(1), y: wordsY, "text-anchor": anchor, "font-size": wordFont, fill: "#555"}, svg);
       t.textContent = wordsNow[i] ?? "";
-      return t;
     });
     tickG = svgEl("g", {}, svg);
     for (let k = Math.ceil(xMin() - fam.mean0); k <= Math.floor(xMax() - fam.mean0); k++) {
@@ -508,34 +588,45 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
       t.textContent = k === 0 ? "0" : `${signed(k, 0)}σ`;
     }
 
-    // The threshold: a red tick on the spine, and the handle on its track below.
-    thrTick = svgEl("line", {y1: plotB - 5, y2: plotB + 5, stroke: RED, "stroke-width": 2}, svg);
-    svgEl("rect", {
-      x: plotL - trackH / 2, y: trackY - trackH / 2, width: plotW + trackH, height: trackH, rx: trackH / 2,
-      fill: "#fff", stroke: "#bbb", "stroke-width": 0.75,
-    }, svg);
-    handleG = svgEl("g", {}, svg);
-    focusRing = svgEl("circle", {r: handleR + 4, fill: "none", stroke: hexToRgba(ACCENT, 0.35), "stroke-width": 3}, handleG);
-    focusRing.style.display = document.activeElement === svg ? "" : "none";
-    svgEl("circle", {r: handleR, fill: RED, stroke: "#fff", "stroke-width": 2}, handleG);
-    thrLabel = svgEl("text", {y: trackY + handleR + 16, "text-anchor": "middle", "font-size": tickFont + 1, fill: "#555"}, svg);
+    // Which family this is, top left, in place of a key: the curves are labelled directly.
+    caption = svgEl("text", {x: plotL + 4, y: plotT + 12, "font-size": tickFont + 1, fill: "#777"}, svg);
+    caption.textContent = `${fam.long ?? fam.name}: ${fam.uses}`;
 
-    // The read-out beside the red tail: a heading always, the figures only with the numbers.
-    const label = svgEl("g", {}, svg);
-    labelHead = svgEl("text", {"font-size": labelFont, "font-weight": "bold", fill: RED, ...halo}, label);
-    labelNow = svgEl("text", {"font-size": labelFont, fill: RED, ...halo}, label);
-    labelWas = svgEl("text", {"font-size": labelFont, fill: "#777", ...halo}, label);
-    labelRatio = svgEl("text", {"font-size": labelFont, "font-weight": "bold", fill: BLACK_CURVE, ...halo}, label);
+    // Each tail: a square bracket under the axis facing up at it, with its name under the
+    // bracket (and its figures, with the numbers), and a leader to its multiplier up in the
+    // plot. The brackets never move: the tail's span on the axis is fixed by the baseline,
+    // and what happens above it is the leader's business.
+    for (const [side, colour] of [["lo", BLUE], ["hi", RED]]) {
+      const hi = side === "hi";
+      const g = svgEl("g", {}, svg);
+      const x1 = hi ? xs(thrHi) : plotL, x2 = hi ? plotR : xs(thrLo);
+      const t = {
+        lines: [],
+        leader: svgEl("line", {stroke: colour, "stroke-width": 1.25}, g),
+        leaderLabel: svgEl("text", {"text-anchor": "middle", "font-size": labelFont, "font-weight": "bold", fill: colour, ...halo}, g),
+      };
+      svgEl("path", {
+        d: `M${x1.toFixed(1)},${bracketY}L${x1.toFixed(1)},${bracketY + 6}L${x2.toFixed(1)},${bracketY + 6}L${x2.toFixed(1)},${bracketY}`,
+        fill: "none", stroke: "#000", "stroke-width": 1.5,
+      }, g);
+      const lines = [hi ? "high" : "low", "extremes", ""];
+      const halfW = Math.max(...lines.map(s => labelHalfWidth(s, labelFont)), labelHalfWidth("0.00% (was 0.00%)", labelFont));
+      const cx = clamp((x1 + x2) / 2, plotL + halfW, plotR - halfW);
+      lines.forEach((text, i) => {
+        const el = svgEl("text", {
+          x: cx.toFixed(1), y: bracketY + 6 + 15 + i * LINE_H, "text-anchor": "middle", "font-size": labelFont,
+          fill: i < 2 ? colour : "#555", "font-weight": i < 2 ? "bold" : "normal", ...halo,
+        }, g);
+        el.textContent = text;
+        t.lines.push(el);
+      });
+      tails[side] = t;
+    }
 
-    // The key, top left: which curve is which.
-    legend = svgEl("g", {"font-size": tickFont + 1}, svg);
-    const key = (y, color, text, width) => {
-      svgEl("line", {x1: plotL + 4, x2: plotL + 24, y1: y, y2: y, stroke: color, "stroke-width": width}, legend);
-      const t = svgEl("text", {x: plotL + 30, y: y + 4, fill: "#555"}, legend);
-      t.textContent = text;
-    };
-    key(plotT + 10, GRAY_CURVE, "original", 2);
-    key(plotT + 26, BLACK_CURVE, "changed", 2.5);
+    refLabel = svgEl("text", {"font-size": labelFont, fill: GRAY_CURVE, ...halo}, svg);
+    curLabel = svgEl("text", {"font-size": labelFont, "font-weight": "bold", fill: BLACK_CURVE, ...halo}, svg);
+    refLabel.textContent = "baseline";
+    curLabel.textContent = "perturbed";
 
     render();
   }
@@ -545,47 +636,85 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
     const refPts = curvePoints(ref), curPts = curvePoints(cur);
     const peak = pts => pts.reduce((m, [, v]) => Math.max(m, Math.min(v, 1e3)), 0);
     const refPeak = peak(refPts);
-    // The frame is twice the original peak, and only stretches when the black curve would
+    // The frame is twice the baseline peak, and only stretches when the black curve would
     // overflow it, so that the gray curve stays put while the sliders move.
     yMax = refPeak * clamp((1.08 * peak(curPts)) / refPeak, 2, 3);
 
     refCurve.setAttribute("d", toPath(refPts));
     curCurve.setAttribute("d", toPath(curPts));
-    refTail.setAttribute("d", tailPath(ref, refPts));
-    curTail.setAttribute("d", tailPath(cur, curPts));
-
-    const tx = xs(thr);
-    setAttrs(thrTick, {x1: tx.toFixed(1), x2: tx.toFixed(1)});
-    handleG.setAttribute("transform", `translate(${tx.toFixed(1)},${trackY})`);
-    thrLabel.setAttribute("x", clamp(tx, plotL + 40, plotR - 40).toFixed(1));
-    thrLabel.textContent = numbers ? `threshold ${signed(thr - fam.mean0)} σ` : "";
+    const refArea = areaPath(refPts), curArea = areaPath(curPts), between = betweenPath(curPts, refPts);
+    clipRefArea.setAttribute("d", refArea);
+    clipCurArea.setAttribute("d", curArea);
+    const [midRef, midCur, loBase, hiBase] = areaEls;
+    midRef.setAttribute("d", refArea);
+    midCur.setAttribute("d", curArea);
+    loBase.setAttribute("d", refArea);
+    hiBase.setAttribute("d", refArea);
+    for (const el of betweenEls) el.setAttribute("d", between);
     tickG.style.display = numbers ? "" : "none";
 
-    // Tail fractions, from the cdfs rather than the picture.
-    const fNow = Math.max(0, 1 - cur.cdf(thr)), fWas = Math.max(0, 1 - ref.cdf(thr));
-    const ratio = fWas > 0 ? fNow / fWas : fNow > 0 ? Infinity : 1;
+    const stats = {lo: tailStats("lo"), hi: tailStats("hi")};
+    for (const side of ["lo", "hi"]) {
+      placeLeader(side, stats[side]);
+      // The third line under the bracket: the figures, with the numbers.
+      tails[side].lines[2].textContent = numbers ? `${formatShare(stats[side].fNow)} (was ${formatShare(stats[side].fWas)})` : "";
+    }
+    placeCurveLabels(refPts, curPts);
 
-    // The read-out stands to the right of the threshold when there is room, else to its left.
-    const lines = numbers
-      ? [`${formatShare(fNow)} of the time`, `was ${formatShare(fWas)}`, formatRatio(ratio)]
-      : ["", "", ""];
-    const longest = Math.max(...["Extremes", ...lines].map(s => 2 * labelHalfWidth(s, labelFont)));
-    const rightSide = tx + 10 + longest <= plotR - 4;
-    const lx = rightSide ? tx + 10 : tx - 10;
-    const anchor = rightSide ? "start" : "end";
-    [labelHead, labelNow, labelWas, labelRatio].forEach((el, i) => {
-      setAttrs(el, {x: lx.toFixed(1), y: plotT + 60 + i * (labelFont + 4), "text-anchor": anchor});
-    });
-    labelHead.textContent = "Extremes";
-    [labelNow.textContent, labelWas.textContent, labelRatio.textContent] = lines;
-
-    svg.setAttribute("aria-valuemin", xMin() - fam.mean0);
-    svg.setAttribute("aria-valuemax", xMax() - fam.mean0);
-    svg.setAttribute("aria-valuenow", (thr - fam.mean0).toFixed(2));
     svg.setAttribute("aria-label",
-      `Threshold for an extreme: ${signed(thr - fam.mean0)} standard deviations from the original mean. ` +
-      `${fam.name} distribution; extremes happen ${formatShare(fNow)} of the time, against ${formatShare(fWas)} originally, ` +
-      `${formatRatio(ratio)}. Left and right arrows move the threshold.`);
+      `${fam.long ?? fam.name} distribution, with the extremes beyond the baseline's ${formatShare(tailShare)} tails. ` +
+      `High extremes happen ${formatShare(stats.hi.fNow)} of the time, ${formatRatio(stats.hi.ratio)}; ` +
+      `low extremes ${formatShare(stats.lo.fNow)} of the time, ${formatRatio(stats.lo.ratio)}.`);
+  }
+
+  // A tail's fractions, from the cdfs rather than the picture, and the centroid of the area
+  // between the two curves in it, from the samples.
+  function tailStats(side) {
+    const hi = side === "hi";
+    const t = hi ? thrHi : thrLo;
+    const fNow = clamp(hi ? 1 - cur.cdf(t) : cur.cdf(t), 0, 1);
+    const fWas = clamp(hi ? 1 - ref.cdf(t) : ref.cdf(t), 0, 1);
+    const ratio = fWas > 0 ? fNow / fWas : fNow > 0 ? Infinity : 1;
+    let sw = 0, sx = 0, sy = 0;
+    for (const x of samples) {
+      if (hi ? x <= t : x >= t) continue;
+      const a = Math.min(cur.pdf(x), 1e3), b = Math.min(ref.pdf(x), 1e3);
+      const d = Math.abs(a - b);
+      sw += d; sx += d * x; sy += (d * (a + b)) / 2;
+    }
+    return {t, fNow, fWas, ratio, cx: sw > 1e-12 ? sx / sw : null, cy: sw > 1e-12 ? sy / sw : 0};
+  }
+
+  // The multiplier over a tail, on a short vertical leader from the middle of the area
+  // between the curves, shown once it is outside the band from half to double, and always
+  // with the numbers.
+  function placeLeader(side, st) {
+    const t = tails[side];
+    const show = st.cx != null && Number.isFinite(st.ratio) && (numbers || st.ratio >= LEADER_BAND || st.ratio <= 1 / LEADER_BAND);
+    t.leader.style.display = t.leaderLabel.style.display = show ? "" : "none";
+    if (!show) return;
+    const px = clamp(xs(st.cx), plotL + 24, plotR - 24);
+    const top = Math.max(plotT + labelFont + 4, ys(Math.max(cur.pdf(st.cx), ref.pdf(st.cx))) - 10);
+    setAttrs(t.leader, {x1: px.toFixed(1), x2: px.toFixed(1), y1: ys(st.cy).toFixed(1), y2: top.toFixed(1)});
+    setAttrs(t.leaderLabel, {x: px.toFixed(1), y: (top - 4).toFixed(1)});
+    t.leaderLabel.textContent = `${formatMultiplier(st.ratio)}×`;
+  }
+
+  // "baseline" and "perturbed" beside their curves' peaks, each on the side away from the
+  // other, so that the two never run into each other however the black curve is moved.
+  function placeCurveLabels(refPts, curPts) {
+    const peakOf = pts => pts.reduce((m, p) => (p[1] > m[1] ? p : m));
+    const rp = peakOf(refPts), cp = peakOf(curPts);
+    const refLeft = rp[0] <= cp[0];
+    const place = (el, [x, v], left) => {
+      setAttrs(el, {
+        x: (xs(x) + (left ? -7 : 7)).toFixed(1),
+        y: clamp(ys(v) - 6, plotT + 12, plotB - 4).toFixed(1),
+        "text-anchor": left ? "end" : "start",
+      });
+    };
+    place(refLabel, rp, refLeft);
+    place(curLabel, cp, !refLeft);
   }
 
   // ---- changes ----------------------------------------------------------------------------------
@@ -599,77 +728,26 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
   function setFamily(id) {
     const next = FAMILIES.find(f => f.id === id);
     if (!next || next === fam) return;
-    const rel = thr - fam.mean0;
     fam = next;
-    famSelect.value = fam.id;
     resetParams();
-    thr = clamp(fam.mean0 + rel, xMin(), xMax());
     makeDistributions();
+    makeThresholds();
+    updateTabs();
     build();
     updateSliders();
     emit();
   }
 
-  function setThreshold(x) {
-    x = clamp(Math.round(x / 0.05) * 0.05, xMin(), xMax());
-    if (x === thr) return;
-    thr = x;
-    render();
-    emit();
-  }
-
-  // ---- input --------------------------------------------------------------------------------------
-  function pointerAt(e) {
-    const r = svg.getBoundingClientRect();
-    return {px: (e.clientX - r.left) * (w / r.width), py: (e.clientY - r.top) * (totalH / r.height)};
-  }
-  const overSlider = py => Math.abs(py - trackY) <= 22;
-
-  svg.addEventListener("pointerdown", e => {
-    const {px, py} = pointerAt(e);
-    if (!overSlider(py)) return;
-    dragging = true;
-    svg.setPointerCapture(e.pointerId);
-    svg.focus();
-    setThreshold(xInv(px));
-    e.preventDefault();
-  });
-  svg.addEventListener("pointermove", e => {
-    const {px, py} = pointerAt(e);
-    if (!dragging) { svg.style.cursor = overSlider(py) ? "ew-resize" : "default"; return; }
-    setThreshold(xInv(px));
-  });
-  for (const type of ["pointerup", "pointercancel"]) {
-    svg.addEventListener(type, e => {
-      if (!dragging) return;
-      dragging = false;
-      svg.releasePointerCapture(e.pointerId);
-    });
-  }
-  svg.addEventListener("keydown", e => {
-    const step = e.shiftKey ? 0.5 : 0.1;
-    let x = thr;
-    if (e.key === "ArrowLeft" || e.key === "ArrowDown") x -= step;
-    else if (e.key === "ArrowRight" || e.key === "ArrowUp") x += step;
-    else if (e.key === "Home") x = xMin();
-    else if (e.key === "End") x = xMax();
-    else return;
-    e.preventDefault();
-    setThreshold(x);
-  });
-  svg.addEventListener("focus", () => { focusRing.style.display = ""; });
-  svg.addEventListener("blur", () => { focusRing.style.display = "none"; });
-
   // ---- value --------------------------------------------------------------------------------------
   function value() {
-    const fNow = Math.max(0, 1 - cur.cdf(thr)), fWas = Math.max(0, 1 - ref.cdf(thr));
+    const hi = tailStats("hi"), lo = tailStats("lo");
     return {
       family: fam.id,
-      mean: mean - fam.mean0, sd, skewness: skew, kurtosis: kurt, // in units of the original σ, mean relative to the original
-      threshold: thr - fam.mean0,
-      extremeFraction: fNow,
-      originalFraction: fWas,
-      ratio: fWas > 0 ? fNow / fWas : null,
+      mean: mean - fam.mean0, sd, skewness: skew, kurtosis: kurt, // in units of the baseline σ, mean relative to the baseline
+      tail: tailShare,
+      highThreshold: thrHi - fam.mean0, lowThreshold: thrLo - fam.mean0,
+      highFraction: hi.fNow, highRatio: hi.ratio,
+      lowFraction: lo.fNow, lowRatio: lo.ratio,
       showNumbers: numbers,
     };
   }
@@ -678,6 +756,14 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
     container.dispatchEvent(new CustomEvent("input", {bubbles: true}));
   }
 
+  function layoutControls() {
+    sliderBox.style.margin = `0 ${w - plotR}px 0 ${plotL}px`;
+    title.style.fontSize = `${titleFont}px`;
+    title.style.marginLeft = `${plotL}px`;
+  }
+
+  updateTabs();
+  layoutControls();
   build();
   updateSliders();
   container.value = value();
@@ -687,7 +773,7 @@ export function createExtremeEventsWidget({family = "normal", shift = 0.5, thres
       const avail = entries[0]?.contentRect?.width || container.clientWidth;
       if (!(avail > 0)) return;
       const fitted = Math.max(MIN_WIDTH, Math.min(maxW, Math.floor(avail)));
-      if (fitted !== w) { applyLayout(fitted); build(); }
+      if (fitted !== w) { applyLayout(fitted); layoutControls(); build(); }
     });
     ro.observe(container);
   }
@@ -713,11 +799,17 @@ export function formatShare(f) {
 
 function formatRatio(r) {
   if (!Number.isFinite(r)) return r > 1 ? "from almost never" : "";
-  if (r >= 1.05) return `${formatTimes(r)}× as often`;
-  if (r <= 0.95) return `${formatTimes(1 / r)}× rarer`;
+  if (r >= 1.05) return `${formatMultiplier(r)}× as often`;
+  if (r <= 0.95) return `${formatMultiplier(1 / r)}× rarer`;
   return "about as often";
 }
-const formatTimes = r => (r < 10 ? r.toFixed(1) : Math.round(r).toLocaleString("en-US"));
+// "0.5", "2.3", "12": two figures below ten, whole numbers above, and never a bare "0".
+function formatMultiplier(r) {
+  if (r >= 10) return Math.round(r).toLocaleString("en-US");
+  if (r >= 1) return r.toFixed(1);
+  if (r < 0.001) return "<0.001";
+  return String(Number(r.toPrecision(1)));
+}
 
 // ---- small helpers ------------------------------------------------------------------------------
 
@@ -730,7 +822,9 @@ function labelHalfWidth(text, fontSize) {
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
-function hexToRgba(hex, alpha) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+// A colour at `t` of the way from the plate to `hex`, as an opaque colour.
+function tint(hex, t) {
+  const n = parseInt(hex.slice(1), 16), b = parseInt(BACKGROUND.slice(1), 16);
+  const ch = s => Math.round(((b >> s) & 255) + (((n >> s) & 255) - ((b >> s) & 255)) * t);
+  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
 }
