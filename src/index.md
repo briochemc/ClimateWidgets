@@ -83,6 +83,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Extreme events, simply</h2>
     <img class="thumb" src="./assets/thumbnails/extreme-events-simple.png" alt="A gray bell curve and a black one shifted a little to the right, over an axis of daily maximum temperature in degrees from 10 to 40 and a vertical axis labelled how often, under the title A little warming of the average makes extreme heat much more common; brackets under the axis mark extreme heat above 35 °C in red and extreme cold below 15 °C in blue, and three sliders for warming, spread and skewness sit above">
   </a>
+  <a class="card" href="./extreme-events-cities/">
+    <h2>Extreme events, in real cities</h2>
+    <img class="thumb" src="./assets/thumbnails/extreme-events-cities.png" alt="A histogram of Sydney's daily maximum temperatures in its three hottest months for the last thirty years, one translucent bar per degree, with a black bell curve fitted to them and a gray one fitted to the first thirty years on record, over an axis in degrees; brackets under the axis mark extreme heat and extreme cold at the baseline's 1% thresholds, a small world map at the top right has a dot per city with Sydney filled in, and a two-handle slider picks the years">
+  </a>
 </div>
 
 ## Archive

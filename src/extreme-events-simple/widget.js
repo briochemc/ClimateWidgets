@@ -137,7 +137,7 @@ export function createSimpleExtremesWidget({
       format: v => `${signed(v, 1)} °C`},
     {key: "spread", name: "Spread", step: 0.1, min: SD_MIN, max: SD_MAX, get: () => sd, set: v => (sd = v),
       format: v => `± ${v.toFixed(1)} °C`},
-    {key: "skew", name: "Skewness (asymmetry)", step: 0.05, min: -SKEW_MAX, max: SKEW_MAX, get: () => skew, set: v => (skew = v),
+    {key: "skew", name: "Skewness (asymmetry)", short: "Skewness", step: 0.05, min: -SKEW_MAX, max: SKEW_MAX, get: () => skew, set: v => (skew = v),
       format: v => signed(v, 2)},
   ];
   const sliderRows = SLIDERS.map(s => {
@@ -160,10 +160,12 @@ export function createSimpleExtremesWidget({
     const out = document.createElement("span");
     out.style.cssText = "min-width:5.5em;text-align:right;font-variant-numeric:tabular-nums;color:#333;";
     sliderBox.append(name, input, out);
-    return {s, input, out};
+    return {s, name, input, out};
   });
   function updateSliders() {
-    for (const {s, input, out} of sliderRows) {
+    for (const {s, name, input, out} of sliderRows) {
+      // The long name squeezes the slider out at phone widths.
+      name.textContent = w < 480 && s.short ? s.short : s.name;
       const v = s.get();
       if (document.activeElement !== input) input.value = clamp(v, s.min, s.max);
       out.textContent = s.format(v);
@@ -444,7 +446,7 @@ export function createSimpleExtremesWidget({
       const avail = entries[0]?.contentRect?.width || container.clientWidth;
       if (!(avail > 0)) return;
       const fitted = Math.max(MIN_WIDTH, Math.min(maxW, Math.floor(avail)));
-      if (fitted !== w) { applyLayout(fitted); layoutControls(); build(); }
+      if (fitted !== w) { applyLayout(fitted); layoutControls(); build(); updateSliders(); }
     });
     ro.observe(container);
   }
