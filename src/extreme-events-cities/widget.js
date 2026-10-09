@@ -20,12 +20,18 @@
 //
 // The extremes are the baseline's hottest and coldest 1% of days, to a tenth of a degree,
 // so each city gets thresholds of its own. The temperature axis is the same for every city,
-// so that nothing jumps when one is picked, except that the two polar stations slide it
-// down by 25 degrees (same width, animated, so the ticks are seen to move); the vertical
-// scale is fixed at twice the
+// so that nothing jumps when one is picked, except that a city with days below 0 °C (the
+// polar stations) slides it down, in steps of 5 degrees, just far enough to hold its coldest
+// day: same width, so the ticks are seen to move. The vertical scale is fixed at twice the
 // baseline curve's peak, as in the other two widgets, and the histogram does not change it.
 // The figures under the brackets, in numbers mode, are the data's: the share of the
 // window's days beyond each threshold, against the baseline's share.
+//
+// Picking a city is a sequence rather than a cut: the curves (with their painted tails and
+// labels) fade out, the bars of the city being left sink to the axis, the new city's bars
+// rise from it (the axis sliding under them when its range differs), and the curves fade
+// back in. Two things carry it: `alpha`, the curves' opacity, and `wave`, how far the bars
+// are through their sink or rise, which each bin joins a little after the one to its left.
 
 import {geoEqualEarth, geoPath} from "https://cdn.jsdelivr.net/npm/d3-geo@3/+esm";
 import {feature} from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
@@ -49,10 +55,17 @@ const WINDOW_YEARS = 10;      // the window the slider opens on: the last ten ye
 // inflated every "was" figure.
 const FIRST_YEAR = 1950;
 const TAIL = 0.01;
-const X_RANGE = [0, 50];      // the temperature axis, °C, the same for every city but the polar ones,
-const POLAR_RANGE = [-25, 25]; // which slide it down by 25 degrees: same width, so the ticks just move
-const POLAR_LAT = 60;
-const SLIDE_MS = 700;         // how long the axis takes to slide between the two ranges
+const X_RANGE = [0, 55];      // the temperature axis, °C (Baghdad's days pass 52), the same for every city
+const RANGE_STEP = 5;         // but one with colder days, which slides it down by this much at a time
+const FADE_MS = 220;          // the curves fading out before a city change, and back in after it
+const DROP_MS = 520;          // the old city's bars sinking to the axis
+const RISE_MS = 640;          // the new city's rising from it
+const SLIDE_MS = 1400;        // the same rise when the axis has to slide to a new range as well
+// The bars do not all move at once: each starts a little after its neighbour to the left, so
+// the sink and the rise run across the axis as a wave. This is the stagger from the first bin
+// to the last, as a fraction of one bin's own travel time: the last bin sets off when the
+// first has long finished, so the wave is most of the motion.
+const WAVE = 2.4;
 
 const FIGURE_WIDTH = 640;
 const MIN_WIDTH = 320;
@@ -77,18 +90,17 @@ export function moments(v) {
 
 // `data` is the parsed data/hot-season-tmax.json, `world` the parsed countries-110m.json
 // (without it the map has no land). `city` is a name from the data; `xRange` the
-// temperature axis in °C, and `polarRange` the one for cities beyond 60° of latitude;
-// `firstYear` is where the record starts.
-export function createCityExtremesWidget({data, world, city = "Sydney", xRange = X_RANGE, polarRange = POLAR_RANGE, firstYear = FIRST_YEAR, showNumbers = false, width = FIGURE_WIDTH} = {}) {
+// temperature axis in °C, which a city with colder days slides down to fit them; `firstYear`
+// is where the record starts.
+export function createCityExtremesWidget({data, world, city = "Sydney", xRange = X_RANGE, firstYear = FIRST_YEAR, showNumbers = false, width = FIGURE_WIDTH} = {}) {
   if (!data?.cities?.length) throw new Error("createCityExtremesWidget needs the hot-season-tmax data");
   const uid = `extreme-events-cities-${++instances}`;
   const cities = data.cities.map(c => {
     const keep = c.years.map(y => y >= firstYear);
-    return {
-      ...c,
-      years: c.years.filter((_, i) => keep[i]),
-      seasons: c.days.filter((_, i) => keep[i]).map(d => d.map(t => t / 10)),
-    };
+    const seasons = c.days.filter((_, i) => keep[i]).map(d => d.map(t => t / 10));
+    let coldest = Infinity;
+    for (const s of seasons) for (const t of s) if (t < coldest) coldest = t;
+    return {...c, years: c.years.filter((_, i) => keep[i]), seasons, coldest};
   });
   const land = world?.objects?.land ? feature(world, world.objects.land) : null;
 
@@ -130,8 +142,16 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
   let from, to;                   // the window, inclusive season years
   let numbers = Boolean(showNumbers);
   let ref, cur, win;              // the two curves and the window's moments
-  const rangeFor = x => (Math.abs(x.lat) >= POLAR_LAT ? polarRange : xRange);
+  // The axis, or the same width slid down in whole steps to a degree below the city's coldest day.
+  const rangeFor = x => {
+    const lo = x.coldest - 1 < xRange[0] ? Math.floor((x.coldest - 1) / RANGE_STEP) * RANGE_STEP : xRange[0];
+    return [lo, lo + xRange[1] - xRange[0]];
+  };
   let [xMin, xMax] = rangeFor(c);   // the axis as drawn now, which may be mid-slide
+  // The bars' motion on a city change: null at rest (full height), else which way they are
+  // going and how far along, 0 to 1, with each bin's own height worked out from that (binHeight).
+  let wave = null;
+  let alpha = 1;                    // the curves' opacity: 0 while the bars are on the move
   let thrHi, thrLo;
 
   const yearIndex = y => c.years.indexOf(y);
@@ -146,21 +166,28 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
     return s[Math.min(s.length - 1, Math.max(0, Math.floor(p * s.length)))];
   };
 
-  function setCity(next) {
-    c = next;
-    const y0 = c.years[0], y1 = c.years[Math.min(BASELINE_YEARS, c.years.length) - 1];
-    const days = daysIn(y0, y1);
-    base = {from: y0, to: y1, ...moments(days)};
+  // Everything the figure needs for a city, worked out without touching the state, so that a
+  // city change can know its destination (for the captions) before the figure gets there.
+  function analyse(x) {
+    const y0 = x.years[0], y1 = x.years[Math.min(BASELINE_YEARS, x.years.length) - 1];
+    const days = x.seasons.slice(0, x.years.indexOf(y1) + 1).flat();
+    const b = {from: y0, to: y1, ...moments(days)};
     // The thresholds are the baseline's 1% quantiles to a tenth of a degree: rounding to a
     // whole degree looked friendlier but, in a tropical city where the spread is under two
     // degrees, it could move the baseline share from 1% to 0.1% and the multiplier tenfold.
-    const [lo, hi] = rangeFor(c);
-    thrHi = clamp(Math.round(10 * quantileOf(days, 1 - TAIL)) / 10, lo, hi);
-    thrLo = clamp(Math.round(10 * quantileOf(days, TAIL)) / 10, lo, hi);
-    base.hiShare = share(days, true);
-    base.loShare = share(days, false);
-    ref = pearson3(base.mean, base.sd, base.skew);
-    resetWindow();
+    const [lo, hi] = rangeFor(x);
+    const hiT = clamp(Math.round(10 * quantileOf(days, 1 - TAIL)) / 10, lo, hi);
+    const loT = clamp(Math.round(10 * quantileOf(days, TAIL)) / 10, lo, hi);
+    b.hiShare = days.filter(t => t > hiT).length / (days.length || 1);
+    b.loShare = days.filter(t => t < loT).length / (days.length || 1);
+    // The window the slider opens on: the last ten years.
+    const t1 = x.years[x.years.length - 1], t0 = x.years[Math.max(0, x.years.length - WINDOW_YEARS)];
+    const w = moments(x.seasons.slice(x.years.indexOf(t0), x.years.indexOf(t1) + 1).flat());
+    return {c: x, base: b, thrHi: hiT, thrLo: loT, ref: pearson3(b.mean, b.sd, b.skew), from: t0, to: t1, win: w, cur: pearson3(w.mean, w.sd, w.skew)};
+  }
+  let preview = null; // where a city change is heading, for the captions, until the figure arrives
+  function setCity(next) {
+    ({c, base, thrHi, thrLo, ref, from, to, win, cur} = analyse(next));
   }
   function resetWindow() {
     to = c.years[c.years.length - 1];
@@ -382,52 +409,94 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
     mapLabel = svgEl("text", {"font-size": 12, "font-weight": "bold", fill: ACCENT, stroke: SEA_FILL, "stroke-width": 3, "paint-order": "stroke"}, mapSvg);
     updateMap();
   }
-  function updateMap() {
+  // `picked` is the city the map shows as chosen: the one the figure is heading for, during a change.
+  function updateMap(picked = c) {
     for (const d of dots) {
-      const on = d.city === c;
+      const on = d.city === picked;
       setAttrs(d.el, {r: on ? 5 : 3.5, fill: on ? ACCENT : "#fff", stroke: on ? ACCENT : "#333"});
       d.el.setAttribute("aria-pressed", on);
       if (on) {
         // The name to the right of the dot, or to the left near the map's right edge.
         const left = d.x > mapW - 70;
         setAttrs(mapLabel, {x: (d.x + (left ? -8 : 8)).toFixed(1), y: (d.y + 4).toFixed(1), "text-anchor": left ? "end" : "start"});
-        mapLabel.textContent = c.name;
+        mapLabel.textContent = picked.name;
       }
     }
     // The chosen dot drawn last, so that neighbours do not cover it.
-    const chosen = dots.find(d => d.city === c);
+    const chosen = dots.find(d => d.city === picked);
     if (chosen) mapSvg.insertBefore(chosen.el, mapLabel);
   }
+  // Four beats: the curves fade out, the bars of the city being left sink to the axis, the
+  // new city's bars rise from it with the axis sliding to its range under them when the
+  // range differs (the whole figure is rebuilt on the moving axis each frame, so the ticks
+  // are seen to move), and the curves fade back in. A cut when motion is unwanted. A pick
+  // during any beat starts the sequence again from wherever the opacity and heights are.
   function pick(x) {
     if (x === c) return;
-    setCity(x);
-    updateMap();
-    slideAxis(rangeFor(c));
-    updateRange();
-    emit();
-  }
-
-  // The axis slides to the new city's range, the whole figure redrawn on it each frame so
-  // the ticks are seen to move; it jumps when the range is the same or motion is unwanted.
-  let slide = null;
-  function slideAxis([toMin, toMax]) {
-    if (slide) { cancelAnimationFrame(slide); slide = null; }
-    const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if ((xMin === toMin && xMax === toMax) || reduced || typeof requestAnimationFrame !== "function") {
-      xMin = toMin; xMax = toMax;
+    const [toMin, toMax] = rangeFor(x);
+    const arrive = () => {
+      preview = null;
+      setCity(x);
+      updateMap();
+      updateRange();
+      emit();
+    };
+    if (reducedMotion() || typeof requestAnimationFrame !== "function") {
+      arrive();
+      wave = null; alpha = 1; xMin = toMin; xMax = toMax;
       build();
       return;
     }
-    const fromMin = xMin, fromMax = xMax, t0 = performance.now();
+    // The captions say where the figure is going from the first frame.
+    preview = analyse(x);
+    updateMap(x);
+    // A pick mid-sequence starts the sink from about where the bars are: a rise part way up
+    // reads as a sink that is the same part way from done.
+    const a0 = alpha;
+    const u0 = wave === null ? 0 : wave.down ? wave.u : 1 - wave.u;
+    animate(FADE_MS * a0, e => { alpha = a0 * (1 - e); render(); }, () =>
+      animate(DROP_MS * (1 - u0), (e, u) => { wave = {down: true, u: u0 + (1 - u0) * u}; render(); }, () => {
+        arrive();
+        wave = {down: true, u: 1}; alpha = 0;
+        build();
+        const fromMin = xMin, fromMax = xMax, moving = fromMin !== toMin || fromMax !== toMax;
+        animate(moving ? SLIDE_MS : RISE_MS, (e, u) => {
+          xMin = fromMin + (toMin - fromMin) * e;
+          xMax = fromMax + (toMax - fromMax) * e;
+          wave = {down: false, u};
+          if (moving) build(); else render();
+        }, () => {
+          wave = null; xMin = toMin; xMax = toMax;
+          build();
+          animate(FADE_MS, e => { alpha = e; render(); }, () => { alpha = 1; render(); });
+        });
+      }));
+  }
+
+  let anim = null;
+  const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const ease = u => (u < 0.5 ? 2 * u * u : 1 - (2 - 2 * u) ** 2 / 2); // in and out
+  // Runs `onFrame(eased, raw)` from 0 to 1 over `ms`, then `onDone`; a new animation replaces a running one.
+  function animate(ms, onFrame, onDone) {
+    if (anim) cancelAnimationFrame(anim);
+    const t0 = performance.now();
     const step = now => {
-      const u = Math.min(1, (now - t0) / SLIDE_MS);
-      const e = u < 0.5 ? 2 * u * u : 1 - (2 - 2 * u) ** 2 / 2; // ease in and out
-      xMin = fromMin + (toMin - fromMin) * e;
-      xMax = fromMax + (toMax - fromMax) * e;
-      build();
-      slide = u < 1 ? requestAnimationFrame(step) : null;
+      const u = ms > 0 ? Math.min(1, (now - t0) / ms) : 1;
+      onFrame(ease(u), u);
+      if (u < 1) { anim = requestAnimationFrame(step); return; }
+      anim = null;
+      onDone?.();
     };
-    slide = requestAnimationFrame(step);
+    anim = requestAnimationFrame(step);
+  }
+
+  // Bin i of n during a wave: its own eased travel, started later the further right it is,
+  // the last bin beginning WAVE travel times after the first (the whole move, first bin
+  // setting off to last bin arriving, is 1 + WAVE travel times, fitted into the beat).
+  function binHeight(i, n) {
+    if (wave === null) return 1;
+    const e = ease(clamp(wave.u * (1 + WAVE) - (i / Math.max(1, n - 1)) * WAVE, 0, 1));
+    return wave.down ? 1 - e : e;
   }
 
   // ---- scales and sampling ----------------------------------------------------------------------
@@ -468,15 +537,15 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
     const n = days.length || 1;
     let d = `M${xs(k0).toFixed(1)},${plotB}`;
     counts.forEach((cnt, i) => {
-      const y = ys(cnt / n).toFixed(1);
+      const y = (plotB - binHeight(i, counts.length) * (plotB - ys(cnt / n))).toFixed(1); // scaled during a city change
       d += `L${xs(k0 + i).toFixed(1)},${y}L${xs(k0 + i + 1).toFixed(1)},${y}`;
     });
     return d + `L${xs(k1 + 1).toFixed(1)},${plotB}Z`;
   }
 
   // ---- scaffolding, rebuilt on resize and city change ------------------------------------------
-  let refCurve, curCurve, areaEls, betweenEls, clipRefArea, clipCurArea, bars, caption2, caption3;
-  let refLabel, curLabel;
+  let refCurve, curCurve, areaEls, betweenEls, clipRefArea, clipCurArea, bars, caption1, caption2, caption3;
+  let refLabel, curLabel, fading = [];
   const tails = {};
 
   function build() {
@@ -537,8 +606,7 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
 
     // Caption lines, top left: the city and its hot season; what the bars and the gray curve
     // are; and, with the numbers, the two fits.
-    const caption1 = svgEl("text", {x: plotL + 8, y: plotT + 12, "font-size": tickFont + 1, "font-weight": "bold", fill: "#555"}, svg);
-    caption1.textContent = narrow() ? `${c.name}: days in ${c.season}` : `${c.name}, ${c.country}: days in ${c.season}, its three hottest months`;
+    caption1 = svgEl("text", {x: plotL + 8, y: plotT + 12, "font-size": tickFont + 1, "font-weight": "bold", fill: "#555"}, svg);
     caption2 = svgEl("text", {x: plotL + 8, y: plotT + 12 + tickFont + 4, "font-size": tickFont, fill: "#777"}, svg);
     caption3 = svgEl("text", {x: plotL + 8, y: plotT + 12 + 2 * (tickFont + 4), "font-size": tickFont, fill: "#777"}, svg);
 
@@ -547,6 +615,7 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
       const g = svgEl("g", {}, svg);
       const x1 = hi ? xs(thrHi) : plotL, x2 = hi ? plotR : xs(thrLo);
       const t = {
+        group: g,
         lines: [],
         leader: svgEl("line", {stroke: colour, "stroke-width": 1.25}, g),
         leaderLabel: svgEl("text", {"text-anchor": "middle", "font-size": labelFont, "font-weight": "bold", fill: colour, ...halo}, g),
@@ -569,6 +638,10 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
 
     refLabel = svgEl("text", {"font-size": labelFont, fill: GRAY_CURVE, ...halo}, svg);
     curLabel = svgEl("text", {"font-size": labelFont, "font-weight": "bold", fill: BLACK_CURVE, ...halo}, svg);
+    // Everything that belongs to the curves and the thresholds rather than the bars, faded
+    // together on a city change: the painted areas, the curves and their labels, the two
+    // brackets with their labels and leaders.
+    fading = [...areaEls, ...betweenEls, refCurve, curCurve, refLabel, curLabel, tails.lo.group, tails.hi.group];
 
     render();
   }
@@ -591,15 +664,22 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
     loBase.setAttribute("d", refArea);
     hiBase.setAttribute("d", refArea);
     for (const el of betweenEls) el.setAttribute("d", between);
+    for (const el of fading) el.setAttribute("opacity", alpha.toFixed(3));
 
     const days = daysIn(from, to);
     bars.setAttribute("d", histogramPath(days));
+    // The captions, top left, are the first thing to change on a city change: they describe
+    // the destination while the figure is still on its way there.
+    const cap = preview ?? {c, from, to, base, win};
+    caption1.textContent = narrow()
+      ? `${cap.c.name}: days in ${cap.c.season}`
+      : `${cap.c.name}, ${cap.c.country}: days in ${cap.c.season}, its three hottest months`;
     caption2.textContent = narrow()
-      ? `bars, black: ${from}–${to}; gray: ${base.from}–${base.to}`
-      : `bars and black curve: ${from}–${to}; gray curve: ${base.from}–${base.to}, the baseline`;
+      ? `bars, black: ${cap.from}–${cap.to}; gray: ${cap.base.from}–${cap.base.to}`
+      : `bars and black curve: ${cap.from}–${cap.to}; gray curve: ${cap.base.from}–${cap.base.to}, the baseline`;
     caption3.textContent = !numbers ? "" : narrow()
-      ? `${win.mean.toFixed(1)} ± ${win.sd.toFixed(1)} °C (was ${base.mean.toFixed(1)} ± ${base.sd.toFixed(1)})`
-      : `fits: ${win.mean.toFixed(1)} ± ${win.sd.toFixed(1)} °C, skewness ${signed(win.skew, 2)} (baseline ${base.mean.toFixed(1)} ± ${base.sd.toFixed(1)} °C, ${signed(base.skew, 2)})`;
+      ? `${cap.win.mean.toFixed(1)} ± ${cap.win.sd.toFixed(1)} °C (was ${cap.base.mean.toFixed(1)} ± ${cap.base.sd.toFixed(1)})`
+      : `fits: ${cap.win.mean.toFixed(1)} ± ${cap.win.sd.toFixed(1)} °C, skewness ${signed(cap.win.skew, 2)} (baseline ${cap.base.mean.toFixed(1)} ± ${cap.base.sd.toFixed(1)} °C, ${signed(cap.base.skew, 2)})`;
 
     const dataShare = {hi: share(days, true), lo: share(days, false)};
     const stats = {lo: tailStats("lo", dataShare.lo), hi: tailStats("hi", dataShare.hi)};
@@ -658,7 +738,8 @@ export function createCityExtremesWidget({data, world, city = "Sydney", xRange =
   // always with the numbers; "0×" when the window has no such days at all.
   function placeLeader(side, st) {
     const t = tails[side];
-    const show = st.cx != null && Number.isFinite(st.ratio) && (numbers || st.ratio >= LEADER_BAND || st.ratio <= 1 / LEADER_BAND);
+    // Not while the curves are faded for a city change: a leader to nothing says nothing.
+    const show = alpha === 1 && st.cx != null && Number.isFinite(st.ratio) && (numbers || st.ratio >= LEADER_BAND || st.ratio <= 1 / LEADER_BAND);
     t.leader.style.display = t.leaderLabel.style.display = show ? "" : "none";
     if (!show) return;
     const px = clamp(xs(st.cx), plotL + 24, plotR - 24);

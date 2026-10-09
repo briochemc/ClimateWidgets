@@ -8,8 +8,9 @@ The shortlist is the capitals of the countries that send the most students to Au
 (src/extreme-events-cities/data/the-number-of-internatio.csv, from education.gov.au) plus
 the four largest Australian cities, less a few capitals that would sit on top of a neighbour
 on the widget's small map (Singapore under Kuala Lumpur, Thimphu between Kathmandu and
-Dhaka, Phnom Penh beside Bangkok), plus a few more so that the map has Europe, the Middle
-East, Africa, the US west coast and the two poles. The hot season is the three consecutive calendar months
+Dhaka, Phnom Penh beside Bangkok), plus a few more so that the map has Europe, Russia, the
+Middle East, North and sub-Saharan Africa, the US west coast, the Arctic and both sides of
+Antarctica. The hot season is the three consecutive calendar months
 with the highest mean daily maximum over the whole record, so it is Dec–Feb in Sydney and
 Apr–Jun in Delhi; a season that straddles the new year is labelled by the year of its last
 month, and a season with fewer than 85 days is dropped.
@@ -17,7 +18,7 @@ month, and a season with fewer than 85 days is dropped.
 The site never runs this script; the JSON is committed. It paces itself to stay under the
 free tier's rate limit (which still bites after twenty-odd long requests in an hour: rerun
 it later and it resumes from the existing file)."""
-import json, sys, time, datetime, urllib.request, urllib.error
+import json, sys, time, datetime, urllib.request, urllib.error, urllib.parse
 from pathlib import Path
 
 CITIES = [
@@ -55,14 +56,25 @@ CITIES = [
     ("Madrid", "Spain", 40.42, -3.70, "Europe/Madrid"),
     ("Berlin", "Germany", 52.52, 13.41, "Europe/Berlin"),
     ("Stockholm", "Sweden", 59.33, 18.07, "Europe/Stockholm"),
+    ("Moscow", "Russia", 55.76, 37.62, "Europe/Moscow"),
+    ("Istanbul", "Turkey", 41.01, 28.98, "Europe/Istanbul"),
+    ("Baghdad", "Iraq", 33.31, 44.37, "Asia/Baghdad"),
     ("Riyadh", "Saudi Arabia", 24.71, 46.68, "Asia/Riyadh"),
     ("Tehran", "Iran", 35.69, 51.39, "Asia/Tehran"),
     ("Cairo", "Egypt", 30.04, 31.24, "Africa/Cairo"),
+    ("Marrakesh", "Morocco", 31.63, -8.01, "Africa/Casablanca"),
+    ("Algiers", "Algeria", 36.75, 3.06, "Africa/Algiers"),
+    ("Tripoli", "Libya", 32.90, 13.19, "Africa/Tripoli"),
     ("Abuja", "Nigeria", 9.06, 7.49, "Africa/Lagos"),
     ("Cape Town", "South Africa", -33.93, 18.42, "Africa/Johannesburg"),
     ("Los Angeles", "United States", 34.05, -118.24, "America/Los_Angeles"),
+    ("Seattle", "United States", 47.61, -122.33, "America/Los_Angeles"),
     ("Longyearbyen", "Svalbard", 78.22, 15.63, "Arctic/Longyearbyen"),
+    ("Nuuk", "Greenland", 64.18, -51.72, "America/Nuuk"),
     ("Casey Station", "Antarctica", -66.28, 110.53, "Antarctica/Casey"),
+    # Inland West Antarctica, 1,530 m up on the ice sheet; no IANA zone of its own, so the
+    # fixed offset nearest its longitude (the day boundary hardly matters in the polar day).
+    ("Byrd Station", "Antarctica", -80.02, -119.53, "Etc/GMT+8"),
 ]
 END = "2026-09-30"  # ERA5 lags a few days; the last season must be complete
 MIN_DAYS = 85
@@ -88,11 +100,19 @@ def get(url):
 # ---- the cities --------------------------------------------------------------------------------
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 cities = []
+
+def save():
+    # After every fetch, so that a run cut short by the rate limit keeps what it has.
+    out.write_text(json.dumps({
+        "source": "ERA5 via Open-Meteo historical weather API, daily temperature_2m_max",
+        "fetched": datetime.date.today().isoformat(), "units": "tenths of °C",
+        "cities": cities}, separators=(",", ":"), ensure_ascii=False))
+
 for name, country, lat, lon, tz in CITIES:
     if name in done:
         cities.append(done[name]); continue
     url = (f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}"
-           f"&start_date=1940-01-01&end_date={END}&daily=temperature_2m_max&timezone={tz.replace('/', '%2F')}")
+           f"&start_date=1940-01-01&end_date={END}&daily=temperature_2m_max&timezone={urllib.parse.quote(tz, safe='')}")
     print(name, flush=True)
     d = get(url)
     t, x = d["daily"]["time"], d["daily"]["temperature_2m_max"]
@@ -114,9 +134,9 @@ for name, country, lat, lon, tz in CITIES:
     cities.append({"name": name, "country": country, "lat": lat, "lon": lon, "elevation": d.get("elevation"),
                    "months": months, "season": label, "years": years, "days": [seasons[y] for y in years]})
     print(f"  {label}: {len(years)} seasons, {years[0]}–{years[-1]}", flush=True)
-    out.write_text(json.dumps({
-        "source": "ERA5 via Open-Meteo historical weather API, daily temperature_2m_max",
-        "fetched": datetime.date.today().isoformat(), "units": "tenths of °C",
-        "cities": cities}, separators=(",", ":"), ensure_ascii=False))
+    save()
     time.sleep(12)
+# Written once more at the end: the cities after the last one fetched (already in the file
+# from an earlier run) are otherwise left out of it.
+save()
 print("done")
