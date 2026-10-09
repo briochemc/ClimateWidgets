@@ -81,7 +81,7 @@ Small, self-contained interactive figures for teaching climate science. Each wid
   </a>
   <a class="card" href="./extreme-events-simple/">
     <h2>Extreme events, simply</h2>
-    <img class="thumb" src="./assets/thumbnails/extreme-events-simple.png" alt="A gray bell curve and a black one shifted a little to the right, over an axis of daily maximum temperature in degrees from 10 to 40 and a vertical axis labelled how often, under the title A little warming of the average makes extreme heat much more common; brackets under the axis mark extreme heat above 35 °C in red and extreme cold below 15 °C in blue, and three sliders for warming, spread and skewness sit above">
+    <img class="thumb" src="./assets/thumbnails/extreme-events-simple.png" alt="A gray bell curve and a black one shifted a little to the right, over an axis of daily maximum temperature in degrees from 10 to 40 and a vertical axis labelled how often, under the title A small increase in average temperature makes extreme heat much more common; brackets under the axis mark extreme heat above 35 °C in red and extreme cold below 15 °C in blue, and three sliders for warming, spread and skewness sit above">
   </a>
   <a class="card" href="./extreme-events-cities/">
     <h2>Extreme events, in real cities</h2>

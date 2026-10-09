@@ -1,6 +1,6 @@
 # Extreme events, simply
 
-The simple version of the [extreme events](../extreme-events/) figure. One bell curve of a summer day's maximum temperature, in degrees, for a made-up place where the average summer day peaks at 25 °C. Warm the average by a degree or two with the *Warming* slider and watch what happens to the days above 35 °C: the gray curve is the climate before, the black curve the climate after, and the vivid red is what the warming adds to the extreme heat. The other two sliders widen the curve and tilt it.
+The simple version of the [extreme events](../extreme-events/) figure. One bell curve of a summer day's maximum temperature, in degrees, for a made-up place where the average summer day peaks at 25 °C. Warm the average by a degree or two with the *Warming* slider and watch what happens to the days above 35 °C: the gray curve is the climate before, the black curve is the climate after, and the vivid red is what the warming adds to the extreme heat. The other two sliders widen the curve and tilt it.
 
 ```js
 import {createSimpleExtremesWidget} from "./widget.js";

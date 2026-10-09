@@ -99,7 +99,7 @@ export function createSimpleExtremesWidget({
 
   const title = document.createElement("div");
   title.style.cssText = "font-weight:bold;color:#111;line-height:1.2;white-space:pre-line;padding:0 0 6px;";
-  title.textContent = "A little warming of the average\nmakes extreme heat much more common";
+  title.textContent = "A small increase in average temperature\nmakes extreme heat much more common";
   container.appendChild(title);
 
   // The numbers toggle and the reset button, on one row above the sliders.
@@ -184,7 +184,7 @@ export function createSimpleExtremesWidget({
   const note = document.createElement("div");
   note.style.cssText = "padding:10px 0 0;color:#888;font-size:14px;";
   note.textContent =
-    "The gray curve is the climate before, the black curve after you move the sliders. " +
+    "The gray curve is the climate before and the black curve is the climate after you move the sliders. " +
     `Days above ${fmtDeg(hot)} count as extreme heat (red) and days below ${fmtDeg(cold)} as extreme cold (blue). ` +
     "The temperatures are made up for the example.";
   container.appendChild(note);
