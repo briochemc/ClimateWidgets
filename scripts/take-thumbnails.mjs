@@ -1,6 +1,7 @@
 // Renders each widget's embed page in headless Chrome and writes the homepage card
-// thumbnails to src/assets/thumbnails/. Uses playwright-core, which Observable Framework
-// already installs, to drive the Google Chrome on this machine.
+// thumbnails to src/assets/thumbnails/. Uses playwright-core to drive the Google Chrome on
+// this machine; Framework no longer brings it in, so `npm install --no-save playwright-core`
+// first (it stays out of package.json).
 //
 // The PNGs it writes are committed, and the homepage crops them to the card's aspect ratio
 // in CSS. This is a manual tool, not part of the build: run `npm run build && npm run
@@ -71,6 +72,8 @@ const WIDGETS = [
   {name: "extreme-events"},
   {name: "extreme-events-simple"},
   {name: "extreme-events-cities"},
+  // With three balls already thrown, since an untouched turntable says nothing.
+  {name: "coriolis", query: "?demo"},
   // Archived, but still on the homepage.
   {name: "carbon-budget"},
   {name: "co2-per-capita"},

@@ -87,6 +87,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>Extreme events, in real cities</h2>
     <img class="thumb" src="./assets/thumbnails/extreme-events-cities.png" alt="A histogram of Sydney's daily maximum temperatures in its three hottest months for the last thirty years, one translucent bar per degree, with a black bell curve fitted to them and a gray one fitted to the first thirty years on record, over an axis in degrees; brackets under the axis mark extreme heat and extreme cold at the baseline's 1% thresholds, a small world map at the top right has a dot per city with Sydney filled in, and a two-handle slider picks the years">
   </a>
+  <a class="card" href="./coriolis/">
+    <h2>The Coriolis effect</h2>
+    <img class="thumb" src="./assets/thumbnails/coriolis.png" alt="A white turntable with faint spokes inside a ring of tick marks, seen from the turntable, with three coloured balls and their curving traces bending to the right; above it a toggle between the room and the turntable and a rotation slider reading 4 rpm anticlockwise">
+  </a>
 </div>
 
 ## Archive
