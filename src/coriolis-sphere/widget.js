@@ -130,28 +130,25 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
   scroller.appendChild(svg);
   container.appendChild(scroller);
 
-  // The view pad, in the figure's bottom-right corner: arrows to turn the view, held down to
-  // keep turning, and + and − to zoom. Ordinary buttons over the SVG, so a press on them
-  // never reaches the throw gesture, and the keyboard does the same when the figure has
-  // focus. Dragging is kept for throwing alone. The glyphs are drawn, not typed: fonts set
-  // their triangles at different sizes and off centre.
-  const pad = document.createElement("div");
-  pad.style.cssText =
-    "position:absolute;right:10px;bottom:10px;display:grid;grid-template-columns:repeat(4,28px);" +
-    "grid-template-rows:repeat(3,28px);gap:3px;";
-  const padButton = (glyph, title, col, row) => {
+  // The view controls: four bare triangles at the sides of the figure, around the globe, to
+  // turn the view, held down to keep turning, and a joined pair of + and − in the bottom
+  // corner to zoom. Ordinary buttons over the SVG, so a press on them never reaches the
+  // throw gesture, and the keyboard does the same when the figure has focus. Dragging is
+  // kept for throwing alone. The glyphs are drawn, not typed: fonts set their triangles at
+  // different sizes and off centre.
+  const button = (glyph, title, style) => {
     const b = document.createElement("button");
     b.type = "button";
     b.title = title;
     b.setAttribute("aria-label", title);
     b.style.cssText =
-      "display:flex;align-items:center;justify-content:center;color:#333;background:rgba(255,255,255,0.92);" +
-      "border:1px solid #ccc;border-radius:6px;padding:0;cursor:pointer;" +
-      `grid-column:${col};grid-row:${row};touch-action:none;user-select:none;-webkit-user-select:none;`;
+      "display:flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;cursor:pointer;" +
+      `touch-action:none;user-select:none;-webkit-user-select:none;${style}`;
     b.appendChild(glyph);
-    pad.appendChild(b);
     return b;
   };
+  const arrow = (angle, title, place) =>
+    button(triangleGlyph(angle, 14), title, `position:absolute;border:none;background:none;${place}`);
   const holdToSpin = (b, axis, dir) => {
     const start = e => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); spin[axis] = dir; };
     const stop = () => { if (spin[axis] === dir) spin[axis] = 0; };
@@ -159,14 +156,22 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
     for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) b.addEventListener(type, stop);
     // Space or Enter on the button: one step of 10°, as the arrow keys give.
     b.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); turnView(axis, (dir * 10) / zoom); } });
+    scroller.appendChild(b);
   };
-  holdToSpin(padButton(triangleGlyph(-90), "Turn the view north", 2, 1), "lat", 1);
-  holdToSpin(padButton(triangleGlyph(180), "Turn the view west", 1, 2), "lon", -1);
-  holdToSpin(padButton(triangleGlyph(0), "Turn the view east", 3, 2), "lon", 1);
-  holdToSpin(padButton(triangleGlyph(90), "Turn the view south", 2, 3), "lat", -1);
-  padButton(signGlyph(true), "Zoom in", 4, 1).addEventListener("click", () => setZoom(zoom * ZOOM_STEP));
-  padButton(signGlyph(false), "Zoom out", 4, 3).addEventListener("click", () => setZoom(zoom / ZOOM_STEP));
-  scroller.appendChild(pad);
+  holdToSpin(arrow(-90, "Turn the view north", "top:4px;left:50%;transform:translateX(-50%);"), "lat", 1);
+  holdToSpin(arrow(90, "Turn the view south", "bottom:4px;left:50%;transform:translateX(-50%);"), "lat", -1);
+  holdToSpin(arrow(180, "Turn the view west", "left:4px;top:50%;transform:translateY(-50%);"), "lon", -1);
+  holdToSpin(arrow(0, "Turn the view east", "right:4px;top:50%;transform:translateY(-50%);"), "lon", 1);
+
+  const zoomPair = document.createElement("div");
+  zoomPair.style.cssText = "position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;";
+  const zoomStyle = "color:#333;background:rgba(255,255,255,0.92);border:1px solid #ccc;";
+  const zoomIn = button(signGlyph(true), "Zoom in", `${zoomStyle}border-radius:6px 6px 0 0;`);
+  const zoomOut = button(signGlyph(false), "Zoom out", `${zoomStyle}border-radius:0 0 6px 6px;margin-top:-1px;`);
+  zoomIn.addEventListener("click", () => setZoom(zoom * ZOOM_STEP));
+  zoomOut.addEventListener("click", () => setZoom(zoom / ZOOM_STEP));
+  zoomPair.append(zoomIn, zoomOut);
+  scroller.appendChild(zoomPair);
 
   svg.addEventListener("keydown", e => {
     const keys = {ArrowLeft: ["lon", -1], ArrowRight: ["lon", 1], ArrowUp: ["lat", 1], ArrowDown: ["lat", -1]};
@@ -199,7 +204,7 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
   }
 
   // ---- scaffolding, rebuilt on resize ---------------------------------------------------------
-  let oceanEl, graticuleEl, equatorEl, landEl, rimEl, tracesG, dragG, dragLine, dragHead, dragBall, dragLabel;
+  let oceanEl, graticuleEl, equatorEl, landEl, rimEl, tracesG, dragG, dragLine, dragHead, dragBall, dragLabel, dragKind;
 
   function build() {
     svg.setAttribute("width", w);
@@ -223,10 +228,9 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
     dragLine = svgEl("line", {"stroke-width": 2, "stroke-linecap": "round"}, dragG);
     dragHead = svgEl("path", {}, dragG);
     dragBall = svgEl("circle", {r: ballR, stroke: "#fff", "stroke-width": 1.5}, dragG);
-    dragLabel = svgEl("text", {
-      "font-size": labelFont, "font-weight": "bold", "text-anchor": "middle",
-      stroke: BACKGROUND, "stroke-width": 3, "paint-order": "stroke", "stroke-linejoin": "round",
-    }, dragG);
+    const halo = {stroke: BACKGROUND, "stroke-width": 3, "paint-order": "stroke", "stroke-linejoin": "round"};
+    dragLabel = svgEl("text", {"font-size": labelFont, "font-weight": "bold", "text-anchor": "middle", ...halo}, dragG);
+    dragKind = svgEl("text", {"font-size": labelFont - 1, "text-anchor": "middle", ...halo}, dragG);
 
     render();
   }
@@ -426,13 +430,14 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
     dragHead.setAttribute("fill", drag.color);
     dragBall.setAttribute("fill", drag.color);
     dragLabel.setAttribute("fill", drag.color);
+    dragKind.setAttribute("fill", drag.color);
     dragBall.setAttribute("cx", sx.toFixed(1));
     dragBall.setAttribute("cy", sy.toFixed(1));
     if (len < 3) {
-      for (const el of [dragLine, dragHead, dragLabel]) el.setAttribute("display", "none");
+      for (const el of [dragLine, dragHead, dragLabel, dragKind]) el.setAttribute("display", "none");
       return;
     }
-    for (const el of [dragLine, dragHead, dragLabel]) el.removeAttribute("display");
+    for (const el of [dragLine, dragHead, dragLabel, dragKind]) el.removeAttribute("display");
     const tx = (x1 - sx) / len, ty = (y1 - sy) / len;
     const hl = 10, hw = 5;
     const bx = x1 - tx * hl, by = y1 - ty * hl;
@@ -443,10 +448,14 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
     dragHead.setAttribute("d",
       `M${x1.toFixed(1)},${y1.toFixed(1)}L${(bx - ty * hw).toFixed(1)},${(by + tx * hw).toFixed(1)}` +
       `L${(bx + ty * hw).toFixed(1)},${(by - tx * hw).toFixed(1)}Z`);
-    // The speed reads just past the arrowhead.
-    dragLabel.setAttribute("x", (x1 + tx * 14).toFixed(1));
-    dragLabel.setAttribute("y", (y1 + ty * 14 + labelFont * 0.35).toFixed(1));
+    // The speed reads just past the arrowhead, and what kind of flow that is under it.
+    const lx = (x1 + tx * 14).toFixed(1), ly = y1 + ty * 14 + labelFont * 0.35;
+    dragLabel.setAttribute("x", lx);
+    dragLabel.setAttribute("y", ly.toFixed(1));
     dragLabel.textContent = describeSpeed(speed);
+    dragKind.setAttribute("x", lx);
+    dragKind.setAttribute("y", (ly + labelFont + 1).toFixed(1));
+    dragKind.textContent = describeKind(speed);
   }
 
   // ---- changes --------------------------------------------------------------------------------
@@ -500,13 +509,13 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
 
 // ---- small helpers ------------------------------------------------------------------------------
 
-// An equilateral triangle pointing the given way (0 is east, −90 north), drawn as a 12 px SVG
-// centred on its centroid, for the pad's buttons.
-function triangleGlyph(angle) {
+// An equilateral triangle pointing the given way (0 is east, −90 north), drawn as an SVG of
+// the given size centred on its centroid, for the view buttons.
+function triangleGlyph(angle, size = 12) {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", "0 0 12 12");
-  svg.setAttribute("width", 12);
-  svg.setAttribute("height", 12);
+  svg.setAttribute("width", size);
+  svg.setAttribute("height", size);
   svg.setAttribute("aria-hidden", "true");
   svg.style.display = "block";
   const r = 4.6;
@@ -545,6 +554,16 @@ function describeSpeed(v) {
   if (v < 1) return `${(v * 100).toFixed(0)} cm/s`;
   if (v < 10) return `${v.toFixed(1)} m/s (${Math.round(v * 3.6)} km/h)`;
   return `${Math.round(v)} m/s (${Math.round(v * 3.6)} km/h)`;
+}
+// What moves at that speed. The bands: open-ocean drift up to about half a metre a second;
+// the western boundary currents, the Gulf Stream and the Kuroshio, run at 1 to 2.5 m/s;
+// Beaufort 1 to 6, light air to a strong breeze, is 0.3 to 13.8 m/s; a near gale begins at
+// 13.9 m/s and a hurricane at 32.7 m/s.
+function describeKind(v) {
+  if (v < 0.5) return "a slow ocean current";
+  if (v < 3) return "a fast ocean current";
+  if (v < 14) return "a breeze";
+  return "a gale or a storm";
 }
 function describeClock(daySeconds) {
   const s = Math.round(daySeconds * 10) / 10;
