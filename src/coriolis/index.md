@@ -1,6 +1,6 @@
 # The Coriolis effect
 
-A ball thrown across a spinning turntable, watched from two places at once. Press, drag and release anywhere on the figure to throw: the ball starts where you pressed and sets off along the drag, faster for a longer drag. Seen from the room, it rolls in a straight line at a steady speed, because nothing pushes it sideways. Seen from the turntable, the very same ball curves away. The toggle switches between the two views, even mid-flight, and the slider turns the table faster, slower, or the other way.
+A ball thrown across a spinning turntable, watched from two places at once. Press, drag and release anywhere on the figure to throw: the ball starts where you pressed and sets off along the drag, faster for a longer drag. Seen from the room, it rolls in a straight line at a steady speed, because nothing pushes it sideways. Seen from the turntable, the very same ball curves away. The toggle switches between the two views, even mid-flight, without moving anything on screen: whichever frame was turning simply stops, and the other starts. The slider turns the table faster, slower, or the other way. The [companion figure](../coriolis-sphere/) does the same on the Earth.
 
 ```js
 import {createCoriolisWidget} from "./widget.js";

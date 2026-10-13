@@ -29,6 +29,7 @@ export default {
     {name: "Extreme events, simply", path: "/extreme-events-simple/"},
     {name: "Extreme events, in real cities", path: "/extreme-events-cities/"},
     {name: "The Coriolis effect", path: "/coriolis/"},
+    {name: "The Coriolis effect on the Earth", path: "/coriolis-sphere/"},
     {
       name: "Archive",
       open: false,

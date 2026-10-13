@@ -8,7 +8,9 @@
 // table sees is purely a consequence of looking from a turning platform. Both views draw
 // from the same sampled points (each sample keeps the table's angle at the time), so the
 // frame toggle switches instantly, mid-flight, and a change of rotation speed mid-flight
-// stays consistent too.
+// stays consistent too. Switching holds the picture where it is: the frame being let go
+// hands its screen angle to the one being taken hold of, so nothing jumps; the other frame
+// simply starts (or stops) turning.
 //
 // A throw is press, drag, release, anywhere on the figure; the ball starts where the pointer
 // went down and leaves along the drag at a speed proportional to its length. The thrower
@@ -75,7 +77,13 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
   let frame = initialFrame === "fixed" ? "fixed" : "rotating";
   let rpm = clamp(Math.round((Number(initialRpm) || 0) / RPM_STEP) * RPM_STEP, -RPM_MAX, RPM_MAX);
   let simT = 0;    // s of simulated time (real time, capped per frame so a hidden tab does not leap)
-  let theta = 0;   // rad the table has turned, anticlockwise positive
+  let theta = 0;   // rad the table has turned relative to the room, anticlockwise positive
+  // The screen angle of whichever frame the view is attached to: the room in the room view,
+  // the table in the turntable view. Switching views changes nothing on screen at that
+  // instant; the picture is simply held by the other frame from then on.
+  let held = 0;
+  const roomAngle = () => (frame === "fixed" ? held : held - theta);
+  const diskAngle = () => roomAngle() + theta;
   const throws = [];
   let nextColor = 0;
   let drag = null; // {p: [x, y] in the shown frame, q: [x, y] pointer now, color}
@@ -173,7 +181,8 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
   note.style.cssText = "padding:10px 0 0;color:#888;font-size:14px;";
   note.textContent =
     "Press, drag and release to throw a ball. Nothing pushes it sideways: seen from the room it rolls " +
-    "straight at a steady speed, and only seen from the turntable does it curve. Traces fade after ten seconds.";
+    "straight at a steady speed, and only seen from the turntable does it curve. Switching views holds the " +
+    "picture where it is and lets the other frame go. Traces fade after ten seconds.";
   container.appendChild(note);
 
   function svgEl(tag, attrs = {}, parent) {
@@ -198,7 +207,7 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
   };
 
   // ---- scaffolding, rebuilt on resize ---------------------------------------------------------
-  let roomG, diskG, tracesG, dragG, dragLine, dragHead, dragBall, caption;
+  let roomG, diskG, tracesFixedG, tracesRotG, dragG, dragLine, dragHead, dragBall, caption;
 
   function build() {
     svg.setAttribute("width", w);
@@ -245,10 +254,15 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
     }, diskG);
     diskLabel.textContent = "rotating frame";
 
-    tracesG = svgEl("g", {fill: "none", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round"}, svg);
+    // Traces are drawn in their own frame's coordinates and turned with that frame by the
+    // group's transform, so a path never needs rebuilding as the picture turns.
+    const traceAttrs = {fill: "none", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round"};
+    tracesFixedG = svgEl("g", traceAttrs, svg);
+    tracesRotG = svgEl("g", traceAttrs, svg);
     for (const th of throws) {
-      th.path = svgEl("path", {stroke: th.color}, tracesG);
-      th.ball = svgEl("circle", {r: ballR, fill: th.color, stroke: "#fff", "stroke-width": 1.5}, tracesG);
+      th.path = svgEl("path", {stroke: th.color});
+      th.ball = svgEl("circle", {r: ballR, fill: th.color, stroke: "#fff", "stroke-width": 1.5});
+      attach(th);
     }
 
     dragG = svgEl("g", {display: "none"}, svg);
@@ -266,19 +280,22 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
   }
 
   // ---- throws ---------------------------------------------------------------------------------
-  // `p` is where the ball starts and `d` the drag, both in the frame being shown.
+  // `p` is where the ball starts and `d` the drag, both as seen on screen.
   function launch(p, d) {
     let v = scale(d, DRAG_GAIN);
     const speed = Math.hypot(v[0], v[1]);
     if (speed > SPEED_MAX) v = scale(v, SPEED_MAX / speed);
     let x0;
     if (frame === "fixed") {
-      x0 = p;
+      // The thrower stands in the room: undo the room's turn on screen and that is all.
+      x0 = rot(p, -roomAngle());
+      v = rot(v, -roomAngle());
     } else {
-      // The thrower rides the table: turn the start and the throw into room coordinates and
-      // add the table's own velocity at the start, Ω × r.
-      x0 = rot(p, theta);
-      const vr = rot(v, theta);
+      // The thrower rides the table: the start and the throw are in the table's own
+      // coordinates; turn them into room coordinates and add the table's own velocity at
+      // the start, Ω × r.
+      x0 = rot(p, theta - diskAngle());
+      const vr = rot(v, theta - diskAngle());
       const W = omega();
       v = [vr[0] - W * x0[1], vr[1] + W * x0[0]];
     }
@@ -288,13 +305,20 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
       fixed: [], rotating: [], // sampled positions, in each frame, as flat [x, y, x, y, ...]
       dFixed: "", dRotating: "",
       out: false,
-      path: svgEl("path", {stroke: color}, tracesG),
-      ball: svgEl("circle", {r: ballR, fill: color, stroke: "#fff", "stroke-width": 1.5}, tracesG),
+      path: svgEl("path", {stroke: color}),
+      ball: svgEl("circle", {r: ballR, fill: color, stroke: "#fff", "stroke-width": 1.5}),
     };
+    attach(th);
     while (throws.length >= MAX_THROWS) removeThrow(0);
     throws.push(th);
     sample(th);
     emit();
+  }
+
+  // Puts a throw's path and ball in the group of the frame being shown.
+  function attach(th) {
+    const g = frame === "fixed" ? tracesFixedG : tracesRotG;
+    g.append(th.path, th.ball);
   }
 
   function removeThrow(i) {
@@ -357,14 +381,12 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
 
   function placeFrames() {
     // In the room view the table turns; in the turntable view the room turns the other way.
-    const a = deg(theta);
-    if (frame === "fixed") {
-      diskG.setAttribute("transform", `rotate(${a.toFixed(2)} ${c} ${c})`);
-      roomG.removeAttribute("transform");
-    } else {
-      diskG.removeAttribute("transform");
-      roomG.setAttribute("transform", `rotate(${(-a).toFixed(2)} ${c} ${c})`);
-    }
+    const room = `rotate(${deg(roomAngle()).toFixed(2)} ${c} ${c})`;
+    const disk = `rotate(${deg(diskAngle()).toFixed(2)} ${c} ${c})`;
+    roomG.setAttribute("transform", room);
+    tracesFixedG.setAttribute("transform", room);
+    diskG.setAttribute("transform", disk);
+    tracesRotG.setAttribute("transform", disk);
   }
 
   // ---- the clock ------------------------------------------------------------------------------
@@ -454,12 +476,15 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
   // ---- changes --------------------------------------------------------------------------------
   function setFrame(name) {
     if (name === frame) return;
+    // Hold the picture where it is: the frame being let go hands its screen angle to the
+    // one being taken hold of.
+    held = name === "rotating" ? held + theta : held - theta;
     // A drag in progress belongs to the frame it started in; drop it rather than misread it.
     frame = name;
     drag = null;
     updateFrameButtons();
     updateCaption();
-    for (const th of throws) draw(th);
+    for (const th of throws) { attach(th); draw(th); }
     placeFrames();
     drawDrag();
     emit();
@@ -492,6 +517,7 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
     const step = 1 / 60, gap = 0.9;
     const run = s => { for (let i = 0; i < Math.round(s / step); i++) advance(step); };
     theta = -omega() * 3 * gap;
+    held = 0;
     launch([-0.9, -0.1], [0.22, 0.02]);
     run(gap);
     launch([0.1, -0.85], [0.03, 0.22]);

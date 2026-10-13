@@ -91,6 +91,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>The Coriolis effect</h2>
     <img class="thumb" src="./assets/thumbnails/coriolis.png" alt="A white turntable with faint spokes inside a ring of tick marks, seen from the turntable, with three coloured balls and their curving traces bending to the right; above it a toggle between the room and the turntable and a rotation slider reading 4 rpm anticlockwise">
   </a>
+  <a class="card" href="./coriolis-sphere/">
+    <h2>The Coriolis effect on the Earth</h2>
+    <img class="thumb" src="./assets/thumbnails/coriolis-sphere.png" alt="A globe seen from above the Indian Ocean with Australia and Asia in pale green on pale blue, with three coloured parcels and their traces: one looping clockwise over China, one looping anticlockwise off south-east Australia, and one running nearly straight east near the equator; above it a toggle between space and the Earth and a clock slider reading one day in 10 s">
+  </a>
 </div>
 
 ## Archive
