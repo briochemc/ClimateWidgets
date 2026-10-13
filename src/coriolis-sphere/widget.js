@@ -47,12 +47,14 @@ const SIDEREAL_DAY = 86164;       // s
 const MAX_THROWS = 10;
 const LIFE = 40;                  // wall-clock s a trace is shown in full
 const FADE = 8;                   // s it then takes to fade away
-// A drag of a tenth of the figure's width is SPEED_AT_TENTH, and the speed grows as the
-// drag to the power SPEED_POWER: a little steeper than linear, so that a few pixels give an
-// ocean current's 0.1 m/s while most of the width still reaches a jet stream's.
-const SPEED_AT_TENTH = 3;         // m/s
-const SPEED_POWER = 1.5;
-const SPEED_MAX = 100;            // m/s
+// The drag's length maps onto the logarithm of the speed, as a log slider does: a hundredth
+// of the figure's width is SPEED_MIN, the deep ocean's drift, and the full width SPEED_MAX,
+// 300 km/h, about the most a wind ever sustains. That is four decades, a factor of ten per
+// quarter of the width: 1 cm/s to 10 cm/s, the deep ocean; to 1 m/s, surface currents; to
+// 10 m/s, everyday winds; to 300 km/h, storms and the jet stream.
+const SPEED_MIN = 0.01;           // m/s, at DRAG_MIN of the width
+const SPEED_MAX = 300 / 3.6;      // m/s, at the full width
+const DRAG_MIN = 0.01;            // of the figure's width
 const DAY_SECONDS = 1;            // wall-clock seconds per day
 const STEP_MAX = 60;              // s of simulated time per integration step, at most
 const CENTER_LAT = -20;           // the globe is seen, to begin with, from above this latitude...
@@ -473,7 +475,8 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
     // then measured from the centre, which is as good a guess as any.
     const [sx, sy] = projection(d.start) ?? [c, c];
     const len = Math.hypot(d.q[0] - sx, d.q[1] - sy);
-    const speed = Math.min(SPEED_MAX, SPEED_AT_TENTH * Math.pow((10 * len) / w, SPEED_POWER));
+    const t = clamp((len / w - DRAG_MIN) / (1 - DRAG_MIN), 0, 1);
+    const speed = SPEED_MIN * Math.pow(SPEED_MAX / SPEED_MIN, t);
     let aim = d.q;
     const rz = R * zoom;
     const fromCentre = Math.hypot(aim[0] - c, aim[1] - c);
@@ -512,7 +515,7 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
     // The speed reads just past the arrowhead.
     dragLabel.setAttribute("x", (x1 + tx * 14 - ty * 0).toFixed(1));
     dragLabel.setAttribute("y", (y1 + ty * 14 + labelFont * 0.35).toFixed(1));
-    dragLabel.textContent = `${speed < 10 ? speed.toFixed(1) : Math.round(speed)} m/s`;
+    dragLabel.textContent = describeSpeed(speed);
   }
 
   // ---- changes --------------------------------------------------------------------------------
@@ -580,6 +583,14 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
 
 // ---- small helpers ------------------------------------------------------------------------------
 
+// Two significant figures or so, in the unit people use for that speed: cm/s for a current,
+// m/s for a wind, with km/h alongside once it is a wind worth a name.
+function describeSpeed(v) {
+  if (v < 0.1) return `${(v * 100).toFixed(1)} cm/s`;
+  if (v < 1) return `${(v * 100).toFixed(0)} cm/s`;
+  if (v < 10) return `${v.toFixed(1)} m/s (${Math.round(v * 3.6)} km/h)`;
+  return `${Math.round(v)} m/s (${Math.round(v * 3.6)} km/h)`;
+}
 function describeClock(daySeconds) {
   const s = Math.round(daySeconds * 10) / 10;
   return s === 1 ? "one day a second" : `one day in ${Number.isInteger(s) ? s : s.toFixed(1)} s`;
