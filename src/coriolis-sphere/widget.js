@@ -15,8 +15,10 @@
 // round an inertial circle: clockwise in the north, anticlockwise in the south, of radius
 // v/f and period 2π/f (half a sidereal day at a pole, 17 h at 45°, never at the equator).
 //
-// The Earth's size and spin are real. The clock is run fast, one day in a few seconds (the
-// slider), because at real speed nothing would be seen to happen. Throws are always
+// The Earth's size and spin are real. The clock is run fast, one day a second, because at
+// real speed nothing would be seen to happen. The view is seen from one angle to begin with
+// and can be turned and zoomed with a pad of buttons (or the keyboard), never by dragging,
+// which is kept for throwing. Throws are always
 // relative to the ground: a drag on the globe sets the parcel's speed over the ground and
 // its direction, whichever view is showing, since a wind is a motion relative to the Earth.
 // The two views share the samples (each keeps the Earth's angle at the time), as the
@@ -43,15 +45,21 @@ const EARTH_RADIUS = 6371;        // km
 const OMEGA = 7.2921e-5;          // rad/s
 const SIDEREAL_DAY = 86164;       // s
 const MAX_THROWS = 10;
-const LIFE = 10;                  // wall-clock s a trace is shown in full
-const FADE = 2;                   // s it then takes to fade away
-const SPEED_GAIN = 125;           // m/s per globe radius of drag
-const SPEED_MAX = 150;            // m/s
-const DAY_MIN = 4, DAY_MAX = 60;  // wall-clock seconds per day, the clock slider's range
+const LIFE = 40;                  // wall-clock s a trace is shown in full
+const FADE = 8;                   // s it then takes to fade away
+// A drag of a tenth of the figure's width is SPEED_AT_TENTH, and the speed grows as the
+// drag to the power SPEED_POWER: a little steeper than linear, so that a few pixels give an
+// ocean current's 0.1 m/s while most of the width still reaches a jet stream's.
+const SPEED_AT_TENTH = 3;         // m/s
+const SPEED_POWER = 1.5;
+const SPEED_MAX = 100;            // m/s
+const DAY_SECONDS = 1;            // wall-clock seconds per day
 const STEP_MAX = 60;              // s of simulated time per integration step, at most
-const CENTER_LAT = -20;           // the globe is seen from above this latitude...
-const CENTER_LON = 135;           // ...and, to begin with, this longitude
-const GLOBE_R = 0.44;             // globe radius as a fraction of the figure's side
+const CENTER_LAT = -20;           // the globe is seen, to begin with, from above this latitude...
+const CENTER_LON = 135;           // ...and this longitude
+const GLOBE_R = 0.44;             // globe radius as a fraction of the figure's side, before zooming
+const SPIN_RATE = 45;             // °/s the view turns while an arrow button or key is held, at zoom 1
+const ZOOM_STEP = 1.5, ZOOM_MAX = 100; // at 100× a 1 m/s current's 10 km loop is 40 px across
 
 const FIGURE_WIDTH = 640;
 const MIN_WIDTH = 320;
@@ -59,10 +67,9 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 let instances = 0;
 
 // `world` is the TopoJSON with a `land` object; `frame` is "rotating" (seen from the Earth)
-// or "fixed" (seen from space); `daySeconds` is how many seconds a day takes on screen;
-// `width` caps the figure's side. `demo` launches three parcels and runs the clock on a
-// few seconds, for a capture of the figure in use.
-export function createCoriolisSphereWidget({world, frame: initialFrame = "rotating", daySeconds: initialDay = 10, width = FIGURE_WIDTH, demo = false} = {}) {
+// or "fixed" (seen from space); `width` caps the figure's side. `demo` launches three
+// parcels and runs the clock on a moment, for a capture of the figure in use.
+export function createCoriolisSphereWidget({world, frame: initialFrame = "rotating", width = FIGURE_WIDTH, demo = false} = {}) {
   const uid = `coriolis-sphere-${++instances}`;
   const land = world?.objects?.land ? feature(world, world.objects.land) : null;
   const graticule = geoGraticule().step([15, 15])();
@@ -72,11 +79,12 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   let w, c, R, titleFont, labelFont, ballR;
   const projection = geoOrthographic().clipAngle(90).precision(0.5);
   const path = geoPath(projection);
+  let zoom = 1;
   function applyLayout(newW) {
     w = newW;
     c = w / 2;
     R = GLOBE_R * w;
-    projection.scale(R).translate([c, c]);
+    projection.scale(R * zoom).translate([c, c]);
     const t = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
     const lerp = (a, b) => a + (b - a) * t;
     titleFont = Math.round(lerp(14, 20));
@@ -87,14 +95,15 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
 
   // ---- state ----------------------------------------------------------------------------------
   let frame = initialFrame === "fixed" ? "fixed" : "rotating";
-  let daySeconds = clamp(Math.round(Number(initialDay) || 10), DAY_MIN, DAY_MAX);
   let wallT = 0;   // s of wall-clock time, capped per frame so a hidden tab does not leap
   let simT = 0;    // s of the Earth's own time
   const thetaDeg = () => ((simT * OMEGA * 180) / Math.PI) % 360; // how far the Earth has turned
   // The centre longitude of whichever frame the view is attached to: the Earth's own
   // longitude in the Earth view, a longitude fixed among the stars in the space view.
   let held = CENTER_LON;
+  let viewLat = CENTER_LAT;
   const globeLon = () => (frame === "rotating" ? held : held - thetaDeg()); // Earth longitude at the centre
+  const spin = {lon: 0, lat: 0}; // −1, 0 or 1: which way the view is being turned
   const parcels = [];
   let nextColor = 0;
   let drag = null; // {start: [lon, lat] on the Earth, q: [sx, sy] pointer on screen, color}
@@ -144,37 +153,13 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   }
   controls.appendChild(frameBar);
 
-  const clockField = document.createElement("label");
-  clockField.style.cssText = "display:flex;align-items:center;gap:8px;flex:1 1 220px;";
-  const clockName = document.createElement("span");
-  clockName.textContent = "Clock";
-  clockName.style.cssText = "color:#333;white-space:nowrap;";
-  const clockInput = document.createElement("input");
-  clockInput.type = "range";
-  // The slider runs in days per minute, so that dragging right speeds the clock up.
-  clockInput.min = (60 / DAY_MAX).toFixed(1);
-  clockInput.max = 60 / DAY_MIN;
-  clockInput.step = 0.5;
-  clockInput.value = 60 / daySeconds;
-  clockInput.id = `${uid}-clock`;
-  clockInput.setAttribute("aria-label", "Clock speed, days per minute");
-  clockInput.style.cssText = "margin:0;flex:1 1 90px;min-width:90px;accent-color:#222;cursor:pointer;";
-  clockInput.addEventListener("input", e => {
-    e.stopPropagation();
-    daySeconds = 60 / Number(clockInput.value);
-    updateClockReadout();
-    emit();
-  });
-  const clockOut = document.createElement("span");
-  clockOut.style.cssText = "min-width:8.5em;text-align:right;font-variant-numeric:tabular-nums;color:#333;white-space:nowrap;";
-  clockField.append(clockName, clockInput, clockOut);
-  controls.appendChild(clockField);
-  function updateClockReadout() {
-    clockOut.textContent = describeClock(daySeconds);
-  }
+  const clockNote = document.createElement("span");
+  clockNote.textContent = `The clock runs ${describeClock(DAY_SECONDS)}`;
+  clockNote.style.cssText = "white-space:nowrap;";
+  controls.appendChild(clockNote);
 
   const scroller = document.createElement("div");
-  scroller.style.cssText = "max-width:100%;overflow-x:auto;";
+  scroller.style.cssText = "max-width:100%;overflow-x:auto;position:relative;";
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "coriolis-sphere");
   svg.setAttribute("role", "img");
@@ -182,16 +167,78 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   svg.style.touchAction = "none";
   svg.style.userSelect = "none";
   svg.style.webkitUserSelect = "none";
+  svg.style.outline = "none";
+  svg.tabIndex = 0;
   scroller.appendChild(svg);
   container.appendChild(scroller);
+
+  // The view pad, in the figure's bottom-right corner: arrows to turn the view, held down to
+  // keep turning, and + and − to zoom. Ordinary buttons over the SVG, so a press on them
+  // never reaches the throw gesture, and the keyboard does the same when the figure has
+  // focus. Dragging is kept for throwing alone.
+  const pad = document.createElement("div");
+  pad.style.cssText =
+    "position:absolute;right:10px;bottom:10px;display:grid;grid-template-columns:repeat(4,28px);" +
+    "grid-template-rows:repeat(3,28px);gap:3px;";
+  const padButton = (label, title, col, row) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.title = title;
+    b.setAttribute("aria-label", title);
+    b.style.cssText =
+      "font:15px/1 sans-serif;color:#333;background:rgba(255,255,255,0.92);border:1px solid #ccc;border-radius:6px;" +
+      `padding:0;cursor:pointer;grid-column:${col};grid-row:${row};touch-action:none;user-select:none;-webkit-user-select:none;`;
+    pad.appendChild(b);
+    return b;
+  };
+  const holdToSpin = (b, axis, dir) => {
+    const start = e => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); spin[axis] = dir; };
+    const stop = () => { if (spin[axis] === dir) spin[axis] = 0; };
+    b.addEventListener("pointerdown", start);
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) b.addEventListener(type, stop);
+    // Space or Enter on the button: one step of 10°, as the arrow keys give.
+    b.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); turnView(axis, (dir * 10) / zoom); } });
+  };
+  holdToSpin(padButton("▲", "Turn the view north", 2, 1), "lat", 1);
+  holdToSpin(padButton("◀", "Turn the view west", 1, 2), "lon", -1);
+  holdToSpin(padButton("▶", "Turn the view east", 3, 2), "lon", 1);
+  holdToSpin(padButton("▼", "Turn the view south", 2, 3), "lat", -1);
+  padButton("+", "Zoom in", 4, 1).addEventListener("click", () => setZoom(zoom * ZOOM_STEP));
+  padButton("−", "Zoom out", 4, 3).addEventListener("click", () => setZoom(zoom / ZOOM_STEP));
+  scroller.appendChild(pad);
+
+  svg.addEventListener("keydown", e => {
+    const keys = {ArrowLeft: ["lon", -1], ArrowRight: ["lon", 1], ArrowUp: ["lat", 1], ArrowDown: ["lat", -1]};
+    if (keys[e.key]) { e.preventDefault(); const [axis, dir] = keys[e.key]; spin[axis] = dir; return; }
+    if (e.key === "+" || e.key === "=") { e.preventDefault(); setZoom(zoom * ZOOM_STEP); }
+    if (e.key === "-" || e.key === "_") { e.preventDefault(); setZoom(zoom / ZOOM_STEP); }
+  });
+  svg.addEventListener("keyup", e => {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") spin.lon = 0;
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") spin.lat = 0;
+  });
+  svg.addEventListener("blur", () => { spin.lon = spin.lat = 0; });
+
+  function turnView(axis, degrees) {
+    if (axis === "lon") held = wrapLon(held + degrees);
+    else viewLat = clamp(viewLat + degrees, -90, 90);
+  }
+  function setZoom(z) {
+    zoom = clamp(z, 1, ZOOM_MAX);
+    projection.scale(R * zoom);
+    render();
+    emit();
+  }
 
   const note = document.createElement("div");
   note.style.cssText = "padding:10px 0 0;color:#888;font-size:14px;";
   note.textContent =
-    "Press, drag and release on the globe to launch a parcel of air at that speed over the ground. " +
+    "Press, drag and release on the globe to launch a parcel of air or water at the speed shown, over the ground. " +
     "The Earth's size and spin are real; only the clock is sped up. Nothing acts on the parcel but the " +
     "Earth's turning, so its speed never changes. Switching views holds the picture where it is. " +
-    "Traces fade after ten seconds.";
+    "The arrows and + and − turn and zoom the view; so do the arrow keys and + and − once the figure " +
+    "has been clicked. Traces fade after forty seconds.";
   container.appendChild(note);
 
   function svgEl(tag, attrs = {}, parent) {
@@ -245,14 +292,14 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   // viewer now; the traces are drawn in the coordinates of the frame being shown, centred on
   // the held longitude, which in the space view is a longitude among the stars.
   function render() {
-    projection.rotate([-globeLon(), -CENTER_LAT]);
+    projection.rotate([-globeLon(), -viewLat]);
     oceanEl.setAttribute("d", path({type: "Sphere"}));
     graticuleEl.setAttribute("d", path(graticule));
     equatorEl.setAttribute("d", path(equator));
     if (land) landEl.setAttribute("d", path(land));
     rimEl.setAttribute("d", path({type: "Sphere"}));
 
-    projection.rotate([-held, -CENTER_LAT]);
+    projection.rotate([-held, -viewLat]);
     const th = thetaDeg();
     for (const p of parcels) drawParcel(p, th);
     drawDrag();
@@ -263,7 +310,7 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
     p.path.setAttribute("d", coords.length > 1 ? path({type: "LineString", coordinates: coords}) ?? "" : "");
     const [lon, lat] = lonLat(p.r);
     const here = frame === "fixed" ? [lon + th, lat] : [lon, lat];
-    const visible = geoDistance(here, [held, CENTER_LAT]) < Math.PI / 2;
+    const visible = geoDistance(here, [held, viewLat]) < Math.PI / 2;
     p.ball.style.display = visible ? "" : "none";
     if (visible) {
       const [sx, sy] = projection(here);
@@ -351,7 +398,10 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   // ---- the clock ------------------------------------------------------------------------------
   function advance(dtWall, draw = true) {
     wallT += dtWall;
-    const dtSim = (dtWall * SIDEREAL_DAY) / daySeconds;
+    // Slower when zoomed in, so that the ground goes by at the same pace on screen.
+    if (spin.lon) turnView("lon", (spin.lon * SPIN_RATE * dtWall) / zoom);
+    if (spin.lat) turnView("lat", (spin.lat * SPIN_RATE * dtWall) / zoom);
+    const dtSim = (dtWall * SIDEREAL_DAY) / DAY_SECONDS;
     const n = Math.max(1, Math.ceil(dtSim / STEP_MAX));
     const h = dtSim / n;
     for (let i = parcels.length - 1; i >= 0; i--) {
@@ -383,8 +433,8 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   }
   // The Earth coordinates under a screen point, or null off the globe.
   function groundAt(xy) {
-    projection.rotate([-globeLon(), -CENTER_LAT]);
-    if (Math.hypot(xy[0] - c, xy[1] - c) > R) return null;
+    projection.rotate([-globeLon(), -viewLat]);
+    if (Math.hypot(xy[0] - c, xy[1] - c) > R * zoom) return null;
     return projection.invert(xy);
   }
   svg.addEventListener("pointerdown", e => {
@@ -414,20 +464,22 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   svg.addEventListener("pointerup", release);
   svg.addEventListener("pointercancel", release);
 
-  // The speed and aim of a drag: the speed from its length on screen, the aim from the
-  // ground under the pointer, or, off the globe, under the nearest point of the rim.
+  // The speed and aim of a drag: the speed from its length on screen (zoom does not change
+  // it, so the whole range stays within reach), the aim from the ground under the pointer,
+  // or, off the globe, under the nearest point of the rim.
   function throwOf(d) {
-    projection.rotate([-globeLon(), -CENTER_LAT]);
+    projection.rotate([-globeLon(), -viewLat]);
     // In the space view a long drag can carry the start round to the far side; the throw is
     // then measured from the centre, which is as good a guess as any.
     const [sx, sy] = projection(d.start) ?? [c, c];
     const len = Math.hypot(d.q[0] - sx, d.q[1] - sy);
-    const speed = Math.min(SPEED_MAX, (SPEED_GAIN * len) / R);
+    const speed = Math.min(SPEED_MAX, SPEED_AT_TENTH * Math.pow((10 * len) / w, SPEED_POWER));
     let aim = d.q;
+    const rz = R * zoom;
     const fromCentre = Math.hypot(aim[0] - c, aim[1] - c);
-    if (fromCentre > R * 0.999) aim = [c + ((aim[0] - c) * R * 0.999) / fromCentre, c + ((aim[1] - c) * R * 0.999) / fromCentre];
+    if (fromCentre > rz * 0.999) aim = [c + ((aim[0] - c) * rz * 0.999) / fromCentre, c + ((aim[1] - c) * rz * 0.999) / fromCentre];
     const toward = projection.invert(aim) ?? d.start;
-    return {speed: len < 4 ? 0 : speed, toward, sx, sy, len};
+    return {speed: len < 3 ? 0 : speed, toward, sx, sy, len};
   }
 
   function drawDrag() {
@@ -442,7 +494,7 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
     dragLabel.setAttribute("fill", drag.color);
     dragBall.setAttribute("cx", sx.toFixed(1));
     dragBall.setAttribute("cy", sy.toFixed(1));
-    if (len < 4) {
+    if (len < 3) {
       for (const el of [dragLine, dragHead, dragLabel]) el.setAttribute("display", "none");
       return;
     }
@@ -460,7 +512,7 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
     // The speed reads just past the arrowhead.
     dragLabel.setAttribute("x", (x1 + tx * 14 - ty * 0).toFixed(1));
     dragLabel.setAttribute("y", (y1 + ty * 14 + labelFont * 0.35).toFixed(1));
-    dragLabel.textContent = `${Math.round(speed)} m/s`;
+    dragLabel.textContent = `${speed < 10 ? speed.toFixed(1) : Math.round(speed)} m/s`;
   }
 
   // ---- changes --------------------------------------------------------------------------------
@@ -478,14 +530,14 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   }
 
   function value() {
-    return {frame, daySeconds, parcels: parcels.length};
+    return {frame, parcels: parcels.length, view: [held, viewLat], zoom};
   }
   function emit() {
     container.value = value();
     svg.setAttribute("aria-label",
-      `The Earth as a globe seen from above ${Math.abs(CENTER_LAT)}° ${CENTER_LAT < 0 ? "south" : "north"}, ` +
+      `The Earth as a globe seen from above ${Math.abs(Math.round(viewLat))}° ${viewLat < 0 ? "south" : "north"}, ` +
       `${frame === "fixed" ? "from space, turning" : "from the Earth, still"}, with ${parcels.length} parcel${parcels.length === 1 ? "" : "s"} ` +
-      `of air in flight; the clock runs ${describeClock(daySeconds)}.`);
+      `of air in flight; the clock runs ${describeClock(DAY_SECONDS)}.`);
     container.dispatchEvent(new CustomEvent("input", {bubbles: true}));
   }
 
@@ -495,7 +547,6 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
 
   layoutControls();
   updateFrameButtons();
-  updateClockReadout();
   build();
   container.value = value();
 
@@ -505,11 +556,11 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
     const stepWall = 1 / 60;
     const run = s => { for (let i = 0; i < Math.round(s / stepWall); i++) advance(stepWall, false); };
     launch([110, 40], [120, 40], 45);
-    run(1.2);
+    run(0.12);
     launch([150, -35], [150, -25], 45);
-    run(1.2);
+    run(0.12);
     launch([100, 5], [110, 5], 60);
-    run(4.5);
+    run(0.45);
     render();
   }
   requestAnimationFrame(tick);
@@ -531,7 +582,7 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
 
 function describeClock(daySeconds) {
   const s = Math.round(daySeconds * 10) / 10;
-  return `one day in ${Number.isInteger(s) ? s : s.toFixed(1)} s`;
+  return s === 1 ? "one day a second" : `one day in ${Number.isInteger(s) ? s : s.toFixed(1)} s`;
 }
 
 // Earth-fixed xyz: x toward (0°, 0°), y toward (90° E, 0°), z toward the north pole.

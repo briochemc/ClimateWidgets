@@ -31,14 +31,13 @@ import {createCoriolisSphereWidget} from "./widget.js";
 
 const world = await FileAttachment("../data/countries-110m.json").json();
 
-// ?frame=fixed opens with the view from space; ?day=20 runs the clock at one day in 20 s;
-// ?demo opens with three parcels already launched (the thumbnail capture uses it).
+// ?frame=fixed opens with the view from space; ?demo opens with three parcels already
+// launched (the thumbnail capture uses it).
 const params = new URLSearchParams(location.search);
 const frame = params.get("frame") === "fixed" ? "fixed" : "rotating";
-const daySeconds = params.has("day") ? Number(params.get("day")) : 10;
 const demo = params.has("demo");
 ```
 
 ```js
-const coriolis = view(createCoriolisSphereWidget({world, frame, daySeconds, demo}));
+const coriolis = view(createCoriolisSphereWidget({world, frame, demo}));
 ```
