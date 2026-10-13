@@ -1,6 +1,6 @@
-// The Coriolis effect on the Earth: a parcel of air launched over the ground, watched from
-// the Earth (the rotating frame) or from space (the fixed frame), on an orthographic globe
-// seen from one fixed angle. The companion of the turntable widget in ../coriolis/.
+// The Coriolis effect on the Earth: a parcel of air or water launched over the ground, on an
+// orthographic globe seen from the Earth itself (the rotating frame), from an angle that can
+// be turned and zoomed. The companion of the turntable widget in ../coriolis/.
 //
 // The physics is Earth-like, not a free particle on a sphere. A free particle on a
 // frictionless rotating sphere would feel the centrifugal push as well and slide toward the
@@ -13,17 +13,14 @@
 // the first term being what keeps a straight run on a great circle. Stepped with RK4 and
 // put back on the sphere after each step, the poles included. Left alone, a parcel goes
 // round an inertial circle: clockwise in the north, anticlockwise in the south, of radius
-// v/f and period 2π/f (half a sidereal day at a pole, 17 h at 45°, never at the equator).
+// v/f and period 2π/f (half a sidereal day at a pole, 17 h at 45°, never at the equator),
+// drifting slowly west as the exact solution on the sphere does. Checked against the
+// conservation of energy and of cos φ (u + Ω a cos φ) (Ripa 1997, J. Phys. Oceanogr. 27, 633).
 //
 // The Earth's size and spin are real. The clock is run fast, one day a second, because at
-// real speed nothing would be seen to happen. The view is seen from one angle to begin with
-// and can be turned and zoomed with a pad of buttons (or the keyboard), never by dragging,
-// which is kept for throwing. Throws are always
-// relative to the ground: a drag on the globe sets the parcel's speed over the ground and
-// its direction, whichever view is showing, since a wind is a motion relative to the Earth.
-// The two views share the samples (each keeps the Earth's angle at the time), as the
-// turntable does, and switching holds the picture where it is: the frame being let go
-// hands its centre longitude to the one being taken hold of, so nothing jumps.
+// real speed nothing would be seen to happen. The view can be turned and zoomed with a pad
+// of buttons (or the keyboard), never by dragging, which is kept for throwing: a drag on
+// the globe sets the parcel's speed over the ground and its direction.
 //
 // d3-geo and topojson-client are imported from jsDelivr, as the map widgets do, so the
 // module works both on the Framework site and as a raw script-tag embed. The land outline is
@@ -34,7 +31,6 @@ import {geoOrthographic, geoPath, geoGraticule, geoDistance} from "https://cdn.j
 import {feature} from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
 
 const BACKGROUND = "#f2f2f2";
-const ACCENT = "#0b57d0";
 const OCEAN = "#e6eef6";
 const LAND = "#c9d3c0";
 const RIM = "#9a9a9a";
@@ -48,13 +44,14 @@ const MAX_THROWS = 10;
 const LIFE = 40;                  // wall-clock s a trace is shown in full
 const FADE = 8;                   // s it then takes to fade away
 // The drag's length maps onto the logarithm of the speed, as a log slider does: a hundredth
-// of the figure's width is SPEED_MIN, a surface current, and the full width SPEED_MAX,
-// 300 km/h, about the most a wind ever sustains. That is close to three decades, a factor
-// of ten per third of the width: 10 cm/s to 1 m/s, the ocean's currents; to 10 m/s,
-// everyday winds; to 300 km/h, storms and the jet stream.
+// of the figure's width is SPEED_MIN, a surface current, and a third of it SPEED_MAX,
+// 300 km/h, about the most a wind ever sustains; beyond a third the speed stays there. That
+// is close to three decades, a factor of ten for about every tenth of the width: 10 cm/s to
+// 1 m/s, the ocean's currents; to 10 m/s, everyday winds; to 300 km/h, storms and the jet
+// stream. A third rather than the whole width, so that the top is within an easy drag.
 const SPEED_MIN = 0.1;            // m/s, at DRAG_MIN of the width
-const SPEED_MAX = 300 / 3.6;      // m/s, at the full width
-const DRAG_MIN = 0.01;            // of the figure's width
+const SPEED_MAX = 300 / 3.6;      // m/s, at DRAG_MAX of the width
+const DRAG_MIN = 0.01, DRAG_MAX = 1 / 3; // of the figure's width
 const DAY_SECONDS = 1;            // wall-clock seconds per day
 const STEP_MAX = 60;              // s of simulated time per integration step, at most
 const CENTER_LAT = -20;           // the globe is seen, to begin with, from above this latitude...
@@ -66,13 +63,10 @@ const ZOOM_STEP = 1.5, ZOOM_MAX = 100; // at 100× a 1 m/s current's 10 km loop 
 const FIGURE_WIDTH = 640;
 const MIN_WIDTH = 320;
 const SVG_NS = "http://www.w3.org/2000/svg";
-let instances = 0;
 
-// `world` is the TopoJSON with a `land` object; `frame` is "rotating" (seen from the Earth)
-// or "fixed" (seen from space); `width` caps the figure's side. `demo` launches three
-// parcels and runs the clock on a moment, for a capture of the figure in use.
-export function createCoriolisSphereWidget({world, frame: initialFrame = "rotating", width = FIGURE_WIDTH, demo = false} = {}) {
-  const uid = `coriolis-sphere-${++instances}`;
+// `world` is the TopoJSON with a `land` object; `width` caps the figure's side. `demo`
+// launches three parcels and runs the clock on a moment, for a capture of the figure in use.
+export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = false} = {}) {
   const land = world?.objects?.land ? feature(world, world.objects.land) : null;
   const graticule = geoGraticule().step([15, 15])();
   const equator = {type: "LineString", coordinates: [[-180, 0], [-90, 0], [0, 0], [90, 0], [180, 0]]};
@@ -96,15 +90,8 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   applyLayout(maxW);
 
   // ---- state ----------------------------------------------------------------------------------
-  let frame = initialFrame === "fixed" ? "fixed" : "rotating";
   let wallT = 0;   // s of wall-clock time, capped per frame so a hidden tab does not leap
-  let simT = 0;    // s of the Earth's own time
-  const thetaDeg = () => ((simT * OMEGA * 180) / Math.PI) % 360; // how far the Earth has turned
-  // The centre longitude of whichever frame the view is attached to: the Earth's own
-  // longitude in the Earth view, a longitude fixed among the stars in the space view.
-  let held = CENTER_LON;
-  let viewLat = CENTER_LAT;
-  const globeLon = () => (frame === "rotating" ? held : held - thetaDeg()); // Earth longitude at the centre
+  let viewLon = CENTER_LON, viewLat = CENTER_LAT; // the Earth longitude and latitude facing the viewer
   const spin = {lon: 0, lat: 0}; // −1, 0 or 1: which way the view is being turned
   const parcels = [];
   let nextColor = 0;
@@ -121,44 +108,13 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   title.textContent = "Launch a parcel of air over the spinning Earth";
   container.appendChild(title);
 
-  const controls = document.createElement("div");
-  controls.style.cssText =
-    "display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 16px;" +
-    "padding:0 0 8px;font-size:13px;color:#666;";
-  container.appendChild(controls);
-
-  const frameBar = document.createElement("div");
-  frameBar.style.cssText = "display:flex;align-items:center;gap:6px;";
-  frameBar.append("Seen from");
-  const FRAMES = [["fixed", "space"], ["rotating", "the Earth"]];
-  const frameButtons = FRAMES.map(([name, label], i) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = label;
-    b.style.cssText =
-      "font:13px sans-serif;padding:3px 10px;cursor:pointer;border:1px solid #ccc;white-space:nowrap;" +
-      `border-radius:${i ? "0 999px 999px 0" : "999px 0 0 999px"};${i ? "margin-left:-7px;" : ""}`;
-    b.addEventListener("click", () => setFrame(name));
-    frameBar.appendChild(b);
-    return b;
-  });
-  function updateFrameButtons() {
-    frameButtons.forEach((b, i) => {
-      const on = FRAMES[i][0] === frame;
-      b.style.background = on ? hexToRgba(ACCENT, 0.08) : "#fff";
-      b.style.borderColor = on ? ACCENT : "#ccc";
-      b.style.color = on ? ACCENT : "#333";
-      b.style.position = "relative";
-      b.style.zIndex = on ? 1 : 0;
-      b.setAttribute("aria-pressed", on);
-    });
-  }
-  controls.appendChild(frameBar);
-
-  const clockNote = document.createElement("span");
-  clockNote.textContent = `The clock runs ${describeClock(DAY_SECONDS)}`;
-  clockNote.style.cssText = "white-space:nowrap;";
-  controls.appendChild(clockNote);
+  const note = document.createElement("div");
+  note.style.cssText = "padding:0 0 8px;color:#888;font-size:14px;";
+  note.textContent =
+    "Click and drag to launch a parcel of air/water (speed is shown). " +
+    "Nothing acts on the parcel but the Earth's turning, so its speed never changes. " +
+    `The clock runs ${describeClock(DAY_SECONDS)}.`;
+  container.appendChild(note);
 
   const scroller = document.createElement("div");
   scroller.style.cssText = "max-width:100%;overflow-x:auto;position:relative;";
@@ -177,20 +133,22 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   // The view pad, in the figure's bottom-right corner: arrows to turn the view, held down to
   // keep turning, and + and − to zoom. Ordinary buttons over the SVG, so a press on them
   // never reaches the throw gesture, and the keyboard does the same when the figure has
-  // focus. Dragging is kept for throwing alone.
+  // focus. Dragging is kept for throwing alone. The glyphs are drawn, not typed: fonts set
+  // their triangles at different sizes and off centre.
   const pad = document.createElement("div");
   pad.style.cssText =
     "position:absolute;right:10px;bottom:10px;display:grid;grid-template-columns:repeat(4,28px);" +
     "grid-template-rows:repeat(3,28px);gap:3px;";
-  const padButton = (label, title, col, row) => {
+  const padButton = (glyph, title, col, row) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.textContent = label;
     b.title = title;
     b.setAttribute("aria-label", title);
     b.style.cssText =
-      "font:15px/1 sans-serif;color:#333;background:rgba(255,255,255,0.92);border:1px solid #ccc;border-radius:6px;" +
-      `padding:0;cursor:pointer;grid-column:${col};grid-row:${row};touch-action:none;user-select:none;-webkit-user-select:none;`;
+      "display:flex;align-items:center;justify-content:center;color:#333;background:rgba(255,255,255,0.92);" +
+      "border:1px solid #ccc;border-radius:6px;padding:0;cursor:pointer;" +
+      `grid-column:${col};grid-row:${row};touch-action:none;user-select:none;-webkit-user-select:none;`;
+    b.appendChild(glyph);
     pad.appendChild(b);
     return b;
   };
@@ -202,12 +160,12 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
     // Space or Enter on the button: one step of 10°, as the arrow keys give.
     b.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); turnView(axis, (dir * 10) / zoom); } });
   };
-  holdToSpin(padButton("▲", "Turn the view north", 2, 1), "lat", 1);
-  holdToSpin(padButton("◀", "Turn the view west", 1, 2), "lon", -1);
-  holdToSpin(padButton("▶", "Turn the view east", 3, 2), "lon", 1);
-  holdToSpin(padButton("▼", "Turn the view south", 2, 3), "lat", -1);
-  padButton("+", "Zoom in", 4, 1).addEventListener("click", () => setZoom(zoom * ZOOM_STEP));
-  padButton("−", "Zoom out", 4, 3).addEventListener("click", () => setZoom(zoom / ZOOM_STEP));
+  holdToSpin(padButton(triangleGlyph(-90), "Turn the view north", 2, 1), "lat", 1);
+  holdToSpin(padButton(triangleGlyph(180), "Turn the view west", 1, 2), "lon", -1);
+  holdToSpin(padButton(triangleGlyph(0), "Turn the view east", 3, 2), "lon", 1);
+  holdToSpin(padButton(triangleGlyph(90), "Turn the view south", 2, 3), "lat", -1);
+  padButton(signGlyph(true), "Zoom in", 4, 1).addEventListener("click", () => setZoom(zoom * ZOOM_STEP));
+  padButton(signGlyph(false), "Zoom out", 4, 3).addEventListener("click", () => setZoom(zoom / ZOOM_STEP));
   scroller.appendChild(pad);
 
   svg.addEventListener("keydown", e => {
@@ -223,7 +181,7 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   svg.addEventListener("blur", () => { spin.lon = spin.lat = 0; });
 
   function turnView(axis, degrees) {
-    if (axis === "lon") held = wrapLon(held + degrees);
+    if (axis === "lon") viewLon = wrapLon(viewLon + degrees);
     else viewLat = clamp(viewLat + degrees, -90, 90);
   }
   function setZoom(z) {
@@ -233,16 +191,6 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
     emit();
   }
 
-  const note = document.createElement("div");
-  note.style.cssText = "padding:10px 0 0;color:#888;font-size:14px;";
-  note.textContent =
-    "Press, drag and release on the globe to launch a parcel of air or water at the speed shown, over the ground. " +
-    "The Earth's size and spin are real; only the clock is sped up. Nothing acts on the parcel but the " +
-    "Earth's turning, so its speed never changes. Switching views holds the picture where it is. " +
-    "The arrows and + and − turn and zoom the view; so do the arrow keys and + and − once the figure " +
-    "has been clicked. Traces fade after forty seconds.";
-  container.appendChild(note);
-
   function svgEl(tag, attrs = {}, parent) {
     const el = document.createElementNS(SVG_NS, tag);
     for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
@@ -251,7 +199,7 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   }
 
   // ---- scaffolding, rebuilt on resize ---------------------------------------------------------
-  let oceanEl, graticuleEl, equatorEl, landEl, rimEl, tracesG, dragG, dragLine, dragHead, dragBall, dragLabel, caption;
+  let oceanEl, graticuleEl, equatorEl, landEl, rimEl, tracesG, dragG, dragLine, dragHead, dragBall, dragLabel;
 
   function build() {
     svg.setAttribute("width", w);
@@ -280,39 +228,25 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
       stroke: BACKGROUND, "stroke-width": 3, "paint-order": "stroke", "stroke-linejoin": "round",
     }, dragG);
 
-    caption = svgEl("text", {x: 10, y: 10 + labelFont, "font-size": labelFont, fill: "#555"}, svg);
-    updateCaption();
     render();
   }
 
-  function updateCaption() {
-    caption.textContent = frame === "fixed" ? "Seen from space (fixed frame)" : "Seen from the Earth (rotating frame)";
-  }
-
   // ---- drawing --------------------------------------------------------------------------------
-  // The globe is drawn in Earth coordinates centred on whatever Earth longitude faces the
-  // viewer now; the traces are drawn in the coordinates of the frame being shown, centred on
-  // the held longitude, which in the space view is a longitude among the stars.
   function render() {
-    projection.rotate([-globeLon(), -viewLat]);
+    projection.rotate([-viewLon, -viewLat]);
     oceanEl.setAttribute("d", path({type: "Sphere"}));
     graticuleEl.setAttribute("d", path(graticule));
     equatorEl.setAttribute("d", path(equator));
     if (land) landEl.setAttribute("d", path(land));
     rimEl.setAttribute("d", path({type: "Sphere"}));
-
-    projection.rotate([-held, -viewLat]);
-    const th = thetaDeg();
-    for (const p of parcels) drawParcel(p, th);
+    for (const p of parcels) drawParcel(p);
     drawDrag();
   }
 
-  function drawParcel(p, th) {
-    const coords = frame === "fixed" ? p.fixed : p.rotating;
-    p.path.setAttribute("d", coords.length > 1 ? path({type: "LineString", coordinates: coords}) ?? "" : "");
-    const [lon, lat] = lonLat(p.r);
-    const here = frame === "fixed" ? [lon + th, lat] : [lon, lat];
-    const visible = geoDistance(here, [held, viewLat]) < Math.PI / 2;
+  function drawParcel(p) {
+    p.path.setAttribute("d", p.trace.length > 1 ? path({type: "LineString", coordinates: p.trace}) ?? "" : "");
+    const here = lonLat(p.r);
+    const visible = geoDistance(here, [viewLon, viewLat]) < Math.PI / 2;
     p.ball.style.display = visible ? "" : "none";
     if (visible) {
       const [sx, sy] = projection(here);
@@ -342,7 +276,7 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
     const color = COLORS[nextColor++ % COLORS.length];
     const p = {
       r: scale(r, EARTH_RADIUS), v, speed: norm(v), t0: wallT, color,
-      fixed: [], rotating: [], // sampled [lon, lat] in each frame
+      trace: [], // sampled [lon, lat]
       path: svgEl("path", {stroke: color}, tracesG),
       ball: svgEl("circle", {r: ballR, fill: color, stroke: "#fff", "stroke-width": 1.5}, tracesG),
     };
@@ -359,9 +293,7 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   }
 
   function sample(p) {
-    const [lon, lat] = lonLat(p.r);
-    p.rotating.push([lon, lat]);
-    p.fixed.push([wrapLon(lon + thetaDeg()), lat]);
+    p.trace.push(lonLat(p.r));
   }
 
   // One RK4 step of dt seconds for a parcel, then back onto the sphere at its own speed.
@@ -410,9 +342,8 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
       const p = parcels[i];
       if (wallT - p.t0 >= LIFE + FADE) { removeParcel(i); continue; }
       for (let k = 0; k < n; k++) step(p, h);
+      sample(p);
     }
-    simT += dtSim;
-    for (const p of parcels) sample(p);
     if (draw) render();
   }
 
@@ -435,7 +366,7 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   }
   // The Earth coordinates under a screen point, or null off the globe.
   function groundAt(xy) {
-    projection.rotate([-globeLon(), -viewLat]);
+    projection.rotate([-viewLon, -viewLat]);
     if (Math.hypot(xy[0] - c, xy[1] - c) > R * zoom) return null;
     return projection.invert(xy);
   }
@@ -470,12 +401,12 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   // it, so the whole range stays within reach), the aim from the ground under the pointer,
   // or, off the globe, under the nearest point of the rim.
   function throwOf(d) {
-    projection.rotate([-globeLon(), -viewLat]);
-    // In the space view a long drag can carry the start round to the far side; the throw is
-    // then measured from the centre, which is as good a guess as any.
+    projection.rotate([-viewLon, -viewLat]);
+    // The view can be turned during a drag until the start is on the far side; the throw
+    // is then measured from the centre, which is as good a guess as any.
     const [sx, sy] = projection(d.start) ?? [c, c];
     const len = Math.hypot(d.q[0] - sx, d.q[1] - sy);
-    const t = clamp((len / w - DRAG_MIN) / (1 - DRAG_MIN), 0, 1);
+    const t = clamp((len / w - DRAG_MIN) / (DRAG_MAX - DRAG_MIN), 0, 1);
     const speed = SPEED_MIN * Math.pow(SPEED_MAX / SPEED_MIN, t);
     let aim = d.q;
     const rz = R * zoom;
@@ -513,33 +444,20 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
       `M${x1.toFixed(1)},${y1.toFixed(1)}L${(bx - ty * hw).toFixed(1)},${(by + tx * hw).toFixed(1)}` +
       `L${(bx + ty * hw).toFixed(1)},${(by - tx * hw).toFixed(1)}Z`);
     // The speed reads just past the arrowhead.
-    dragLabel.setAttribute("x", (x1 + tx * 14 - ty * 0).toFixed(1));
+    dragLabel.setAttribute("x", (x1 + tx * 14).toFixed(1));
     dragLabel.setAttribute("y", (y1 + ty * 14 + labelFont * 0.35).toFixed(1));
     dragLabel.textContent = describeSpeed(speed);
   }
 
   // ---- changes --------------------------------------------------------------------------------
-  function setFrame(name) {
-    if (name === frame) return;
-    // Hold the picture where it is: the frame being let go hands its centre longitude to
-    // the one being taken hold of.
-    held = wrapLon(name === "fixed" ? held + thetaDeg() : held - thetaDeg());
-    frame = name;
-    drag = null;
-    updateFrameButtons();
-    updateCaption();
-    render();
-    emit();
-  }
-
   function value() {
-    return {frame, parcels: parcels.length, view: [held, viewLat], zoom};
+    return {parcels: parcels.length, view: [viewLon, viewLat], zoom};
   }
   function emit() {
     container.value = value();
     svg.setAttribute("aria-label",
       `The Earth as a globe seen from above ${Math.abs(Math.round(viewLat))}° ${viewLat < 0 ? "south" : "north"}, ` +
-      `${frame === "fixed" ? "from space, turning" : "from the Earth, still"}, with ${parcels.length} parcel${parcels.length === 1 ? "" : "s"} ` +
+      `${Math.abs(Math.round(viewLon))}° ${viewLon < 0 ? "west" : "east"}, with ${parcels.length} parcel${parcels.length === 1 ? "" : "s"} ` +
       `of air in flight; the clock runs ${describeClock(DAY_SECONDS)}.`);
     container.dispatchEvent(new CustomEvent("input", {bubbles: true}));
   }
@@ -549,7 +467,6 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
   }
 
   layoutControls();
-  updateFrameButtons();
   build();
   container.value = value();
 
@@ -582,6 +499,44 @@ export function createCoriolisSphereWidget({world, frame: initialFrame = "rotati
 }
 
 // ---- small helpers ------------------------------------------------------------------------------
+
+// An equilateral triangle pointing the given way (0 is east, −90 north), drawn as a 12 px SVG
+// centred on its centroid, for the pad's buttons.
+function triangleGlyph(angle) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 12 12");
+  svg.setAttribute("width", 12);
+  svg.setAttribute("height", 12);
+  svg.setAttribute("aria-hidden", "true");
+  svg.style.display = "block";
+  const r = 4.6;
+  const pts = [0, 120, 240].map(a => {
+    const t = ((angle + a) * Math.PI) / 180;
+    return `${(6 + r * Math.cos(t)).toFixed(2)},${(6 + r * Math.sin(t)).toFixed(2)}`;
+  });
+  const poly = document.createElementNS(SVG_NS, "polygon");
+  poly.setAttribute("points", pts.join(" "));
+  poly.setAttribute("fill", "#333");
+  svg.appendChild(poly);
+  return svg;
+}
+// A plus or a minus, drawn the same way.
+function signGlyph(plus) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 12 12");
+  svg.setAttribute("width", 12);
+  svg.setAttribute("height", 12);
+  svg.setAttribute("aria-hidden", "true");
+  svg.style.display = "block";
+  const line = (x1, y1, x2, y2) => {
+    const l = document.createElementNS(SVG_NS, "line");
+    for (const [k, v] of Object.entries({x1, y1, x2, y2, stroke: "#333", "stroke-width": 1.6, "stroke-linecap": "round"})) l.setAttribute(k, v);
+    svg.appendChild(l);
+  };
+  line(1.5, 6, 10.5, 6);
+  if (plus) line(6, 1.5, 6, 10.5);
+  return svg;
+}
 
 // Two significant figures or so, in the unit people use for that speed: cm/s for a current,
 // m/s for a wind, with km/h alongside once it is a wind worth a name.
@@ -617,8 +572,4 @@ const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a
 const norm = a => Math.sqrt(dot(a, a));
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
-}
-function hexToRgba(hex, a) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }

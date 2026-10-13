@@ -31,13 +31,10 @@ import {createCoriolisSphereWidget} from "./widget.js";
 
 const world = await FileAttachment("../data/countries-110m.json").json();
 
-// ?frame=fixed opens with the view from space; ?demo opens with three parcels already
-// launched (the thumbnail capture uses it).
-const params = new URLSearchParams(location.search);
-const frame = params.get("frame") === "fixed" ? "fixed" : "rotating";
-const demo = params.has("demo");
+// ?demo opens with three parcels already launched (the thumbnail capture uses it).
+const demo = new URLSearchParams(location.search).has("demo");
 ```
 
 ```js
-const coriolis = view(createCoriolisSphereWidget({world, frame, demo}));
+const coriolis = view(createCoriolisSphereWidget({world, demo}));
 ```
