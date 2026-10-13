@@ -48,11 +48,11 @@ const MAX_THROWS = 10;
 const LIFE = 40;                  // wall-clock s a trace is shown in full
 const FADE = 8;                   // s it then takes to fade away
 // The drag's length maps onto the logarithm of the speed, as a log slider does: a hundredth
-// of the figure's width is SPEED_MIN, the deep ocean's drift, and the full width SPEED_MAX,
-// 300 km/h, about the most a wind ever sustains. That is four decades, a factor of ten per
-// quarter of the width: 1 cm/s to 10 cm/s, the deep ocean; to 1 m/s, surface currents; to
-// 10 m/s, everyday winds; to 300 km/h, storms and the jet stream.
-const SPEED_MIN = 0.01;           // m/s, at DRAG_MIN of the width
+// of the figure's width is SPEED_MIN, a surface current, and the full width SPEED_MAX,
+// 300 km/h, about the most a wind ever sustains. That is close to three decades, a factor
+// of ten per third of the width: 10 cm/s to 1 m/s, the ocean's currents; to 10 m/s,
+// everyday winds; to 300 km/h, storms and the jet stream.
+const SPEED_MIN = 0.1;            // m/s, at DRAG_MIN of the width
 const SPEED_MAX = 300 / 3.6;      // m/s, at the full width
 const DRAG_MIN = 0.01;            // of the figure's width
 const DAY_SECONDS = 1;            // wall-clock seconds per day
