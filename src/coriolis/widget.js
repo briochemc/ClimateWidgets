@@ -56,10 +56,11 @@ const PAINT_STEP = 0.003; // disk radii (under a pixel) the ball must move befor
 const LINGER = 1;        // s a throw stays in full after its ball has left the picture...
 const FADE = 2;          // ...and then takes to fade away
 const LIFE_MAX = 60;     // s after which a throw fades anyway, for a ball that never leaves
-// Frames a second the figure is redrawn at: half a 60 Hz screen's rate, to halve the work.
-// Animation frames closer together than this are skipped, so a 120 Hz screen draws every
-// fourth; the clock itself keeps real time, whatever the rate.
-const FRAME_RATE = 30;
+// Frames a second the figure is redrawn at, at most: a 60 Hz screen's own rate, since a
+// turn stepped any slower looks jerky, and the turning layers are never repainted, only
+// moved, so a frame is cheap. Animation frames closer together than this are skipped, so
+// a 120 Hz screen draws every other one; the clock itself keeps real time.
+const FRAME_RATE = 60;
 const DASH = "#222";
 const DRAG_GAIN = 2.5;   // disk radii per second of speed, per disk radius of drag
 const SPEED_MAX = 4;     // disk radii per second
@@ -240,7 +241,6 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
     const layer = turns => {
       const box = document.createElement("div");
       box.style.cssText = `position:absolute;left:0;top:0;width:${w}px;height:${w}px;${turns ? "will-change:transform;" : ""}`;
-      box.spin = {anim: null, angle: NaN, rate: NaN, t0: 0};
       figure.appendChild(box);
       const s = svgEl("svg", {width: w, height: w}, box);
       s.style.display = "block";
@@ -488,50 +488,21 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
   }
 
   // In the room view the table turns; in the turntable view the room turns the other way.
-  // A layer that turns is driven by a Web Animation, one full turn at a steady rate
-  // repeated for ever, which the browser runs on its compositor at the screen's own refresh
-  // rate with no work from the clock here, so the turning is smooth whatever the clock's
-  // frame rate. The clock keeps its own angle for the physics and checks each frame that
-  // the animation agrees with it, starting one afresh from the current angle when it does
-  // not: after the rotation speed or the view has changed, or when the clock was capped or
-  // paused while the animation ran on. The animation's start is pinned to the frame's own
-  // timestamp, which is the animation timeline's, so that otherwise the two never drift.
   // Each layer is a square box centred on the figure, so a rotate turns it about the
-  // centre with no transform-origin to set.
-  const SYNC_TOL = (0.5 * Math.PI) / 180;
-  function spin(box, angle, rate, now) {
-    const s = box.spin;
-    if (s.rate === rate) {
-      const implied = rate === 0 ? s.angle : s.angle + (rate * (now - s.t0)) / 1000;
-      if (Math.abs(wrapAngle(angle - implied)) < SYNC_TOL) return;
-    }
-    s.anim?.cancel();
-    s.anim = null;
-    s.angle = angle;
-    s.rate = rate;
-    s.t0 = now;
-    if (rate === 0) {
-      box.style.transform = `rotate(${deg(angle).toFixed(2)}deg)`;
-      return;
-    }
-    box.style.transform = "";
-    s.anim = box.animate(
-      [{transform: `rotate(${deg(angle)}deg)`}, {transform: `rotate(${deg(angle + Math.sign(rate) * 2 * Math.PI)}deg)`}],
-      {duration: ((2 * Math.PI) / Math.abs(rate)) * 1000, iterations: Infinity, easing: "linear"},
-    );
-    s.anim.startTime = now;
-  }
-  function placeFrames(now = document.timeline?.currentTime ?? performance.now()) {
-    const W = omega();
-    spin(roomSvg.parentNode, roomAngle(), frame === "fixed" ? 0 : -W, now);
-    spin(diskSvg.parentNode, diskAngle(), frame === "fixed" ? W : 0, now);
+  // centre with no transform-origin to set. The turn is set from the clock, in the same
+  // frame as the balls, and not left to a compositor animation: the compositor samples an
+  // animation at its own frame time, a frame or two after the one the balls were placed
+  // for, and a ball on the floor then jitters against the paint turning under it.
+  function placeFrames() {
+    roomSvg.parentNode.style.transform = `rotate(${deg(roomAngle()).toFixed(2)}deg)`;
+    diskSvg.parentNode.style.transform = `rotate(${deg(diskAngle()).toFixed(2)}deg)`;
   }
 
   // ---- the clock ------------------------------------------------------------------------------
-  function advance(dt, now) {
+  function advance(dt) {
     simT += dt;
     theta += omega() * dt;
-    placeFrames(now);
+    placeFrames();
     for (let i = throws.length - 1; i >= 0; i--) {
       const th = throws[i];
       if (fadeOf(th) <= 0) { removeThrow(i); continue; }
@@ -556,15 +527,10 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
     // Capped so that a tab coming back from the background does not leap ahead.
     const dt = last == null ? 0 : Math.min(0.05, (now - last) / 1000);
     last = now;
-    advance(dt, now);
+    advance(dt);
   }
   if (typeof IntersectionObserver === "function") {
-    new IntersectionObserver(entries => {
-      inSight = entries.some(e => e.isIntersecting);
-      // Out of sight the layers' animations are paused too; the first frame back finds
-      // them adrift and starts them afresh.
-      if (!inSight) for (const s of [roomSvg, diskSvg]) s.parentNode.spin.anim?.pause();
-    }).observe(scroller);
+    new IntersectionObserver(entries => { inSight = entries.some(e => e.isIntersecting); }).observe(scroller);
   }
 
   // ---- throwing with the pointer --------------------------------------------------------------
@@ -701,10 +667,6 @@ function describeRpm(rpm) {
 }
 function scale([x, y], k) {
   return [x * k, y * k];
-}
-// An angle brought into (−π, π].
-function wrapAngle(a) {
-  return a - 2 * Math.PI * Math.floor((a + Math.PI) / (2 * Math.PI));
 }
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
