@@ -79,17 +79,14 @@ const TOUR = [
     view: {lon: 153.5, lat: -31.5, zoom: 9},
     box: [[152.5, -36], [156, -27]], offshore: true,
     heading: 190, spread: 50, speed: [0.1, 2], count: 16,
-    caption: "Water at the pace of the East Australian Current, 0.1 to 2 m/s. With nothing acting on it but the " +
-      "Earth's turning, each parcel goes round a small circle in about a day, anticlockwise here in the south: " +
-      "an inertial loop, a few kilometres across.",
+    caption: "Water parcels moving at typical ocean current speeds (0.1–2 m/s) go around in small circles (like eddies) that are about a couple kms wide.",
   },
   {
     name: "winds over Australia",
     view: {lon: 134, lat: -26, zoom: 2.2},
     box: [[118, -34], [148, -18]],
     heading: 90, spread: 180, speed: [15, 40], count: 8,
-    caption: "Air at gale to storm speeds, 15 to 40 m/s, over Australia. The same turning takes it round the " +
-      "same loops, now hundreds of kilometres across and big enough to see on the whole globe.",
+    caption: "At gale to storm speeds (15 to 40 m/s), air parcels would go around loops 100's of kms across.",
   },
 ];
 const TOUR_FLY = 5;         // s a scene's zoom takes
@@ -183,13 +180,16 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
   scroller.appendChild(svg);
   container.appendChild(scroller);
 
-  // The tour's caption for the scene playing, over the top-left of the figure, faded in as
-  // the scene's parcels set off and out as they go.
+  // The tour's caption for the scene playing, over the figure's top-left, below the top
+  // arrow and clear of the left one, faded in as the scene's parcels set off and out as
+  // they go. A halo rather than a box keeps it legible over the globe.
   const caption = document.createElement("div");
   caption.style.cssText =
-    "position:absolute;left:12px;top:10px;max-width:62%;padding:6px 10px;border-radius:6px;" +
-    "background:rgba(242,242,242,0.88);color:#333;font-size:14px;line-height:1.3;opacity:0;pointer-events:none;";
+    "position:absolute;left:8px;top:40px;max-width:55%;color:#333;font-size:14px;line-height:1.3;" +
+    `opacity:0;pointer-events:none;text-shadow:0 0 3px ${BACKGROUND},0 0 6px ${BACKGROUND},0 0 10px ${BACKGROUND};`;
   scroller.appendChild(caption);
+  // A number and its unit stay on one line.
+  const setCaption = text => { caption.textContent = text.replace(/ (m\/s|km\/h|kms?)\b/g, " $1"); };
 
   // The view controls: four bare triangles at the sides of the figure, around the globe, to
   // turn the view, held down to keep turning, and a joined pair of + and − in the bottom
@@ -469,7 +469,7 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
       tour.stage = "spawn";
       tour.t = 0;
       tour.spawned = 0;
-      caption.textContent = scene.caption;
+      setCaption(scene.caption);
     } else if (tour.stage === "spawn") {
       if (tour.spawned < scene.count && tour.t >= tour.spawned * TOUR_SPAWN_GAP) {
         tourLaunch(scene);
