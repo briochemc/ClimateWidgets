@@ -27,7 +27,7 @@
 // passed in as `world` (the repo's countries-110m.json) and is optional: without it the
 // globe is ocean and graticule.
 
-import {geoOrthographic, geoPath, geoGraticule, geoDistance} from "https://cdn.jsdelivr.net/npm/d3-geo@3/+esm";
+import {geoOrthographic, geoPath, geoGraticule, geoDistance, geoContains} from "https://cdn.jsdelivr.net/npm/d3-geo@3/+esm";
 import {feature} from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
 
 const BACKGROUND = "#f2f2f2";
@@ -495,17 +495,23 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
     const end = (scene.count - 1) * TOUR_SPAWN_GAP + TOUR_LIFE + FADE;
     captionTarget = (tour.stage === "spawn" || tour.stage === "hold") && tour.t < end - CAPTION_FADE ? 1 : 0;
   }
-  // One parcel at a random spot in the scene's box (kept off the coast for the current:
-  // the east coast runs from about 153.5° E at 27.5° S to 150° E at 37° S, so the start is
-  // pushed east of that line), heading the scene's way give or take its spread, at a speed
-  // drawn evenly in the logarithm of the scene's range.
+  // One parcel at a random spot in the scene's box, heading the scene's way give or take
+  // its spread, at a speed drawn evenly in the logarithm of the scene's range. For the
+  // current the spot is kept in the water: the east coast runs from about 153.5° E at
+  // 27.5° S to 150° E at 37° S, so the start is drawn east of that line, and then checked
+  // against the land outline itself and drawn again, a little further out each time, if it
+  // fell on land.
   function tourLaunch(scene) {
     const [[lon0, lat0], [lon1, lat1]] = scene.box;
-    const lat = lat0 + Math.random() * (lat1 - lat0);
+    let lat = lat0 + Math.random() * (lat1 - lat0);
     let lon = lon0 + Math.random() * (lon1 - lon0);
     if (scene.offshore) {
-      const coast = 153.5 - (-27.5 - lat) * (3.5 / 9.5);
-      lon = coast + 0.5 + Math.random() * 2;
+      for (let tries = 0; tries < 40; tries++) {
+        lat = lat0 + Math.random() * (lat1 - lat0);
+        const coast = 153.5 - (-27.5 - lat) * (3.5 / 9.5);
+        lon = coast + 0.5 + Math.random() * 2 + tries * 0.1;
+        if (!land || !geoContains(land, [lon, lat])) break;
+      }
     }
     const bearing = ((scene.heading + (Math.random() * 2 - 1) * scene.spread) * Math.PI) / 180;
     // Aim a degree along the bearing, which is near enough a straight line at this scale.
