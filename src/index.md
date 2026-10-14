@@ -89,7 +89,7 @@ Small, self-contained interactive figures for teaching climate science. Each wid
   </a>
   <a class="card" href="./coriolis/">
     <h2>The Coriolis effect</h2>
-    <img class="thumb" src="./assets/thumbnails/coriolis.png" alt="A white turntable with faint spokes inside a ring of tick marks, seen from the turntable, with three coloured balls and their curving traces bending to the right; above it a toggle between the room and the turntable and a rotation slider reading 4 rpm anticlockwise">
+    <img class="thumb" src="./assets/thumbnails/coriolis.png" alt="A white turntable with faint spokes inside a ring of tick marks, seen from the room, with three coloured balls, each on a dashed straight line with its paint curving on the table behind it; above it a toggle between the room and the turntable and a rotation slider reading 4 rpm anticlockwise">
   </a>
   <a class="card" href="./coriolis-sphere/">
     <h2>The Coriolis effect on the Earth</h2>

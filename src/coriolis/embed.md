@@ -32,7 +32,7 @@ import {createCoriolisWidget} from "./widget.js";
 // ?frame=fixed opens with the view from the room; ?rpm=6 sets the rotation, negative for
 // clockwise; ?demo opens with three balls already thrown (the thumbnail capture uses it).
 const params = new URLSearchParams(location.search);
-const frame = params.get("frame") === "fixed" ? "fixed" : "rotating";
+const frame = params.get("frame") === "rotating" ? "rotating" : "fixed";
 const rpm = params.has("rpm") ? Number(params.get("rpm")) : 4;
 const demo = params.has("demo");
 ```

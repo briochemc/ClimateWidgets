@@ -20,12 +20,14 @@
 //
 // A throw is press, drag, release, anywhere on the figure; the ball starts where the pointer
 // went down and leaves along the drag at a speed proportional to its length. The thrower
-// stands in the frame being shown: in the room view the drag is the ball's velocity in the
-// room; in the turntable view it is the velocity relative to the table, and the table's own
-// velocity at that spot is added, so the ball always sets off the way it was thrown and
-// then bends. A click with no drag on the turntable view drops a ball "at rest" on the
-// table, which the room sees moving off at a tangent, and the table sees sliding outward:
-// a frictionless table cannot hold anything still.
+// stands on whatever the ball starts on: from the floor, in either view, the drag is the
+// ball's velocity in the room; from on the table in the turntable view it is the velocity
+// relative to the table, and the table's own velocity at that spot is added. Either way
+// the ball sets off exactly along the arrow and then, in the turntable view, is seen to
+// bend. A click with no drag on the table in the turntable view drops a ball "at rest" on
+// the table, which the room sees moving off at a tangent and the table sees sliding
+// outward: a frictionless table cannot hold anything still. A click on the floor drops a
+// ball at rest in the room, which the turntable view sees going round once per turn.
 //
 // Up to MAX_THROWS balls at once, oldest dropped first. A throw stays until LINGER seconds
 // after its ball has left the picture and then fades out over FADE more (or after LIFE_MAX
@@ -65,7 +67,7 @@ let instances = 0;
 // is the table's rotation in turns per minute, positive anticlockwise; `width` caps the
 // figure's side. `demo` throws three balls and runs the clock on a few seconds, for a
 // capture of the figure in use.
-export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: initialRpm = 4, width = FIGURE_WIDTH, demo = false} = {}) {
+export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initialRpm = 4, width = FIGURE_WIDTH, demo = false} = {}) {
   const uid = `coriolis-${++instances}`;
 
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
@@ -84,7 +86,7 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
   applyLayout(maxW);
 
   // ---- state ----------------------------------------------------------------------------------
-  let frame = initialFrame === "fixed" ? "fixed" : "rotating";
+  let frame = initialFrame === "rotating" ? "rotating" : "fixed";
   let rpm = clamp(Math.round((Number(initialRpm) || 0) / RPM_STEP) * RPM_STEP, -RPM_MAX, RPM_MAX);
   let simT = 0;    // s of simulated time (real time, capped per frame so a hidden tab does not leap)
   let theta = 0;   // rad the table has turned relative to the room, anticlockwise positive
@@ -109,6 +111,12 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
   title.style.cssText = "font-weight:bold;color:#111;line-height:1.2;padding:0 0 6px;";
   title.textContent = "The Coriolis effect in the lab";
   container.appendChild(title);
+
+  const note = document.createElement("div");
+  note.style.cssText = "padding:0 0 8px;color:#888;font-size:14px;";
+  note.textContent =
+    "Click and drag to throw a ball. It rolls straight in the room's fixed frame, but its trajectory looks curved in the turntable frame.";
+  container.appendChild(note);
 
   // One row: the frame toggle on the left, the rotation slider on the right; they wrap onto
   // two rows when there is no room.
@@ -187,12 +195,6 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
   scroller.appendChild(svg);
   container.appendChild(scroller);
 
-  const note = document.createElement("div");
-  note.style.cssText = "padding:10px 0 0;color:#888;font-size:14px;";
-  note.textContent =
-    "Click and drag to throw a ball. It rolls straight in the room's fixed frame, but its trajectory looks curved in the turntable frame.";
-  container.appendChild(note);
-
   function svgEl(tag, attrs = {}, parent) {
     const el = document.createElementNS(SVG_NS, tag);
     for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
@@ -236,10 +238,11 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
         stroke: ROOM, "stroke-width": major ? 2 : 1, "stroke-linecap": "round",
       }, roomG);
     }
-    // The room's name, above the ring at the top. It goes round with the ring in the
-    // turntable view, which is how the rider sees the room turn.
+    // The room's name, just inside the ring at the top, between the long tick and the
+    // table's rim (above the ring it would be clipped by the figure's edge). It goes round
+    // with the ring in the turntable view, which is how the rider sees the room turn.
     const roomLabel = svgEl("text", {
-      x: c, y: (c - roomR - 16).toFixed(1), "text-anchor": "middle", "font-size": labelFont, fill: ROOM,
+      x: c, y: (c - roomR + 13 + labelFont).toFixed(1), "text-anchor": "middle", "font-size": labelFont, fill: ROOM,
     }, roomG);
     roomLabel.textContent = "fixed frame";
 
@@ -295,24 +298,20 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
   }
 
   // ---- throws ---------------------------------------------------------------------------------
-  // `p` is where the ball starts and `d` the drag, both as seen on screen.
+  // `p` is where the ball starts and `d` the drag, both as seen on screen. The drag is the
+  // ball's velocity in the room (undo the room's turn on screen and that is all), except
+  // for a throw from on the table in the turntable view: there the thrower rides the table,
+  // the drag is the velocity relative to it, and the table's own velocity at the start,
+  // Ω × r, is added. Either way the ball sets off exactly along the arrow.
   function launch(p, d) {
     let v = scale(d, DRAG_GAIN);
     const speed = Math.hypot(v[0], v[1]);
     if (speed > SPEED_MAX) v = scale(v, SPEED_MAX / speed);
-    let x0;
-    if (frame === "fixed") {
-      // The thrower stands in the room: undo the room's turn on screen and that is all.
-      x0 = rot(p, -roomAngle());
-      v = rot(v, -roomAngle());
-    } else {
-      // The thrower rides the table: the start and the throw are in the table's own
-      // coordinates; turn them into room coordinates and add the table's own velocity at
-      // the start, Ω × r.
-      x0 = rot(p, theta - diskAngle());
-      const vr = rot(v, theta - diskAngle());
+    const x0 = rot(p, -roomAngle());
+    v = rot(v, -roomAngle());
+    if (frame === "rotating" && Math.hypot(x0[0], x0[1]) <= 1) {
       const W = omega();
-      v = [vr[0] - W * x0[1], vr[1] + W * x0[0]];
+      v = [v[0] - W * x0[1], v[1] + W * x0[0]];
     }
     const color = COLORS[nextColor++ % COLORS.length];
     const th = {
