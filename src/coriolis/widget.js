@@ -5,12 +5,18 @@
 // speed, and that is the whole of the physics: every trajectory is x0 + v·t in inertial
 // coordinates, and the rotating view is the same points turned back by the angle the table
 // has turned through since. There is no integration and no force; the curve a rider on the
-// table sees is purely a consequence of looking from a turning platform. Both views draw
-// from the same sampled points (each sample keeps the table's angle at the time), so the
-// frame toggle switches instantly, mid-flight, and a change of rotation speed mid-flight
-// stays consistent too. Switching holds the picture where it is: the frame being let go
-// hands its screen angle to the one being taken hold of, so nothing jumps; the other frame
-// simply starts (or stops) turning.
+// table sees is purely a consequence of looking from a turning platform.
+//
+// The ball leaves paint where it passes, as in a lab: paint on the table turns with the
+// table, paint on the floor around it stays with the room. So in the room view the paint on
+// the table curves as the table carries it round while the paint on the floor lies straight,
+// and in the turntable view the paint on the table lies still while the floor's goes round
+// the other way. The room view also draws the ball's actual path, a dashed straight line,
+// while the ball is in the picture, and fades it once the ball has left. Each sample keeps
+// the table's angle at the time, so a change of rotation speed mid-flight stays consistent.
+// Switching views holds the picture where it is: the frame being let go hands its screen
+// angle to the one being taken hold of, so nothing jumps; the other frame simply starts (or
+// stops) turning.
 //
 // A throw is press, drag, release, anywhere on the figure; the ball starts where the pointer
 // went down and leaves along the drag at a speed proportional to its length. The thrower
@@ -21,8 +27,9 @@
 // table, which the room sees moving off at a tangent, and the table sees sliding outward:
 // a frictionless table cannot hold anything still.
 //
-// Up to MAX_THROWS balls at once, oldest dropped first. A trace lasts LIFE seconds and then
-// fades out over FADE more. Colours cycle through the Okabe–Ito palette, as the other
+// Up to MAX_THROWS balls at once, oldest dropped first. A throw stays until LINGER seconds
+// after its ball has left the picture and then fades out over FADE more (or after LIFE_MAX
+// seconds, for a ball that never leaves). Colours cycle through the Okabe–Ito palette, as the other
 // categorical widgets here do. Physics is in units of the disk radius and seconds, so a
 // resize mid-flight simply redraws everything at the new size.
 
@@ -36,8 +43,10 @@ const ROOM = "#808080";
 const COLORS = ["#E69F00", "#56B4E9", "#009E73", "#0072B2", "#D55E00", "#CC79A7", "#b39b00", "#000000"];
 
 const MAX_THROWS = 10;
-const LIFE = 10;         // s a trace is shown in full
-const FADE = 2;          // s it then takes to fade away
+const LINGER = 1;        // s a throw stays in full after its ball has left the picture...
+const FADE = 2;          // ...and then takes to fade away
+const LIFE_MAX = 60;     // s after which a throw fades anyway, for a ball that never leaves
+const DASH = "#222";
 const DRAG_GAIN = 2.5;   // disk radii per second of speed, per disk radius of drag
 const SPEED_MAX = 4;     // disk radii per second
 const RPM_MAX = 10;
@@ -45,6 +54,7 @@ const RPM_STEP = 0.5;
 const DISK_R = 0.40;     // disk radius as a fraction of the figure's side
 const ROOM_R = 0.465;    // the room's ring of marks
 const OUT_R = 1.9;       // disk radii from the centre beyond which a ball is out of the picture
+const HALF_SIDE = 0.5 / DISK_R; // the figure's half-side in disk radii
 
 const FIGURE_WIDTH = 640;
 const MIN_WIDTH = 320;
@@ -97,7 +107,7 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
 
   const title = document.createElement("div");
   title.style.cssText = "font-weight:bold;color:#111;line-height:1.2;padding:0 0 6px;";
-  title.textContent = "Throw a ball across a spinning turntable";
+  title.textContent = "The Coriolis effect in the lab";
   container.appendChild(title);
 
   // One row: the frame toggle on the left, the rotation slider on the right; they wrap onto
@@ -180,9 +190,7 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
   const note = document.createElement("div");
   note.style.cssText = "padding:10px 0 0;color:#888;font-size:14px;";
   note.textContent =
-    "Press, drag and release to throw a ball. Nothing pushes it sideways: seen from the room it rolls " +
-    "straight at a steady speed, and only seen from the turntable does it curve. Switching views holds the " +
-    "picture where it is and lets the other frame go. Traces fade after ten seconds.";
+    "Click and drag to throw a ball. It rolls straight in the room's fixed frame, but its trajectory looks curved in the turntable frame.";
   container.appendChild(note);
 
   function svgEl(tag, attrs = {}, parent) {
@@ -207,7 +215,7 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
   };
 
   // ---- scaffolding, rebuilt on resize ---------------------------------------------------------
-  let roomG, diskG, tracesFixedG, tracesRotG, dragG, dragLine, dragHead, dragBall, caption;
+  let roomG, diskG, tracesFixedG, tracesRotG, dashG, ballsFixedG, ballsRotG, dragG, dragLine, dragHead, dragBall, caption;
 
   function build() {
     svg.setAttribute("width", w);
@@ -254,13 +262,20 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
     }, diskG);
     diskLabel.textContent = "rotating frame";
 
-    // Traces are drawn in their own frame's coordinates and turned with that frame by the
-    // group's transform, so a path never needs rebuilding as the picture turns.
+    // Paint is drawn in the coordinates of whatever it is on and turned with it by the
+    // group's transform, so a path never needs rebuilding as the picture turns: the floor's
+    // paint and the dashed path in the room's groups, the table's paint in the table's. The
+    // balls come last, in a group of their own per frame, so that no paint covers them.
     const traceAttrs = {fill: "none", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round"};
     tracesFixedG = svgEl("g", traceAttrs, svg);
     tracesRotG = svgEl("g", traceAttrs, svg);
+    dashG = svgEl("g", {fill: "none", stroke: DASH, "stroke-width": 1.5, "stroke-dasharray": "6 5", "stroke-linecap": "round"}, svg);
+    ballsFixedG = svgEl("g", {}, svg);
+    ballsRotG = svgEl("g", {}, svg);
     for (const th of throws) {
-      th.path = svgEl("path", {stroke: th.color});
+      th.floorPath = svgEl("path", {stroke: th.color}, tracesFixedG);
+      th.diskPath = svgEl("path", {stroke: th.color}, tracesRotG);
+      th.dash = svgEl("path", {}, dashG);
       th.ball = svgEl("circle", {r: ballR, fill: th.color, stroke: "#fff", "stroke-width": 1.5});
       attach(th);
     }
@@ -302,10 +317,18 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
     const color = COLORS[nextColor++ % COLORS.length];
     const th = {
       x0, v, t0: simT, color,
-      fixed: [], rotating: [], // sampled positions, in each frame, as flat [x, y, x, y, ...]
-      dFixed: "", dRotating: "",
-      out: false,
-      path: svgEl("path", {stroke: color}),
+      // Paint, as runs of points: on the floor in room coordinates, on the table in the
+      // table's own, each run a flat [x, y, x, y, ...]. A new run starts at each crossing
+      // of the rim.
+      floorRuns: [], diskRuns: [],
+      dFloor: "", dDisk: "",
+      on: null,           // "disk" or "floor": where the last sample's paint went
+      prevP: null, prevTheta: 0,
+      out: false,         // beyond OUT_R: no more samples
+      leftT: null,        // when the ball left the picture, from which the throw's fade is timed
+      floorPath: svgEl("path", {stroke: color}, tracesFixedG),
+      diskPath: svgEl("path", {stroke: color}, tracesRotG),
+      dash: svgEl("path", {}, dashG),
       ball: svgEl("circle", {r: ballR, fill: color, stroke: "#fff", "stroke-width": 1.5}),
     };
     attach(th);
@@ -315,15 +338,16 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
     emit();
   }
 
-  // Puts a throw's path and ball in the group of the frame being shown.
+  // Puts a throw's ball in the group of the frame being shown.
   function attach(th) {
-    const g = frame === "fixed" ? tracesFixedG : tracesRotG;
-    g.append(th.path, th.ball);
+    (frame === "fixed" ? ballsFixedG : ballsRotG).appendChild(th.ball);
   }
 
   function removeThrow(i) {
     const [th] = throws.splice(i, 1);
-    th.path.remove();
+    th.floorPath.remove();
+    th.diskPath.remove();
+    th.dash.remove();
     th.ball.remove();
   }
 
@@ -333,21 +357,57 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
     return [th.x0[0] + th.v[0] * dt, th.x0[1] + th.v[1] * dt];
   };
 
-  // Records the ball's position in both frames and extends both traces. A trace is a set of
-  // points fixed in its own frame, so each view's path only ever grows at the end.
+  // Lays the ball's paint down where it is now: on the table, in the table's coordinates,
+  // or on the floor, in the room's. When the ball has crossed the rim since the last sample
+  // the run is ended exactly at the rim and a new one begun there on the other side.
   function sample(th) {
     const p = positionOf(th);
     if (Math.hypot(p[0], p[1]) > OUT_R) { th.out = true; return; }
-    const q = rot(p, -theta);
-    th.fixed.push(p[0], p[1]);
-    th.rotating.push(q[0], q[1]);
-    const cmd = th.fixed.length === 2 ? "M" : "L";
-    th.dFixed += cmd + pt(p);
-    th.dRotating += cmd + pt(q);
+    const on = Math.hypot(p[0], p[1]) <= 1 ? "disk" : "floor";
+    if (th.on && on !== th.on) {
+      const s = rimCrossing(th.prevP, p);
+      const pc = [th.prevP[0] + s * (p[0] - th.prevP[0]), th.prevP[1] + s * (p[1] - th.prevP[1])];
+      const thetaC = th.prevTheta + s * (theta - th.prevTheta);
+      paint(th, th.on, pc, thetaC);
+      newRun(th, on);
+      paint(th, on, pc, thetaC);
+    } else if (!th.on) {
+      newRun(th, on);
+    }
+    paint(th, on, p, theta);
+    th.on = on;
+    th.prevP = p;
+    th.prevTheta = theta;
+  }
+  function newRun(th, on) {
+    (on === "disk" ? th.diskRuns : th.floorRuns).push([]);
+  }
+  function paint(th, on, p, at) {
+    if (on === "disk") {
+      const q = rot(p, -at);
+      const run = th.diskRuns[th.diskRuns.length - 1];
+      th.dDisk += (run.length ? "L" : "M") + pt(q);
+      run.push(q[0], q[1]);
+    } else {
+      const run = th.floorRuns[th.floorRuns.length - 1];
+      th.dFloor += (run.length ? "L" : "M") + pt(p);
+      run.push(p[0], p[1]);
+    }
+  }
+  // Where the straight run from a to b crosses the rim, as a fraction of the way from a.
+  function rimCrossing(a, b) {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const A = dx * dx + dy * dy, B = 2 * (a[0] * dx + a[1] * dy), C = a[0] * a[0] + a[1] * a[1] - 1;
+    const disc = B * B - 4 * A * C;
+    if (A < 1e-12 || disc < 0) return 0.5;
+    const root = Math.sqrt(disc);
+    for (const s of [(-B - root) / (2 * A), (-B + root) / (2 * A)]) if (s >= 0 && s <= 1) return s;
+    return 0.5;
   }
 
   function draw(th) {
-    th.path.setAttribute("d", frame === "fixed" ? th.dFixed : th.dRotating);
+    th.floorPath.setAttribute("d", th.dFloor);
+    th.diskPath.setAttribute("d", th.dDisk);
     const p = positionOf(th);
     const q = frame === "fixed" ? p : rot(p, -theta);
     const visible = Math.hypot(q[0], q[1]) <= OUT_R;
@@ -357,25 +417,41 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
       th.ball.setAttribute("cx", sx.toFixed(1));
       th.ball.setAttribute("cy", sy.toFixed(1));
     }
-    const age = simT - th.t0;
-    const opacity = age < LIFE ? 1 : clamp(1 - (age - LIFE) / FADE, 0, 1);
-    th.path.setAttribute("opacity", opacity.toFixed(3));
-    th.ball.setAttribute("opacity", opacity.toFixed(3));
+    // The throw's fade is timed from the ball leaving the square of the picture. The ball's
+    // place on screen is the same expression in either view: the room's coordinates turned
+    // by the room's screen angle.
+    const onScreen = rot(p, roomAngle());
+    if (th.leftT == null && (Math.abs(onScreen[0]) > HALF_SIDE || Math.abs(onScreen[1]) > HALF_SIDE)) th.leftT = simT;
+    const opacity = fadeOf(th);
+    for (const el of [th.floorPath, th.diskPath, th.ball]) el.setAttribute("opacity", opacity.toFixed(3));
+
+    // The dashed path, in the room view only: the straight line from the start to the ball.
+    th.dash.style.display = frame === "fixed" ? "" : "none";
+    if (frame === "fixed") {
+      th.dash.setAttribute("d", `M${pt(th.x0)}L${pt(p)}`);
+      th.dash.setAttribute("opacity", opacity.toFixed(3));
+    }
+  }
+  // 1 until LINGER after the ball has left the picture (or LIFE_MAX after the throw), then
+  // down to 0 over FADE.
+  function fadeOf(th) {
+    const from = Math.min(th.leftT == null ? Infinity : th.leftT + LINGER, th.t0 + LIFE_MAX);
+    return simT < from ? 1 : clamp(1 - (simT - from) / FADE, 0, 1);
   }
 
-  // Rebuilds the traces from their samples, after a resize.
+  // Rebuilds the paint from its runs, after a resize.
   function redrawAll() {
     for (const th of throws) {
-      th.dFixed = pathFrom(th.fixed);
-      th.dRotating = pathFrom(th.rotating);
+      th.dFloor = pathFrom(th.floorRuns);
+      th.dDisk = pathFrom(th.diskRuns);
       draw(th);
     }
     placeFrames();
     drawDrag();
   }
-  function pathFrom(flat) {
+  function pathFrom(runs) {
     let d = "";
-    for (let i = 0; i < flat.length; i += 2) d += (i ? "L" : "M") + pt([flat[i], flat[i + 1]]);
+    for (const flat of runs) for (let i = 0; i < flat.length; i += 2) d += (i ? "L" : "M") + pt([flat[i], flat[i + 1]]);
     return d;
   }
 
@@ -383,10 +459,8 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
     // In the room view the table turns; in the turntable view the room turns the other way.
     const room = `rotate(${deg(roomAngle()).toFixed(2)} ${c} ${c})`;
     const disk = `rotate(${deg(diskAngle()).toFixed(2)} ${c} ${c})`;
-    roomG.setAttribute("transform", room);
-    tracesFixedG.setAttribute("transform", room);
-    diskG.setAttribute("transform", disk);
-    tracesRotG.setAttribute("transform", disk);
+    for (const g of [roomG, tracesFixedG, dashG, ballsFixedG]) g.setAttribute("transform", room);
+    for (const g of [diskG, tracesRotG, ballsRotG]) g.setAttribute("transform", disk);
   }
 
   // ---- the clock ------------------------------------------------------------------------------
@@ -396,7 +470,7 @@ export function createCoriolisWidget({frame: initialFrame = "rotating", rpm: ini
     placeFrames();
     for (let i = throws.length - 1; i >= 0; i--) {
       const th = throws[i];
-      if (simT - th.t0 >= LIFE + FADE) { removeThrow(i); continue; }
+      if (fadeOf(th) <= 0) { removeThrow(i); continue; }
       if (!th.out) sample(th);
       draw(th);
     }
