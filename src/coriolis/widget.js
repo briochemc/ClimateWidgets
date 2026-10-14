@@ -34,6 +34,13 @@
 // seconds, for a ball that never leaves). Colours cycle through the Okabe–Ito palette, as the other
 // categorical widgets here do. Physics is in units of the disk radius and seconds, so a
 // resize mid-flight simply redraws everything at the new size.
+//
+// The figure is three SVGs stacked in one box: the room (its ring of marks and the paint
+// on the floor), the table (the disk and the paint on it), and on top the balls, the
+// dashed paths and the throw being dragged. The first two are turned with a CSS rotate on
+// the SVG element itself, which every browser keeps as a painted layer and turns on the
+// GPU, so nothing in them is repainted as the picture goes round; only the thin top layer
+// is redrawn each frame. (A transform on a group inside one SVG would repaint the lot.)
 
 const BACKGROUND = "#f2f2f2";
 const ACCENT = "#0b57d0";
@@ -44,10 +51,15 @@ const ROOM = "#808080";
 // Okabe–Ito less its yellow, which vanishes on the plate; a darkened yellow stands in.
 const COLORS = ["#E69F00", "#56B4E9", "#009E73", "#0072B2", "#D55E00", "#CC79A7", "#b39b00", "#000000"];
 
-const MAX_THROWS = 10;
+const MAX_THROWS = 5;
+const PAINT_STEP = 0.003; // disk radii (under a pixel) the ball must move before it leaves more paint
 const LINGER = 1;        // s a throw stays in full after its ball has left the picture...
 const FADE = 2;          // ...and then takes to fade away
 const LIFE_MAX = 60;     // s after which a throw fades anyway, for a ball that never leaves
+// Frames a second the figure is redrawn at: half a 60 Hz screen's rate, to halve the work.
+// Animation frames closer together than this are skipped, so a 120 Hz screen draws every
+// fourth; the clock itself keeps real time, whatever the rate.
+const FRAME_RATE = 30;
 const DASH = "#222";
 const DRAG_GAIN = 2.5;   // disk radii per second of speed, per disk radius of drag
 const SPEED_MAX = 4;     // disk radii per second
@@ -184,15 +196,15 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
 
   const scroller = document.createElement("div");
   scroller.style.cssText = "max-width:100%;overflow-x:auto;";
-  const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("class", "coriolis");
-  svg.setAttribute("role", "img");
-  svg.style.display = "block";
-  svg.style.touchAction = "none";
-  svg.style.cursor = "crosshair";
-  svg.style.userSelect = "none";
-  svg.style.webkitUserSelect = "none";
-  scroller.appendChild(svg);
+  // The figure's box, which the three layers fill. Overflow hidden, since a turned square
+  // layer pokes its corners out of the box.
+  const figure = document.createElement("div");
+  figure.className = "coriolis";
+  figure.setAttribute("role", "img");
+  figure.style.cssText =
+    `position:relative;overflow:hidden;background:${BACKGROUND};touch-action:none;cursor:crosshair;` +
+    "user-select:none;-webkit-user-select:none;";
+  scroller.appendChild(figure);
   container.appendChild(scroller);
 
   function svgEl(tag, attrs = {}, parent) {
@@ -217,17 +229,29 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
   };
 
   // ---- scaffolding, rebuilt on resize ---------------------------------------------------------
-  let roomG, diskG, tracesFixedG, tracesRotG, dashG, ballsFixedG, ballsRotG, dragG, dragLine, dragHead, dragBall, caption;
+  let roomSvg, diskSvg, tracesFixedG, tracesRotG, dashG, ballsG, dragG, dragLine, dragHead, dragBall, caption;
 
   function build() {
-    svg.setAttribute("width", w);
-    svg.setAttribute("height", w);
-    svg.replaceChildren();
-    svgEl("rect", {width: w, height: w, fill: BACKGROUND}, svg);
+    figure.style.width = `${w}px`;
+    figure.style.height = `${w}px`;
+    figure.replaceChildren();
+    // Each layer is an SVG in a div of the figure's size; it is the div that turns, a plain
+    // box being what every browser animates on its compositor.
+    const layer = turns => {
+      const box = document.createElement("div");
+      box.style.cssText = `position:absolute;left:0;top:0;width:${w}px;height:${w}px;${turns ? "will-change:transform;" : ""}`;
+      box.spin = {anim: null, angle: NaN, rate: NaN, t0: 0};
+      figure.appendChild(box);
+      const s = svgEl("svg", {width: w, height: w}, box);
+      s.style.display = "block";
+      return s;
+    };
+    roomSvg = layer(true);
+    diskSvg = layer(true);
+    const topSvg = layer(false);
 
     // The room: a ring of marks around the table, longer ones every quarter turn. Still in the
     // room view, turning the other way in the turntable view: it is what the rider sees go by.
-    roomG = svgEl("g", {}, svg);
     for (let i = 0; i < 24; i++) {
       const a = (i * Math.PI) / 12;
       const major = i % 6 === 0;
@@ -236,59 +260,57 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
         x1: (c + r1 * Math.cos(a)).toFixed(1), y1: (c - r1 * Math.sin(a)).toFixed(1),
         x2: (c + r2 * Math.cos(a)).toFixed(1), y2: (c - r2 * Math.sin(a)).toFixed(1),
         stroke: ROOM, "stroke-width": major ? 2 : 1, "stroke-linecap": "round",
-      }, roomG);
+      }, roomSvg);
     }
     // The room's name, just inside the ring at the top, between the long tick and the
     // table's rim (above the ring it would be clipped by the figure's edge). It goes round
     // with the ring in the turntable view, which is how the rider sees the room turn.
     const roomLabel = svgEl("text", {
       x: c, y: (c - roomR + 13 + labelFont).toFixed(1), "text-anchor": "middle", "font-size": labelFont, fill: ROOM,
-    }, roomG);
+    }, roomSvg);
     roomLabel.textContent = "fixed frame";
 
     // The turntable: a white disk with a rim, faint rings and spokes so that it is seen to
     // turn, and its name just inside the rim, turning with it.
-    diskG = svgEl("g", {}, svg);
-    svgEl("circle", {cx: c, cy: c, r: R, fill: DISK_FILL, stroke: DISK_RIM, "stroke-width": 2}, diskG);
-    for (const f of [0.25, 0.5, 0.75]) svgEl("circle", {cx: c, cy: c, r: R * f, fill: "none", stroke: DISK_LINES, "stroke-width": 1}, diskG);
+    svgEl("circle", {cx: c, cy: c, r: R, fill: DISK_FILL, stroke: DISK_RIM, "stroke-width": 2}, diskSvg);
+    for (const f of [0.25, 0.5, 0.75]) svgEl("circle", {cx: c, cy: c, r: R * f, fill: "none", stroke: DISK_LINES, "stroke-width": 1}, diskSvg);
     for (let i = 0; i < 6; i++) {
       const a = (i * Math.PI) / 6;
       svgEl("line", {
         x1: (c - R * Math.cos(a)).toFixed(1), y1: (c + R * Math.sin(a)).toFixed(1),
         x2: (c + R * Math.cos(a)).toFixed(1), y2: (c - R * Math.sin(a)).toFixed(1),
         stroke: DISK_LINES, "stroke-width": 1,
-      }, diskG);
+      }, diskSvg);
     }
     const diskLabel = svgEl("text", {
       x: c, y: (c - R + 10 + labelFont).toFixed(1), "text-anchor": "middle", "font-size": labelFont, fill: DISK_RIM,
       stroke: DISK_FILL, "stroke-width": 3, "paint-order": "stroke", "stroke-linejoin": "round",
-    }, diskG);
+    }, diskSvg);
     diskLabel.textContent = "rotating frame";
 
-    // Paint is drawn in the coordinates of whatever it is on and turned with it by the
-    // group's transform, so a path never needs rebuilding as the picture turns: the floor's
-    // paint and the dashed path in the room's groups, the table's paint in the table's. The
-    // balls come last, in a group of their own per frame, so that no paint covers them.
+    // Paint is drawn in the coordinates of whatever it is on and turned with it by its
+    // layer, so a path never needs rebuilding as the picture turns: the floor's paint in
+    // the room's layer (it lies outside the disk, so the disk's layer being above it hides
+    // nothing), the table's paint in the table's. The dashed paths and the balls are on the
+    // top layer, placed in screen coordinates, so that no paint covers them.
     const traceAttrs = {fill: "none", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round"};
-    tracesFixedG = svgEl("g", traceAttrs, svg);
-    tracesRotG = svgEl("g", traceAttrs, svg);
-    dashG = svgEl("g", {fill: "none", stroke: DASH, "stroke-width": 1.5, "stroke-dasharray": "6 5", "stroke-linecap": "round"}, svg);
-    ballsFixedG = svgEl("g", {}, svg);
-    ballsRotG = svgEl("g", {}, svg);
+    tracesFixedG = svgEl("g", traceAttrs, roomSvg);
+    tracesRotG = svgEl("g", traceAttrs, diskSvg);
+    dashG = svgEl("g", {fill: "none", stroke: DASH, "stroke-width": 1.5, "stroke-dasharray": "6 5", "stroke-linecap": "round"}, topSvg);
+    ballsG = svgEl("g", {}, topSvg);
     for (const th of throws) {
       th.floorPath = svgEl("path", {stroke: th.color}, tracesFixedG);
       th.diskPath = svgEl("path", {stroke: th.color}, tracesRotG);
       th.dash = svgEl("path", {}, dashG);
-      th.ball = svgEl("circle", {r: ballR, fill: th.color, stroke: "#fff", "stroke-width": 1.5});
-      attach(th);
+      th.ball = svgEl("circle", {r: ballR, fill: th.color, stroke: "#fff", "stroke-width": 1.5}, ballsG);
     }
 
-    dragG = svgEl("g", {display: "none"}, svg);
+    dragG = svgEl("g", {display: "none"}, topSvg);
     dragLine = svgEl("line", {"stroke-width": 2, "stroke-linecap": "round"}, dragG);
     dragHead = svgEl("path", {}, dragG);
     dragBall = svgEl("circle", {r: ballR, stroke: "#fff", "stroke-width": 1.5}, dragG);
 
-    caption = svgEl("text", {x: 10, y: 10 + labelFont, "font-size": labelFont, fill: "#555"}, svg);
+    caption = svgEl("text", {x: 10, y: 10 + labelFont, "font-size": labelFont, fill: "#555"}, topSvg);
     updateCaption();
     redrawAll();
   }
@@ -321,25 +343,22 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
       // of the rim.
       floorRuns: [], diskRuns: [],
       dFloor: "", dDisk: "",
+      painted: false,     // paint laid since the paths were last set
+      opacity: null,      // the opacity last set on the throw's elements
       on: null,           // "disk" or "floor": where the last sample's paint went
       prevP: null, prevTheta: 0,
       out: false,         // beyond OUT_R: no more samples
       leftT: null,        // when the ball left the picture, from which the throw's fade is timed
+      dashAngle: null,    // the room's screen angle the dashed path was last drawn at
       floorPath: svgEl("path", {stroke: color}, tracesFixedG),
       diskPath: svgEl("path", {stroke: color}, tracesRotG),
       dash: svgEl("path", {}, dashG),
-      ball: svgEl("circle", {r: ballR, fill: color, stroke: "#fff", "stroke-width": 1.5}),
+      ball: svgEl("circle", {r: ballR, fill: color, stroke: "#fff", "stroke-width": 1.5}, ballsG),
     };
-    attach(th);
     while (throws.length >= MAX_THROWS) removeThrow(0);
     throws.push(th);
     sample(th);
     emit();
-  }
-
-  // Puts a throw's ball in the group of the frame being shown.
-  function attach(th) {
-    (frame === "fixed" ? ballsFixedG : ballsRotG).appendChild(th.ball);
   }
 
   function removeThrow(i) {
@@ -381,17 +400,19 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
   function newRun(th, on) {
     (on === "disk" ? th.diskRuns : th.floorRuns).push([]);
   }
+  // A point is painted only once the ball has moved PAINT_STEP from the run's last point, so
+  // a ball at rest (on the floor, or on the table seen from the table) lays one dot, not a
+  // new point every frame.
   function paint(th, on, p, at) {
-    if (on === "disk") {
-      const q = rot(p, -at);
-      const run = th.diskRuns[th.diskRuns.length - 1];
-      th.dDisk += (run.length ? "L" : "M") + pt(q);
-      run.push(q[0], q[1]);
-    } else {
-      const run = th.floorRuns[th.floorRuns.length - 1];
-      th.dFloor += (run.length ? "L" : "M") + pt(p);
-      run.push(p[0], p[1]);
-    }
+    const q = on === "disk" ? rot(p, -at) : p;
+    const runs = on === "disk" ? th.diskRuns : th.floorRuns;
+    const run = runs[runs.length - 1];
+    const n = run.length;
+    if (n && Math.hypot(q[0] - run[n - 2], q[1] - run[n - 1]) < PAINT_STEP) return;
+    const seg = (n ? "L" : "M") + pt(q);
+    if (on === "disk") th.dDisk += seg; else th.dFloor += seg;
+    run.push(q[0], q[1]);
+    th.painted = true;
   }
   // Where the straight run from a to b crosses the rim, as a fraction of the way from a.
   function rimCrossing(a, b) {
@@ -404,31 +425,41 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
     return 0.5;
   }
 
+  // The paths are set only when they have grown, and the opacity only when it has changed:
+  // an attribute set afresh each frame is a path the browser parses and repaints afresh.
   function draw(th) {
-    th.floorPath.setAttribute("d", th.dFloor);
-    th.diskPath.setAttribute("d", th.dDisk);
+    if (th.painted) {
+      th.floorPath.setAttribute("d", th.dFloor);
+      th.diskPath.setAttribute("d", th.dDisk);
+      th.painted = false;
+    }
+    // The ball's place on screen is the same expression in either view: the room's
+    // coordinates turned by the room's screen angle. The top layer does not turn, so the
+    // ball and the dashed path are placed in screen coordinates.
     const p = positionOf(th);
-    const q = frame === "fixed" ? p : rot(p, -theta);
-    const visible = Math.hypot(q[0], q[1]) <= OUT_R;
+    const onScreen = rot(p, roomAngle());
+    const visible = Math.hypot(p[0], p[1]) <= OUT_R;
     th.ball.style.display = visible ? "" : "none";
     if (visible) {
-      const [sx, sy] = toScreen(q);
+      const [sx, sy] = toScreen(onScreen);
       th.ball.setAttribute("cx", sx.toFixed(1));
       th.ball.setAttribute("cy", sy.toFixed(1));
     }
-    // The throw's fade is timed from the ball leaving the square of the picture. The ball's
-    // place on screen is the same expression in either view: the room's coordinates turned
-    // by the room's screen angle.
-    const onScreen = rot(p, roomAngle());
+    // The throw's fade is timed from the ball leaving the square of the picture.
     if (th.leftT == null && (Math.abs(onScreen[0]) > HALF_SIDE || Math.abs(onScreen[1]) > HALF_SIDE)) th.leftT = simT;
-    const opacity = fadeOf(th);
-    for (const el of [th.floorPath, th.diskPath, th.ball]) el.setAttribute("opacity", opacity.toFixed(3));
+    const opacity = fadeOf(th).toFixed(3);
+    if (opacity !== th.opacity) {
+      for (const el of [th.floorPath, th.diskPath, th.ball, th.dash]) el.setAttribute("opacity", opacity);
+      th.opacity = opacity;
+    }
 
     // The dashed path, in the room view only: the straight line from the start to the ball.
+    // Once the ball is out of the picture it is left where it was, redrawn only if the
+    // room's screen angle has changed since (a switch of views and back).
     th.dash.style.display = frame === "fixed" ? "" : "none";
-    if (frame === "fixed") {
-      th.dash.setAttribute("d", `M${pt(th.x0)}L${pt(p)}`);
-      th.dash.setAttribute("opacity", opacity.toFixed(3));
+    if (frame === "fixed" && (!th.out || th.dashAngle !== roomAngle())) {
+      th.dash.setAttribute("d", `M${pt(rot(th.x0, roomAngle()))}L${pt(onScreen)}`);
+      th.dashAngle = roomAngle();
     }
   }
   // 1 until LINGER after the ball has left the picture (or LIFE_MAX after the throw), then
@@ -443,6 +474,8 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
     for (const th of throws) {
       th.dFloor = pathFrom(th.floorRuns);
       th.dDisk = pathFrom(th.diskRuns);
+      th.painted = true;
+      th.opacity = null;
       draw(th);
     }
     placeFrames();
@@ -454,19 +487,51 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
     return d;
   }
 
-  function placeFrames() {
-    // In the room view the table turns; in the turntable view the room turns the other way.
-    const room = `rotate(${deg(roomAngle()).toFixed(2)} ${c} ${c})`;
-    const disk = `rotate(${deg(diskAngle()).toFixed(2)} ${c} ${c})`;
-    for (const g of [roomG, tracesFixedG, dashG, ballsFixedG]) g.setAttribute("transform", room);
-    for (const g of [diskG, tracesRotG, ballsRotG]) g.setAttribute("transform", disk);
+  // In the room view the table turns; in the turntable view the room turns the other way.
+  // A layer that turns is driven by a Web Animation, one full turn at a steady rate
+  // repeated for ever, which the browser runs on its compositor at the screen's own refresh
+  // rate with no work from the clock here, so the turning is smooth whatever the clock's
+  // frame rate. The clock keeps its own angle for the physics and checks each frame that
+  // the animation agrees with it, starting one afresh from the current angle when it does
+  // not: after the rotation speed or the view has changed, or when the clock was capped or
+  // paused while the animation ran on. The animation's start is pinned to the frame's own
+  // timestamp, which is the animation timeline's, so that otherwise the two never drift.
+  // Each layer is a square box centred on the figure, so a rotate turns it about the
+  // centre with no transform-origin to set.
+  const SYNC_TOL = (0.5 * Math.PI) / 180;
+  function spin(box, angle, rate, now) {
+    const s = box.spin;
+    if (s.rate === rate) {
+      const implied = rate === 0 ? s.angle : s.angle + (rate * (now - s.t0)) / 1000;
+      if (Math.abs(wrapAngle(angle - implied)) < SYNC_TOL) return;
+    }
+    s.anim?.cancel();
+    s.anim = null;
+    s.angle = angle;
+    s.rate = rate;
+    s.t0 = now;
+    if (rate === 0) {
+      box.style.transform = `rotate(${deg(angle).toFixed(2)}deg)`;
+      return;
+    }
+    box.style.transform = "";
+    s.anim = box.animate(
+      [{transform: `rotate(${deg(angle)}deg)`}, {transform: `rotate(${deg(angle + Math.sign(rate) * 2 * Math.PI)}deg)`}],
+      {duration: ((2 * Math.PI) / Math.abs(rate)) * 1000, iterations: Infinity, easing: "linear"},
+    );
+    s.anim.startTime = now;
+  }
+  function placeFrames(now = document.timeline?.currentTime ?? performance.now()) {
+    const W = omega();
+    spin(roomSvg.parentNode, roomAngle(), frame === "fixed" ? 0 : -W, now);
+    spin(diskSvg.parentNode, diskAngle(), frame === "fixed" ? W : 0, now);
   }
 
   // ---- the clock ------------------------------------------------------------------------------
-  function advance(dt) {
+  function advance(dt, now) {
     simT += dt;
     theta += omega() * dt;
-    placeFrames();
+    placeFrames(now);
     for (let i = throws.length - 1; i >= 0; i--) {
       const th = throws[i];
       if (fadeOf(th) <= 0) { removeThrow(i); continue; }
@@ -477,31 +542,45 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
 
   // The clock runs from the first frame and stops for good once the widget has been taken
   // out of the page (it is not in the page yet when created, so that alone does not stop it).
-  let last = null, wasConnected = false;
+  // It pauses while the figure is scrolled out of view, picking up where it left off.
+  let last = null, wasConnected = false, inSight = true;
   function tick(now) {
     if (container.isConnected) wasConnected = true;
     else if (wasConnected) return;
     requestAnimationFrame(tick);
+    if (!inSight) { last = null; return; }
+    // With 4 ms of slack: two 60 Hz frames are 33.3 ms apart, as near the bare threshold
+    // as makes no difference, and jitter would then take now the second frame, now the
+    // third, an uneven pace that shows.
+    if (last != null && now - last < 1000 / FRAME_RATE - 4) return;
     // Capped so that a tab coming back from the background does not leap ahead.
     const dt = last == null ? 0 : Math.min(0.05, (now - last) / 1000);
     last = now;
-    advance(dt);
+    advance(dt, now);
+  }
+  if (typeof IntersectionObserver === "function") {
+    new IntersectionObserver(entries => {
+      inSight = entries.some(e => e.isIntersecting);
+      // Out of sight the layers' animations are paused too; the first frame back finds
+      // them adrift and starts them afresh.
+      if (!inSight) for (const s of [roomSvg, diskSvg]) s.parentNode.spin.anim?.pause();
+    }).observe(scroller);
   }
 
   // ---- throwing with the pointer --------------------------------------------------------------
   function pointerPos(e) {
-    const r = svg.getBoundingClientRect();
+    const r = figure.getBoundingClientRect();
     return toPhys([e.clientX - r.left, e.clientY - r.top]);
   }
-  svg.addEventListener("pointerdown", e => {
+  figure.addEventListener("pointerdown", e => {
     if (e.button != null && e.button !== 0) return;
     e.preventDefault();
-    svg.setPointerCapture?.(e.pointerId);
+    figure.setPointerCapture?.(e.pointerId);
     const p = pointerPos(e);
     drag = {p, q: p, color: COLORS[nextColor % COLORS.length], id: e.pointerId};
     drawDrag();
   });
-  svg.addEventListener("pointermove", e => {
+  figure.addEventListener("pointermove", e => {
     if (!drag || e.pointerId !== drag.id) return;
     drag.q = pointerPos(e);
     drawDrag();
@@ -513,8 +592,8 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
     drawDrag();
     if (e.type === "pointerup") launch(p, [q[0] - p[0], q[1] - p[1]]);
   };
-  svg.addEventListener("pointerup", release);
-  svg.addEventListener("pointercancel", release);
+  figure.addEventListener("pointerup", release);
+  figure.addEventListener("pointercancel", release);
 
   function drawDrag() {
     if (!dragG) return;
@@ -557,7 +636,7 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
     drag = null;
     updateFrameButtons();
     updateCaption();
-    for (const th of throws) { attach(th); draw(th); }
+    for (const th of throws) draw(th);
     placeFrames();
     drawDrag();
     emit();
@@ -568,7 +647,7 @@ export function createCoriolisWidget({frame: initialFrame = "fixed", rpm: initia
   }
   function emit() {
     container.value = value();
-    svg.setAttribute("aria-label",
+    figure.setAttribute("aria-label",
       `A turntable ${describeRpm(rpm)}, seen from ${frame === "fixed" ? "the room" : "the turntable"}, ` +
       `with ${throws.length} ball${throws.length === 1 ? "" : "s"} in flight.`);
     container.dispatchEvent(new CustomEvent("input", {bubbles: true}));
@@ -622,6 +701,10 @@ function describeRpm(rpm) {
 }
 function scale([x, y], k) {
   return [x * k, y * k];
+}
+// An angle brought into (−π, π].
+function wrapAngle(a) {
+  return a - 2 * Math.PI * Math.floor((a + Math.PI) / (2 * Math.PI));
 }
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
