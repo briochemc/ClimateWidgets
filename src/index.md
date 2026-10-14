@@ -93,7 +93,7 @@ Small, self-contained interactive figures for teaching climate science. Each wid
   </a>
   <a class="card" href="./coriolis-sphere/">
     <h2>The Coriolis effect on the Earth</h2>
-    <img class="thumb" src="./assets/thumbnails/coriolis-sphere.png" alt="A globe seen from above the Indian Ocean with Australia and Asia in pale green on pale blue, with three coloured parcels and their traces: one looping clockwise over China, one looping anticlockwise off south-east Australia, and one running nearly straight east near the equator; above it a short note, four small triangles at the sides of the figure for turning the view, and + and − in the bottom corner for zooming">
+    <img class="thumb" src="./assets/thumbnails/coriolis-sphere.png" alt="A globe seen from above the Indian Ocean with Australia and Asia in pale green on pale blue, with three small parcels and their traces in shades of blue and pink by speed: one looping clockwise over China, one looping anticlockwise off south-east Australia, and one running nearly straight east near the equator; above it a short note, four small triangles at the sides of the figure for turning the view, and + and − in the bottom corner for zooming">
   </a>
 </div>
 

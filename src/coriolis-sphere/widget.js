@@ -34,8 +34,13 @@ const BACKGROUND = "#f2f2f2";
 const OCEAN = "#e6eef6";
 const LAND = "#c9d3c0";
 const RIM = "#9a9a9a";
-// Okabe–Ito less its yellow, which vanishes on the plate; a darkened yellow stands in.
-const COLORS = ["#D55E00", "#0072B2", "#009E73", "#E69F00", "#CC79A7", "#56B4E9", "#b39b00", "#000000"];
+// A parcel is coloured by the logarithm of its speed, slow to fast, with Peter Kovesi's
+// isoluminant CET-I3 (colorcet's isoluminant_cm_70_c39), cyan through blue to pink, every
+// 15th of its 256 entries plus the last, each darkened by a fifth so that it holds on the
+// pale globe. Isoluminant so that no speed shouts louder than another.
+const SPEED_COLORS = ["#1094b8", "#3093b9", "#4391bb", "#518fbc", "#5e8cbd", "#6a8abd", "#7588bd", "#7f85bb", "#8a82b9",
+  "#9380b5", "#9c7db0", "#a47bab", "#ac78a6", "#b375a1", "#b9739b", "#c07096", "#c56d90", "#cb6a8a"];
+const TRACE_WIDTH = 2;            // px; a parcel's marker is twice as wide
 
 const EARTH_RADIUS = 6371;        // km
 const OMEGA = 7.2921e-5;          // rad/s
@@ -72,7 +77,8 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
   const equator = {type: "LineString", coordinates: [[-180, 0], [-90, 0], [0, 0], [90, 0], [180, 0]]};
 
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
-  let w, c, R, titleFont, labelFont, ballR;
+  let w, c, R, titleFont, labelFont;
+  const ballR = TRACE_WIDTH;
   const projection = geoOrthographic().clipAngle(90).precision(0.5);
   const path = geoPath(projection);
   let zoom = 1;
@@ -85,7 +91,6 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
     const lerp = (a, b) => a + (b - a) * t;
     titleFont = Math.round(lerp(14, 20));
     labelFont = Math.round(lerp(12, 13));
-    ballR = lerp(4.5, 6);
   }
   applyLayout(maxW);
 
@@ -94,7 +99,6 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
   let viewLon = CENTER_LON, viewLat = CENTER_LAT; // the Earth longitude and latitude facing the viewer
   const spin = {lon: 0, lat: 0}; // −1, 0 or 1: which way the view is being turned
   const parcels = [];
-  let nextColor = 0;
   let drag = null; // {start: [lon, lat] on the Earth, q: [sx, sy] pointer on screen, color}
 
   // ---- DOM ------------------------------------------------------------------------------------
@@ -105,7 +109,7 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
 
   const title = document.createElement("div");
   title.style.cssText = "font-weight:bold;color:#111;line-height:1.2;padding:0 0 6px;";
-  title.textContent = "Launch a parcel of air over the spinning Earth";
+  title.textContent = "The Coriolis effect on Earth";
   container.appendChild(title);
 
   const note = document.createElement("div");
@@ -218,16 +222,16 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
     equatorEl = svgEl("path", {fill: "none", stroke: "rgba(0,0,0,0.25)", "stroke-width": 1}, svg);
     rimEl = svgEl("path", {fill: "none", stroke: RIM, "stroke-width": 1.5}, svg);
 
-    tracesG = svgEl("g", {fill: "none", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round"}, svg);
+    tracesG = svgEl("g", {fill: "none", "stroke-width": TRACE_WIDTH, "stroke-linecap": "round", "stroke-linejoin": "round"}, svg);
     for (const p of parcels) {
       p.path = svgEl("path", {stroke: p.color}, tracesG);
-      p.ball = svgEl("circle", {r: ballR, fill: p.color, stroke: "#fff", "stroke-width": 1.5}, tracesG);
+      p.ball = svgEl("circle", {r: ballR, fill: p.color}, tracesG);
     }
 
     dragG = svgEl("g", {display: "none"}, svg);
-    dragLine = svgEl("line", {"stroke-width": 2, "stroke-linecap": "round"}, dragG);
+    dragLine = svgEl("line", {"stroke-width": TRACE_WIDTH, "stroke-linecap": "round"}, dragG);
     dragHead = svgEl("path", {}, dragG);
-    dragBall = svgEl("circle", {r: ballR, stroke: "#fff", "stroke-width": 1.5}, dragG);
+    dragBall = svgEl("circle", {r: ballR}, dragG);
     const halo = {stroke: BACKGROUND, "stroke-width": 3, "paint-order": "stroke", "stroke-linejoin": "round"};
     dragLabel = svgEl("text", {"font-size": labelFont, "font-weight": "bold", "text-anchor": "middle", ...halo}, dragG);
     dragKind = svgEl("text", {"font-size": labelFont - 1, "text-anchor": "middle", ...halo}, dragG);
@@ -277,12 +281,12 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
       const n = norm(d);
       if (n > 1e-9) v = scale(d, (speed / 1000) / n); // km/s
     }
-    const color = COLORS[nextColor++ % COLORS.length];
+    const color = speedColor(speed);
     const p = {
       r: scale(r, EARTH_RADIUS), v, speed: norm(v), t0: wallT, color,
       trace: [], // sampled [lon, lat]
       path: svgEl("path", {stroke: color}, tracesG),
-      ball: svgEl("circle", {r: ballR, fill: color, stroke: "#fff", "stroke-width": 1.5}, tracesG),
+      ball: svgEl("circle", {r: ballR, fill: color}, tracesG),
     };
     while (parcels.length >= MAX_THROWS) removeParcel(0);
     parcels.push(p);
@@ -381,7 +385,7 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
     if (!start) return;
     e.preventDefault();
     svg.setPointerCapture?.(e.pointerId);
-    drag = {start, q: xy, color: COLORS[nextColor % COLORS.length], id: e.pointerId};
+    drag = {start, q: xy, id: e.pointerId};
     drawDrag();
   });
   svg.addEventListener("pointermove", e => {
@@ -426,11 +430,13 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
     dragG.removeAttribute("display");
     const {speed, sx, sy, len} = throwOf(drag);
     const [x1, y1] = drag.q;
-    dragLine.setAttribute("stroke", drag.color);
-    dragHead.setAttribute("fill", drag.color);
-    dragBall.setAttribute("fill", drag.color);
-    dragLabel.setAttribute("fill", drag.color);
-    dragKind.setAttribute("fill", drag.color);
+    // The preview takes the colour the parcel will have, so the colour reads as speed too.
+    const color = speedColor(speed);
+    dragLine.setAttribute("stroke", color);
+    dragHead.setAttribute("fill", color);
+    dragBall.setAttribute("fill", color);
+    dragLabel.setAttribute("fill", color);
+    dragKind.setAttribute("fill", color);
     dragBall.setAttribute("cx", sx.toFixed(1));
     dragBall.setAttribute("cy", sy.toFixed(1));
     if (len < 3) {
@@ -555,6 +561,16 @@ function describeSpeed(v) {
   if (v < 10) return `${v.toFixed(1)} m/s (${Math.round(v * 3.6)} km/h)`;
   return `${Math.round(v)} m/s (${Math.round(v * 3.6)} km/h)`;
 }
+// The colour for a speed: its logarithm over the drag's range, 10 cm/s to 300 km/h, read
+// off SPEED_COLORS with the stops blended in sRGB. Speeds below the range take the first.
+function speedColor(v) {
+  const t = clamp(Math.log(Math.max(v, SPEED_MIN) / SPEED_MIN) / Math.log(SPEED_MAX / SPEED_MIN), 0, 1);
+  const x = t * (SPEED_COLORS.length - 1), i = Math.min(Math.floor(x), SPEED_COLORS.length - 2), f = x - i;
+  const a = parseInt(SPEED_COLORS[i].slice(1), 16), b = parseInt(SPEED_COLORS[i + 1].slice(1), 16);
+  const ch = s => Math.round(((a >> s) & 255) + (((b >> s) & 255) - ((a >> s) & 255)) * f);
+  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+}
+
 // What moves at that speed. The bands: open-ocean drift up to about half a metre a second;
 // the western boundary currents, the Gulf Stream and the Kuroshio, run at 1 to 2.5 m/s;
 // Beaufort 1 to 6, light air to a strong breeze, is 0.3 to 13.8 m/s; a near gale begins at
