@@ -86,14 +86,14 @@ const TOUR = [
     view: {lon: 134, lat: -26, zoom: 2.2},
     box: [[118, -34], [148, -18]],
     heading: 90, spread: 180, speed: [15, 40], count: 8,
-    caption: "At gale to storm speeds (15 to 40 m/s), air parcels would go around loops 100's of kms across.",
+    caption: "At gale to storm speeds (50--150 km/hr), air parcels would go around loops 100's of kms across.",
   },
 ];
 const TOUR_FLY = 5;         // s a scene's zoom takes
 const TOUR_LIFE = 8;        // s a tour parcel stays in full before it fades
 const TOUR_SPAWN_GAP = 0.3; // s between one tour parcel and the next
 const TOUR_START = 1.5;     // s the tour waits before its first scene
-const CAPTION_FADE = 1.2;   // s a scene's caption takes to fade in, and out at the scene's end
+const CAPTION_FADE = 1.2;   // s a scene's caption takes to fade in, and the same to fade out
 
 const FIGURE_WIDTH = 640;
 const MIN_WIDTH = 320;
@@ -180,16 +180,24 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
   scroller.appendChild(svg);
   container.appendChild(scroller);
 
-  // The tour's caption for the scene playing, over the figure's top-left, below the top
-  // arrow and clear of the left one, faded in as the scene's parcels set off and out as
-  // they go. A halo rather than a box keeps it legible over the globe.
+  // The tour's caption for the scene playing, over the figure's top-left, in from the
+  // corner by the same amount each way so that it sits below the top arrow and clear of
+  // the left one. It fades in as the scene's parcels set off and out, at the same rate, as
+  // they go, or when the tour is stopped: `captionTarget` is where it is headed and the
+  // clock walks it there at CAPTION_FADE.
   const caption = document.createElement("div");
   caption.style.cssText =
-    "position:absolute;left:8px;top:40px;max-width:55%;color:#333;font-size:14px;line-height:1.3;" +
-    `opacity:0;pointer-events:none;text-shadow:0 0 3px ${BACKGROUND},0 0 6px ${BACKGROUND},0 0 10px ${BACKGROUND};`;
+    "position:absolute;left:40px;top:40px;max-width:55%;color:#222;font-size:14px;line-height:1.3;" +
+    "opacity:0;pointer-events:none;";
   scroller.appendChild(caption);
+  let captionTarget = 0, captionOpacity = 0;
   // A number and its unit stay on one line.
   const setCaption = text => { caption.textContent = text.replace(/ (m\/s|km\/h|kms?)\b/g, " $1"); };
+  function fadeCaption(dt) {
+    const step = dt / CAPTION_FADE;
+    captionOpacity += clamp(captionTarget - captionOpacity, -step, step);
+    caption.style.opacity = captionOpacity.toFixed(3);
+  }
 
   // The view controls: four bare triangles at the sides of the figure, around the globe, to
   // turn the view, held down to keep turning, and a joined pair of + and − in the bottom
@@ -402,6 +410,7 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
     if (spin.lat) turnView("lat", (spin.lat * SPIN_RATE * dtWall) / zoom);
     if (flight) fly(dtWall);
     if (touring) tourStep(dtWall);
+    fadeCaption(dtWall);
     const dtSim = (dtWall * SIDEREAL_DAY) / DAY_SECONDS;
     const n = Math.max(1, Math.ceil(dtSim / STEP_MAX));
     const h = dtSim / n;
@@ -447,7 +456,7 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
     touring = false;
     tour = null;
     flight = null;
-    caption.style.opacity = 0;
+    captionTarget = 0;
     updateTourButton();
     emit();
   }
@@ -481,15 +490,10 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
       if (parcels.some(p => p.tour === tour.scene)) return;
       tour = {scene: (tour.scene + 1) % TOUR.length, stage: "wait", t: 0, spawned: 0};
     }
-    // The caption fades in as the first parcel sets off and out as the last one goes; `t`
-    // has counted from the first launch since the spawn stage began.
-    if (tour.stage === "spawn" || tour.stage === "hold") {
-      const end = (scene.count - 1) * TOUR_SPAWN_GAP + TOUR_LIFE + FADE;
-      const o = Math.min(clamp(tour.t / CAPTION_FADE, 0, 1), clamp((end - tour.t) / CAPTION_FADE, 0, 1));
-      caption.style.opacity = o.toFixed(3);
-    } else {
-      caption.style.opacity = 0;
-    }
+    // The caption is wanted from the first parcel's launch until the last one has gone; `t`
+    // has counted from that launch since the spawn stage began.
+    const end = (scene.count - 1) * TOUR_SPAWN_GAP + TOUR_LIFE + FADE;
+    captionTarget = (tour.stage === "spawn" || tour.stage === "hold") && tour.t < end - CAPTION_FADE ? 1 : 0;
   }
   // One parcel at a random spot in the scene's box (kept off the coast for the current:
   // the east coast runs from about 153.5° E at 27.5° S to 150° E at 37° S, so the start is
