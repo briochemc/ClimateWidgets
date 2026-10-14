@@ -31,6 +31,7 @@ import {geoOrthographic, geoPath, geoGraticule, geoDistance} from "https://cdn.j
 import {feature} from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
 
 const BACKGROUND = "#f2f2f2";
+const ACCENT = "#0b57d0";
 const OCEAN = "#e6eef6";
 const LAND = "#c9d3c0";
 const RIM = "#9a9a9a";
@@ -45,7 +46,7 @@ const TRACE_WIDTH = 2;            // px; a parcel's marker is twice as wide
 const EARTH_RADIUS = 6371;        // km
 const OMEGA = 7.2921e-5;          // rad/s
 const SIDEREAL_DAY = 86164;       // s
-const MAX_THROWS = 10;
+const MAX_THROWS = 20;            // enough for the tour's sixteen parcels of current at once
 const LIFE = 40;                  // wall-clock s a trace is shown in full
 const FADE = 8;                   // s it then takes to fade away
 // The drag's length maps onto the logarithm of the speed, as a log slider does: a hundredth
@@ -65,13 +66,42 @@ const GLOBE_R = 0.44;             // globe radius as a fraction of the figure's 
 const SPIN_RATE = 45;             // °/s the view turns while an arrow button or key is held, at zoom 1
 const ZOOM_STEP = 1.5, ZOOM_MAX = 100; // at 100× a 1 m/s current's 10 km loop is 40 px across
 
+// The tour, played when the figure is left alone: a slow zoom onto the Tasman Sea off the
+// east coast of Australia, where the East Australian Current runs south along the shelf,
+// and a handful of parcels of water set off at a current's pace; then back out over the
+// continent, where a handful of parcels of air set off at a gale's. Each scene waits for
+// its parcels to fade, then the next begins, and the tour goes round again. `box` is the
+// [lon, lat] corners the parcels start in, `heading` the compass direction they set off in,
+// ± `spread`, and `speed` the range in m/s, drawn evenly in the logarithm.
+const TOUR = [
+  {
+    name: "the East Australian Current",
+    view: {lon: 153.5, lat: -31.5, zoom: 9},
+    box: [[152.5, -36], [156, -27]], offshore: true,
+    heading: 190, spread: 50, speed: [0.1, 2], count: 16,
+  },
+  {
+    name: "winds over Australia",
+    view: {lon: 134, lat: -26, zoom: 2.2},
+    box: [[118, -34], [148, -18]],
+    heading: 90, spread: 180, speed: [15, 40], count: 8,
+  },
+];
+const TOUR_FLY = 5;         // s a scene's zoom takes
+const TOUR_LIFE = 8;        // s a tour parcel stays in full before it fades
+const TOUR_SPAWN_GAP = 0.3; // s between one tour parcel and the next
+const TOUR_START = 1.5;     // s the tour waits before its first scene
+
 const FIGURE_WIDTH = 640;
 const MIN_WIDTH = 320;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-// `world` is the TopoJSON with a `land` object; `width` caps the figure's side. `demo`
-// launches three parcels and runs the clock on a moment, for a capture of the figure in use.
-export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = false} = {}) {
+// `world` is the TopoJSON with a `land` object; `width` caps the figure's side; `tour`
+// false leaves the figure still until it is touched (it is also left still for a reader who
+// prefers reduced motion). `demo` launches three parcels and runs the clock on a moment,
+// for a capture of the figure in use, and plays no tour.
+export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: playTour = true, demo = false} = {}) {
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
   const land = world?.objects?.land ? feature(world, world.objects.land) : null;
   const graticule = geoGraticule().step([15, 15])();
   const equator = {type: "LineString", coordinates: [[-180, 0], [-90, 0], [0, 0], [90, 0], [180, 0]]};
@@ -100,6 +130,8 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
   const spin = {lon: 0, lat: 0}; // −1, 0 or 1: which way the view is being turned
   const parcels = [];
   let drag = null; // {start: [lon, lat] on the Earth, q: [sx, sy] pointer on screen, color}
+  let flight = null; // {from: {lon, lat, logZoom}, to, t, dur}: the view on its way somewhere
+  let touring = false, tour = null; // {scene, stage: "fly" | "spawn" | "hold", t, spawned}
 
   // ---- DOM ------------------------------------------------------------------------------------
   const container = document.createElement("div");
@@ -112,13 +144,24 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
   title.textContent = "The Coriolis effect on Earth";
   container.appendChild(title);
 
+  // The note, with the tour button at its right. Words rather than a ▶ glyph, which iOS
+  // swaps for a colour emoji.
+  const noteRow = document.createElement("div");
+  noteRow.style.cssText = "display:flex;align-items:flex-start;gap:12px;padding:0 0 8px;";
   const note = document.createElement("div");
-  note.style.cssText = "padding:0 0 8px;color:#888;font-size:14px;";
+  note.style.cssText = "flex:1 1 auto;color:#888;font-size:14px;";
   note.textContent =
     "Click and drag to launch a parcel of air/water (speed is shown). " +
     "Nothing acts on the parcel but the Earth's turning, so its speed never changes. " +
     `The clock runs ${describeClock(DAY_SECONDS)}.`;
-  container.appendChild(note);
+  const tourButton = document.createElement("button");
+  tourButton.type = "button";
+  tourButton.style.cssText =
+    "flex:0 0 auto;font:13px sans-serif;color:#333;background:#fff;border:1px solid #ccc;border-radius:999px;" +
+    "padding:3px 12px;cursor:pointer;white-space:nowrap;";
+  tourButton.addEventListener("click", () => (touring ? stopTour() : startTour(0)));
+  noteRow.append(note, tourButton);
+  container.appendChild(noteRow);
 
   const scroller = document.createElement("div");
   scroller.style.cssText = "max-width:100%;overflow-x:auto;position:relative;";
@@ -154,12 +197,12 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
   const arrow = (angle, title, place) =>
     button(triangleGlyph(angle, 14), title, `position:absolute;border:none;background:none;${place}`);
   const holdToSpin = (b, axis, dir) => {
-    const start = e => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); spin[axis] = dir; };
+    const start = e => { e.preventDefault(); stopTour(); b.setPointerCapture?.(e.pointerId); spin[axis] = dir; };
     const stop = () => { if (spin[axis] === dir) spin[axis] = 0; };
     b.addEventListener("pointerdown", start);
     for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) b.addEventListener(type, stop);
     // Space or Enter on the button: one step of 10°, as the arrow keys give.
-    b.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); turnView(axis, (dir * 10) / zoom); } });
+    b.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); stopTour(); turnView(axis, (dir * 10) / zoom); } });
     scroller.appendChild(b);
   };
   holdToSpin(arrow(-90, "Turn the view north", "top:4px;left:50%;transform:translateX(-50%);"), "lat", 1);
@@ -172,16 +215,16 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
   const zoomStyle = "color:#333;background:rgba(255,255,255,0.92);border:1px solid #ccc;";
   const zoomIn = button(signGlyph(true), "Zoom in", `${zoomStyle}border-radius:6px 6px 0 0;`);
   const zoomOut = button(signGlyph(false), "Zoom out", `${zoomStyle}border-radius:0 0 6px 6px;margin-top:-1px;`);
-  zoomIn.addEventListener("click", () => setZoom(zoom * ZOOM_STEP));
-  zoomOut.addEventListener("click", () => setZoom(zoom / ZOOM_STEP));
+  zoomIn.addEventListener("click", () => { stopTour(); setZoom(zoom * ZOOM_STEP); });
+  zoomOut.addEventListener("click", () => { stopTour(); setZoom(zoom / ZOOM_STEP); });
   zoomPair.append(zoomIn, zoomOut);
   scroller.appendChild(zoomPair);
 
   svg.addEventListener("keydown", e => {
     const keys = {ArrowLeft: ["lon", -1], ArrowRight: ["lon", 1], ArrowUp: ["lat", 1], ArrowDown: ["lat", -1]};
-    if (keys[e.key]) { e.preventDefault(); const [axis, dir] = keys[e.key]; spin[axis] = dir; return; }
-    if (e.key === "+" || e.key === "=") { e.preventDefault(); setZoom(zoom * ZOOM_STEP); }
-    if (e.key === "-" || e.key === "_") { e.preventDefault(); setZoom(zoom / ZOOM_STEP); }
+    if (keys[e.key]) { e.preventDefault(); stopTour(); const [axis, dir] = keys[e.key]; spin[axis] = dir; return; }
+    if (e.key === "+" || e.key === "=") { e.preventDefault(); stopTour(); setZoom(zoom * ZOOM_STEP); }
+    if (e.key === "-" || e.key === "_") { e.preventDefault(); stopTour(); setZoom(zoom / ZOOM_STEP); }
   });
   svg.addEventListener("keyup", e => {
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") spin.lon = 0;
@@ -262,15 +305,15 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
       p.ball.setAttribute("cy", sy.toFixed(1));
     }
     const age = wallT - p.t0;
-    const opacity = age < LIFE ? 1 : clamp(1 - (age - LIFE) / FADE, 0, 1);
+    const opacity = age < p.life ? 1 : clamp(1 - (age - p.life) / FADE, 0, 1);
     p.path.setAttribute("opacity", opacity.toFixed(3));
     p.ball.setAttribute("opacity", opacity.toFixed(3));
   }
 
   // ---- parcels --------------------------------------------------------------------------------
   // `start` is [lon, lat] on the Earth; `toward` is [lon, lat] the throw points at; `speed`
-  // is in m/s over the ground.
-  function launch(start, toward, speed) {
+  // is in m/s over the ground; `life` is how long the parcel stays before it fades.
+  function launch(start, toward, speed, life = LIFE) {
     const r = unit(start);
     let v = [0, 0, 0];
     if (speed > 0) {
@@ -283,7 +326,7 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
     }
     const color = speedColor(speed);
     const p = {
-      r: scale(r, EARTH_RADIUS), v, speed: norm(v), t0: wallT, color,
+      r: scale(r, EARTH_RADIUS), v, speed: norm(v), t0: wallT, life, color,
       trace: [], // sampled [lon, lat]
       path: svgEl("path", {stroke: color}, tracesG),
       ball: svgEl("circle", {r: ballR, fill: color}, tracesG),
@@ -343,16 +386,105 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
     // Slower when zoomed in, so that the ground goes by at the same pace on screen.
     if (spin.lon) turnView("lon", (spin.lon * SPIN_RATE * dtWall) / zoom);
     if (spin.lat) turnView("lat", (spin.lat * SPIN_RATE * dtWall) / zoom);
+    if (flight) fly(dtWall);
+    if (touring) tourStep(dtWall);
     const dtSim = (dtWall * SIDEREAL_DAY) / DAY_SECONDS;
     const n = Math.max(1, Math.ceil(dtSim / STEP_MAX));
     const h = dtSim / n;
     for (let i = parcels.length - 1; i >= 0; i--) {
       const p = parcels[i];
-      if (wallT - p.t0 >= LIFE + FADE) { removeParcel(i); continue; }
+      if (wallT - p.t0 >= p.life + FADE) { removeParcel(i); continue; }
       for (let k = 0; k < n; k++) step(p, h);
       sample(p);
     }
     if (draw) render();
+  }
+
+  // ---- the view on its way somewhere ----------------------------------------------------------
+  function flyTo({lon, lat, zoom: z}, dur) {
+    flight = {
+      from: {lon: viewLon, lat: viewLat, logZoom: Math.log(zoom)},
+      to: {lon, lat, logZoom: Math.log(clamp(z, 1, ZOOM_MAX))},
+      t: 0, dur,
+    };
+  }
+  function fly(dt) {
+    flight.t = Math.min(flight.dur, flight.t + dt);
+    const x = flight.t / flight.dur;
+    const s = x < 0.5 ? 2 * x * x : 1 - ((-2 * x + 2) ** 2) / 2; // ease in and out
+    const {from, to} = flight;
+    viewLon = wrapLon(from.lon + s * wrapLon(to.lon - from.lon));
+    viewLat = from.lat + s * (to.lat - from.lat);
+    zoom = Math.exp(from.logZoom + s * (to.logZoom - from.logZoom));
+    projection.scale(R * zoom);
+    if (flight.t >= flight.dur) flight = null;
+  }
+
+  // ---- the tour -------------------------------------------------------------------------------
+  function startTour(delay = TOUR_START) {
+    if (touring) return;
+    touring = true;
+    tour = {scene: 0, stage: "wait", t: -delay, spawned: 0};
+    updateTourButton();
+    emit();
+  }
+  function stopTour() {
+    if (!touring) return;
+    touring = false;
+    tour = null;
+    flight = null;
+    updateTourButton();
+    emit();
+  }
+  function updateTourButton() {
+    tourButton.textContent = touring ? "Stop tour" : "Play tour";
+    tourButton.style.borderColor = touring ? ACCENT : "#ccc";
+    tourButton.style.color = touring ? ACCENT : "#333";
+    tourButton.setAttribute("aria-pressed", touring);
+  }
+  function tourStep(dt) {
+    const scene = TOUR[tour.scene];
+    tour.t += dt;
+    if (tour.stage === "wait") {
+      if (tour.t < 0) return;
+      flyTo(scene.view, TOUR_FLY);
+      tour.stage = "fly";
+    } else if (tour.stage === "fly") {
+      if (flight) return;
+      tour.stage = "spawn";
+      tour.t = 0;
+      tour.spawned = 0;
+    } else if (tour.stage === "spawn") {
+      if (tour.spawned < scene.count && tour.t >= tour.spawned * TOUR_SPAWN_GAP) {
+        tourLaunch(scene);
+        tour.spawned++;
+      }
+      if (tour.spawned >= scene.count) tour.stage = "hold";
+    } else if (tour.stage === "hold") {
+      // On to the next scene once this one's parcels have all faded.
+      if (parcels.some(p => p.tour === tour.scene)) return;
+      tour = {scene: (tour.scene + 1) % TOUR.length, stage: "wait", t: 0, spawned: 0};
+    }
+  }
+  // One parcel at a random spot in the scene's box (kept off the coast for the current:
+  // the east coast runs from about 153.5° E at 27.5° S to 150° E at 37° S, so the start is
+  // pushed east of that line), heading the scene's way give or take its spread, at a speed
+  // drawn evenly in the logarithm of the scene's range.
+  function tourLaunch(scene) {
+    const [[lon0, lat0], [lon1, lat1]] = scene.box;
+    const lat = lat0 + Math.random() * (lat1 - lat0);
+    let lon = lon0 + Math.random() * (lon1 - lon0);
+    if (scene.offshore) {
+      const coast = 153.5 - (-27.5 - lat) * (3.5 / 9.5);
+      lon = coast + 0.5 + Math.random() * 2;
+    }
+    const bearing = ((scene.heading + (Math.random() * 2 - 1) * scene.spread) * Math.PI) / 180;
+    // Aim a degree along the bearing, which is near enough a straight line at this scale.
+    const toward = [lon + Math.sin(bearing) / Math.cos((lat * Math.PI) / 180), lat + Math.cos(bearing)];
+    const [s0, s1] = scene.speed;
+    const speed = s0 * Math.pow(s1 / s0, Math.random());
+    launch([lon, lat], toward, speed, TOUR_LIFE);
+    parcels[parcels.length - 1].tour = tour.scene;
   }
 
   // The clock runs from the first frame and stops for good once the widget has been taken
@@ -384,6 +516,7 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
     const start = groundAt(xy);
     if (!start) return;
     e.preventDefault();
+    stopTour();
     svg.setPointerCapture?.(e.pointerId);
     drag = {start, q: xy, id: e.pointerId};
     drawDrag();
@@ -466,7 +599,7 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
 
   // ---- changes --------------------------------------------------------------------------------
   function value() {
-    return {parcels: parcels.length, view: [viewLon, viewLat], zoom};
+    return {parcels: parcels.length, view: [viewLon, viewLat], zoom, touring};
   }
   function emit() {
     container.value = value();
@@ -482,6 +615,7 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
   }
 
   layoutControls();
+  updateTourButton();
   build();
   container.value = value();
 
@@ -497,6 +631,8 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, demo = 
     launch([100, 5], [110, 5], 60);
     run(0.45);
     render();
+  } else if (playTour && !reduceMotion) {
+    startTour();
   }
   requestAnimationFrame(tick);
 

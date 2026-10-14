@@ -31,10 +31,13 @@ import {createCoriolisSphereWidget} from "./widget.js";
 
 const world = await FileAttachment("../data/countries-110m.json").json();
 
-// ?demo opens with three parcels already launched (the thumbnail capture uses it).
-const demo = new URLSearchParams(location.search).has("demo");
+// ?tour=0 leaves the figure still until it is touched instead of playing the tour; ?demo
+// opens with three parcels already launched (the thumbnail capture uses it).
+const params = new URLSearchParams(location.search);
+const tour = !["0", "false", "no", "off"].includes(params.get("tour") ?? "");
+const demo = params.has("demo");
 ```
 
 ```js
-const coriolis = view(createCoriolisSphereWidget({world, demo}));
+const coriolis = view(createCoriolisSphereWidget({world, tour, demo}));
 ```
