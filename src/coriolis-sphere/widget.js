@@ -46,7 +46,7 @@ const TRACE_WIDTH = 2;            // px; a parcel's marker is twice as wide
 const EARTH_RADIUS = 6371;        // km
 const OMEGA = 7.2921e-5;          // rad/s
 const SIDEREAL_DAY = 86164;       // s
-const MAX_THROWS = 20;            // enough for the tour's sixteen parcels of current at once
+const MAX_THROWS = 10;            // enough for the tour's eight parcels of current at once
 const LIFE = 40;                  // wall-clock s a trace is shown in full
 const FADE = 8;                   // s it then takes to fade away
 // The drag's length maps onto the logarithm of the speed, as a log slider does: a hundredth
@@ -59,7 +59,17 @@ const SPEED_MIN = 0.1;            // m/s, at DRAG_MIN of the width
 const SPEED_MAX = 300 / 3.6;      // m/s, at DRAG_MAX of the width
 const DRAG_MIN = 0.01, DRAG_MAX = 1 / 3; // of the figure's width
 const DAY_SECONDS = 1;            // wall-clock seconds per day
-const STEP_MAX = 60;              // s of simulated time per integration step, at most
+// Frames a second the figure is redrawn at: half a 60 Hz screen's rate, to halve the work.
+// Animation frames closer together than this are skipped, so a 120 Hz screen draws every
+// fourth; the clock itself keeps real time, whatever the rate.
+const FRAME_RATE = 30;
+// At most 300 s of simulated time per RK4 step: ten steps a frame at FRAME_RATE. The
+// fastest thing to resolve is an inertial circle at a pole, period 12 h, which that samples
+// 144 times round; the RK4 error per step at f·h = 0.04 is below a part in 10⁸, far under
+// the pixel. The trace is sampled every SAMPLE_MAX of simulated time or so, whatever the
+// frame rate, so that a polar circle is drawn with at least 28 points and not as a polygon.
+const STEP_MAX = 300;
+const SAMPLE_MAX = 1500;
 const CENTER_LAT = -20;           // the globe is seen, to begin with, from above this latitude...
 const CENTER_LON = 135;           // ...and this longitude
 const GLOBE_R = 0.44;             // globe radius as a fraction of the figure's side, before zooming
@@ -78,15 +88,15 @@ const TOUR = [
     name: "the East Australian Current",
     view: {lon: 153.5, lat: -31.5, zoom: 9},
     box: [[152.5, -36], [156, -27]], offshore: true,
-    heading: 190, spread: 50, speed: [0.1, 2], count: 16,
+    heading: 190, spread: 50, speed: [0.1, 2], count: 8,
     caption: "Water parcels moving at typical ocean current speeds (0.1–2 m/s) go around in small circles (like eddies) that are about a couple kms wide.",
   },
   {
     name: "winds over Australia",
     view: {lon: 134, lat: -26, zoom: 2.2},
     box: [[118, -34], [148, -18]],
-    heading: 90, spread: 180, speed: [15, 40], count: 8,
-    caption: "At gale to storm speeds (50--150 km/hr), air parcels would go around loops 100's of kms across.",
+    heading: 90, spread: 180, speed: [15, 40], count: 4,
+    caption: "At gale to storm speeds (50–150 km/hr), air parcels would go around loops 100's of kms across.",
   },
 ];
 const TOUR_FLY = 5;         // s a scene's zoom takes
@@ -119,7 +129,10 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
     w = newW;
     c = w / 2;
     R = GLOBE_R * w;
-    projection.scale(R * zoom).translate([c, c]);
+    // Clipped to the figure, a little beyond its edge so that the rim's stroke along the
+    // clip never shows: zoomed in, nearly all of the land and graticule is off the figure
+    // and there is no point in projecting it.
+    projection.scale(R * zoom).translate([c, c]).clipExtent([[-4, -4], [w + 4, w + 4]]);
     const t = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
     const lerp = (a, b) => a + (b - a) * t;
     titleFont = Math.round(lerp(14, 20));
@@ -194,6 +207,7 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
   // A number and its unit stay on one line.
   const setCaption = text => { caption.textContent = text.replace(/ (m\/s|km\/h|kms?)\b/g, " $1"); };
   function fadeCaption(dt) {
+    if (captionOpacity === captionTarget) return;
     const step = dt / CAPTION_FADE;
     captionOpacity += clamp(captionTarget - captionOpacity, -step, step);
     caption.style.opacity = captionOpacity.toFixed(3);
@@ -273,12 +287,17 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
   }
 
   // ---- scaffolding, rebuilt on resize ---------------------------------------------------------
-  let oceanEl, graticuleEl, equatorEl, landEl, rimEl, tracesG, dragG, dragLine, dragHead, dragBall, dragLabel, dragKind;
+  let oceanEl, graticuleEl, equatorEl, landEl, rimEl, tracesG, ballsG, dragG, dragLine, dragHead, dragBall, dragLabel, dragKind;
+  // The view the globe's fixed layers were last projected for, or null when they must be
+  // projected again: they are the costly part of a frame, and only redone when the view
+  // has turned, zoomed or been resized.
+  let shown = null;
 
   function build() {
     svg.setAttribute("width", w);
     svg.setAttribute("height", w);
     svg.replaceChildren();
+    shown = null;
     svgEl("rect", {width: w, height: w, fill: BACKGROUND}, svg);
 
     oceanEl = svgEl("path", {fill: OCEAN}, svg);
@@ -288,9 +307,11 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
     rimEl = svgEl("path", {fill: "none", stroke: RIM, "stroke-width": 1.5}, svg);
 
     tracesG = svgEl("g", {fill: "none", "stroke-width": TRACE_WIDTH, "stroke-linecap": "round", "stroke-linejoin": "round"}, svg);
+    ballsG = svgEl("g", {}, svg);
     for (const p of parcels) {
       p.path = svgEl("path", {stroke: p.color}, tracesG);
-      p.ball = svgEl("circle", {r: ballR, fill: p.color}, tracesG);
+      p.ball = svgEl("circle", {r: ballR, fill: p.color}, ballsG);
+      p.opacity = null;
     }
 
     dragG = svgEl("g", {display: "none"}, svg);
@@ -305,21 +326,56 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
   }
 
   // ---- drawing --------------------------------------------------------------------------------
+  // The globe's fixed layers are projected afresh only when the view has moved; between
+  // moves a frame touches nothing but the parcels, and each parcel's trace only grows at its
+  // end, so the new segment is appended to its path rather than the whole trace projected
+  // again. What the browser then repaints each frame is the traces and balls, not the globe.
   function render() {
-    projection.rotate([-viewLon, -viewLat]);
-    oceanEl.setAttribute("d", path({type: "Sphere"}));
-    graticuleEl.setAttribute("d", path(graticule));
-    equatorEl.setAttribute("d", path(equator));
-    if (land) landEl.setAttribute("d", path(land));
-    rimEl.setAttribute("d", path({type: "Sphere"}));
-    for (const p of parcels) drawParcel(p);
+    const moved = !shown || shown.lon !== viewLon || shown.lat !== viewLat || shown.zoom !== zoom;
+    if (moved) {
+      projection.rotate([-viewLon, -viewLat]);
+      oceanEl.setAttribute("d", path({type: "Sphere"}));
+      graticuleEl.setAttribute("d", path(graticule));
+      equatorEl.setAttribute("d", path(equator));
+      if (land) landEl.setAttribute("d", path(land));
+      rimEl.setAttribute("d", path({type: "Sphere"}));
+      shown = {lon: viewLon, lat: viewLat, zoom};
+    }
+    for (const p of parcels) drawParcel(p, moved);
     drawDrag();
   }
 
-  function drawParcel(p) {
-    p.path.setAttribute("d", p.trace.length > 1 ? path({type: "LineString", coordinates: p.trace}) ?? "" : "");
+  const inView = lonlat => geoDistance(lonlat, [viewLon, viewLat]) < Math.PI / 2;
+
+  // `fresh` is true when the view has moved and the trace must be projected whole, with
+  // the horizon clipped by d3; otherwise the points sampled since the last frame are
+  // projected one by one and appended, with the pen lifted while the parcel is round the
+  // back of the globe. A trace of one point is left to the appending, so that its first
+  // point is not lost.
+  function drawParcel(p, fresh) {
+    if (fresh) {
+      const whole = p.trace.length > 1;
+      p.d = whole ? path({type: "LineString", coordinates: p.trace}) ?? "" : "";
+      p.drawn = whole ? p.trace.length : 0;
+      // The pen is down only if d3 drew something to continue from: a trace wholly off the
+      // figure gives an empty path, and a segment must not be the first thing in it.
+      p.pen = whole && p.d !== "" && inView(p.trace[p.trace.length - 1]);
+      p.dirty = true;
+    }
+    for (; p.drawn < p.trace.length; p.drawn++) {
+      const q = p.trace[p.drawn];
+      if (!inView(q)) { p.pen = false; continue; }
+      const [sx, sy] = projection(q);
+      p.d += `${p.pen ? "L" : "M"}${sx.toFixed(1)},${sy.toFixed(1)}`;
+      p.pen = true;
+      p.dirty = true;
+    }
+    if (p.dirty) {
+      p.path.setAttribute("d", p.d);
+      p.dirty = false;
+    }
     const here = lonLat(p.r);
-    const visible = geoDistance(here, [viewLon, viewLat]) < Math.PI / 2;
+    const visible = inView(here);
     p.ball.style.display = visible ? "" : "none";
     if (visible) {
       const [sx, sy] = projection(here);
@@ -327,9 +383,12 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
       p.ball.setAttribute("cy", sy.toFixed(1));
     }
     const age = wallT - p.t0;
-    const opacity = age < p.life ? 1 : clamp(1 - (age - p.life) / FADE, 0, 1);
-    p.path.setAttribute("opacity", opacity.toFixed(3));
-    p.ball.setAttribute("opacity", opacity.toFixed(3));
+    const opacity = (age < p.life ? 1 : clamp(1 - (age - p.life) / FADE, 0, 1)).toFixed(3);
+    if (opacity !== p.opacity) {
+      p.path.setAttribute("opacity", opacity);
+      p.ball.setAttribute("opacity", opacity);
+      p.opacity = opacity;
+    }
   }
 
   // ---- parcels --------------------------------------------------------------------------------
@@ -350,8 +409,9 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
     const p = {
       r: scale(r, EARTH_RADIUS), v, speed: norm(v), t0: wallT, life, color,
       trace: [], // sampled [lon, lat]
+      d: "", drawn: 0, pen: false, dirty: false, opacity: null, // the trace's path so far
       path: svgEl("path", {stroke: color}, tracesG),
-      ball: svgEl("circle", {r: ballR, fill: color}, tracesG),
+      ball: svgEl("circle", {r: ballR, fill: color}, ballsG),
     };
     while (parcels.length >= MAX_THROWS) removeParcel(0);
     parcels.push(p);
@@ -414,11 +474,14 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
     const dtSim = (dtWall * SIDEREAL_DAY) / DAY_SECONDS;
     const n = Math.max(1, Math.ceil(dtSim / STEP_MAX));
     const h = dtSim / n;
+    const every = Math.max(1, Math.floor(SAMPLE_MAX / h)); // steps between trace samples
     for (let i = parcels.length - 1; i >= 0; i--) {
       const p = parcels[i];
       if (wallT - p.t0 >= p.life + FADE) { removeParcel(i); continue; }
-      for (let k = 0; k < n; k++) step(p, h);
-      sample(p);
+      for (let k = 0; k < n; k++) {
+        step(p, h);
+        if ((k + 1) % every === 0 || k === n - 1) sample(p);
+      }
     }
     if (draw) render();
   }
@@ -524,14 +587,23 @@ export function createCoriolisSphereWidget({world, width = FIGURE_WIDTH, tour: p
 
   // The clock runs from the first frame and stops for good once the widget has been taken
   // out of the page (it is not in the page yet when created, so that alone does not stop it).
-  let last = null, wasConnected = false;
+  // It pauses while the figure is scrolled out of view, picking up where it left off.
+  let last = null, wasConnected = false, inSight = true;
   function tick(now) {
     if (container.isConnected) wasConnected = true;
     else if (wasConnected) return;
     requestAnimationFrame(tick);
+    if (!inSight) { last = null; return; }
+    // With 4 ms of slack: two 60 Hz frames are 33.3 ms apart, as near the bare threshold
+    // as makes no difference, and jitter would then take now the second frame, now the
+    // third, an uneven pace that shows.
+    if (last != null && now - last < 1000 / FRAME_RATE - 4) return;
     const dt = last == null ? 0 : Math.min(0.05, (now - last) / 1000);
     last = now;
     advance(dt);
+  }
+  if (typeof IntersectionObserver === "function") {
+    new IntersectionObserver(entries => { inSight = entries.some(e => e.isIntersecting); }).observe(scroller);
   }
 
   // ---- throwing with the pointer --------------------------------------------------------------
