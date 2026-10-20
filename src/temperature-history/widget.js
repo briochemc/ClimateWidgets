@@ -3,9 +3,9 @@
 // Berkeley Earth instrumental record, the Holocene stack of Marcott et al., the Greenland and
 // Antarctic ice cores, the benthic stacks of Lisiecki and Raymo and of Zachos et al. read
 // through Hansen et al., and Royer et al.'s Phanerozoic curves. One chart, one time axis that
-// always ends at the figure's present (2015), and a "look back" slider under that axis that
-// stretches it from a century to 540 million years, so the reader zooms out from the
-// thermometer record to the Cambrian in one motion. The Play tour does that zoom by itself,
+// always ends at the thermometer record's latest month, and a "look back" slider under that
+// axis that stretches it from a decade to 540 million years, so the reader zooms out from
+// the last few years to the Cambrian in one motion. The Play tour does that zoom by itself,
 // pausing at each of the figure's own landmarks (Holocene, YD, LGM, Eemian, ...), and stops
 // at the end. Along the top run the geological periods, abbreviated as in the figure where
 // they are narrow; hovering a period or a landmark spells it out, and clicking opens its
@@ -28,7 +28,9 @@ const COLORS = {
   ngrip: "#00b050",
   marcott: "#3d96ae",
   berkeley: "#e02020",
+  berkeleyDecadal: "#a01010",
 };
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // The figure fills its container up to FIGURE_WIDTH and reflows below it; below MIN_WIDTH
 // it stops shrinking and scrolls sideways inside its own wrapper.
@@ -42,7 +44,7 @@ const PLOT_T = BAND_T + BAND_H + 6, PLOT_H = 302;
 const PLOT_B = PLOT_T + PLOT_H;
 const TOTAL_H = PLOT_B + 32;
 
-const LOOK_MIN = 100;                // years; the shortest window
+const LOOK_MIN = 10;                 // years; the shortest window
 const WIKI = "https://en.wikipedia.org/wiki/";
 const COMMONS = "https://commons.wikimedia.org/wiki/File:All_palaeotemps.svg";
 
@@ -106,10 +108,19 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
   const royer = fromAges(data.royer.rows);                 // [t, geocarb, proxies, lo, hi], nulls allowed
   const geocarb = royer.filter(r => r[1] !== null).map(r => [r[0], r[1]]);
   const proxies = royer.filter(r => r[2] !== null).map(r => [r[0], r[2]]);
-  const berkeley = data.berkeley.rows.map(([yr, v]) => [yr, v]).sort((a, b) => a[0] - b[0]);
+  // The thermometer record: Berkeley Earth's monthly anomalies, which are against 1951–1980,
+  // moved onto the figure's 1960–1990 baseline by the record's own mean over those years;
+  // then the complete years' means, and the complete decades', the latter at the decade's
+  // middle as the figure had them (1855 for the 1850s).
+  const raw = unpackMonthly(data.berkeley);
+  const shift = mean(raw.filter(([t]) => t >= 1960 && t < 1991).map(p => p[1]));
+  const monthly = raw.map(([t, v]) => [t, v - shift]);
+  const annual = periodMeans(monthly, 1);
+  const decadal = periodMeans(monthly, 10);
+  const berkeley = annual;
   const series = {zachos, lr, epica, ngrip, marcott, geocarb, proxies, berkeley};
 
-  const tEnd = berkeley[berkeley.length - 1][0];
+  const tEnd = monthly[monthly.length - 1][0];
   // Wide enough for the start of the Cambrian to clear the left edge.
   const LOOK_MAX = Math.ceil((tEnd - (present - PERIODS[0].start)) * 1.01 / 1e6) * 1e6;
   const periods = PERIODS.map((p, i) => ({
@@ -120,8 +131,8 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
     .filter(m => m.age > 0 && m.age < LOOK_MAX)
     .sort((a, b) => a.age - b.age).map((m, i) => ({...m, tier: 1 + (i % 3)}));
   const landmarkAlpha = m => fadeIn(m.age * 1.02, m.age * 1.06) * fadeOut(m.age * 5, m.age * 8);
-  const latest = berkeley[berkeley.length - 1];
-  const latestLabel = `${latest[0]}: ${formatTemp(latest[1])}`;
+  const latest = monthly[monthly.length - 1];
+  const latestLabel = `${monthName(latest[0])} ${Math.floor(latest[0])}: ${formatTemp(latest[1])}`;
 
   // The record's point a landmark hangs its leader on.
   function anchorPoint(m) {
@@ -278,7 +289,9 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
   function fadeIn(a, b) { return smooth((Math.log(look) - Math.log(a)) / (Math.log(b) - Math.log(a))); }
   function fadeOut(a, b) { return 1 - fadeIn(a, b); }
   const alphas = () => ({
-    berkeley: fadeOut(30000, 100000),
+    monthly: fadeOut(40, 120),
+    annual: fadeIn(25, 60) * fadeOut(1500, 5000),
+    decadal: fadeIn(250, 700) * fadeOut(30000, 100000),
     marcott: fadeIn(400, 1200) * fadeOut(300000, 1e6),
     ngrip: fadeIn(800, 2500) * fadeOut(2e6, 6e6),
     epica: fadeIn(800, 2500) * fadeOut(10e6, 30e6),
@@ -301,7 +314,9 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
         for (const c of cols) if (pts[i][c] !== null && pts[i][c] !== undefined) take(pts[i][c]);
       }
     };
-    scan(berkeley, a.berkeley);
+    scan(monthly, a.monthly);
+    scan(annual, a.annual);
+    scan(decadal, a.decadal);
     scan(marcott, a.marcott);
     scan(ngrip, a.ngrip);
     scan(epica, a.epica);
@@ -373,11 +388,13 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
     if (a.epica > 0.02) strokeSeries(epica, t0, t1, COLORS.epica, 1.2, a.epica);
     if (a.ngrip > 0.02) strokeSeries(ngrip, t0, t1, COLORS.ngrip, 1.2, a.ngrip);
     if (a.marcott > 0.02) drawMarcott(a.marcott, t0, t1);
-    if (a.berkeley > 0.02) drawBerkeley(a.berkeley, t0, t1);
+    if (a.decadal > 0.02) strokeSeries(decadal, t0, t1, COLORS.berkeleyDecadal, 2, a.decadal);
+    if (a.annual > 0.02) strokeSeries(annual, t0, t1, COLORS.berkeley, 1.5, a.annual);
+    if (a.monthly > 0.02) drawMonthly(a.monthly, t0, t1);
 
-    // Latest decade, labelled at the end of the record.
-    if (a.berkeley > 0.02) {
-      context.globalAlpha = a.berkeley;
+    // Latest month, labelled at the end of the record.
+    if (Math.max(a.monthly, a.annual) > 0.02) {
+      context.globalAlpha = Math.max(a.monthly, a.annual);
       context.font = labelFont;
       context.fillStyle = COLORS.berkeley;
       context.textAlign = "right"; context.textBaseline = "bottom";
@@ -598,18 +615,16 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
     strokeSeries(marcott, t0, t1, COLORS.marcott, 1.5, alpha);
   }
 
-  // Berkeley Earth: decadal means, joined, with a dot each.
-  function drawBerkeley(alpha, t0, t1) {
-    strokeSeries(berkeley, t0, t1, COLORS.berkeley, 1.5, alpha);
+  // Berkeley Earth's months: a thin line, with a dot each while they are far enough apart.
+  function drawMonthly(alpha, t0, t1) {
+    strokeSeries(monthly, t0, t1, COLORS.berkeley, 1, alpha * 0.8);
+    if (look > 25) return;
     context.globalAlpha = alpha;
     context.fillStyle = COLORS.berkeley;
-    const r = look < 2000 ? dotR - 1 : look < 20000 ? 1.5 : 0;
-    if (r > 0) {
-      for (let i = lowerBound(berkeley, t0); i < berkeley.length && berkeley[i][0] <= t1; i++) {
-        context.beginPath();
-        context.arc(x(berkeley[i][0]), y(berkeley[i][1]), r, 0, 2 * Math.PI);
-        context.fill();
-      }
+    for (let i = lowerBound(monthly, t0); i < monthly.length && monthly[i][0] <= t1; i++) {
+      context.beginPath();
+      context.arc(x(monthly[i][0]), y(monthly[i][1]), 1.5, 0, 2 * Math.PI);
+      context.fill();
     }
     context.globalAlpha = 1;
   }
@@ -628,7 +643,9 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
     if (a.epica > 0.02) items.push(["EPICA Dome C, Antarctica (×0.5)", COLORS.epica, "line"]);
     if (a.ngrip > 0.02) items.push(["NGRIP, Greenland (×0.5)", COLORS.ngrip, "line"]);
     if (a.marcott > 0.02) items.push(["Marcott et al. (2013)", COLORS.marcott, "line"]);
-    if (a.berkeley > 0.02) items.push(["Berkeley Earth land-ocean", COLORS.berkeley, "line"]);
+    if (a.decadal > 0.02) items.push(["Berkeley Earth land-ocean, decades", COLORS.berkeleyDecadal, "line"]);
+    if (a.annual > 0.02) items.push(["Berkeley Earth land-ocean, years", COLORS.berkeley, "line"]);
+    if (a.monthly > 0.02) items.push(["Berkeley Earth land-ocean, months", COLORS.berkeley, "thin"]);
     return items;
   }
 
@@ -668,7 +685,8 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
         else if (pts[i][0] > tEnd - look * 0.45) { if (v > rightHigh) rightHigh = v; }
       }
     };
-    scan(berkeley, a.berkeley); scan(marcott, a.marcott); scan(ngrip, a.ngrip); scan(epica, a.epica);
+    scan(monthly, a.monthly); scan(annual, a.annual); scan(decadal, a.decadal);
+    scan(marcott, a.marcott); scan(ngrip, a.ngrip); scan(epica, a.epica);
     scan(lr, a.lr); scan(zachos, a.zachos); scan(royer, a.royer);
     // Only move if the left side would actually collide and the right side is clearer.
     return Number.isFinite(leftHigh) && y(leftHigh) < yLimit + 6 && (!Number.isFinite(rightHigh) || rightHigh < leftHigh);
@@ -762,14 +780,15 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
   overlay.addEventListener("pointerdown", () => stopTour());
 
   // ---- tour -----------------------------------------------------------------------------------
-  // The zoom out, paced by the landmarks: from the thermometer record, the chart widens to
-  // show each of the figure's landmarks in turn, resting long enough to read it, until the
-  // whole Phanerozoic is on screen. One way, then it stops and stays there; any click or
-  // drag ends it early. It starts by itself once, when the figure first scrolls into view.
+  // The zoom out, paced by the landmarks: from the last fifteen years, then the whole
+  // thermometer record, the chart widens to show each of the figure's landmarks in turn,
+  // resting long enough to read it, until the whole Phanerozoic is on screen. One way, then
+  // it stops and stays there; any click or drag ends it early. It starts by itself once,
+  // when the figure first scrolls into view.
   const TOUR_HOLD = 3200;
   const TOUR_GLIDE = 1600;
   // Landmarks close in age share a stop, so the tour does not pause twice on one view.
-  const tourStops = [200, ...landmarks.map(m => m.age * 2.5).filter(l => l < LOOK_MAX / 1.5), LOOK_MAX]
+  const tourStops = [15, 200, ...landmarks.map(m => m.age * 2.5).filter(l => l < LOOK_MAX / 1.5), LOOK_MAX]
     .filter((l, i, arr) => i === 0 || l > arr[i - 1] * 1.5 || i === arr.length - 1);
   let touring = false, tourTimer = null, tourWatcher = null;
 
@@ -864,6 +883,42 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
 }
 
 // ---- helpers ------------------------------------------------------------------------------------
+
+// Unpacks a monthly series {year, month, v: [...]} into [[decimalYear, value], ...], dropping
+// the missing months.
+export function unpackMonthly(packed) {
+  if (!packed) return [];
+  const out = [];
+  const start = packed.year * 12 + (packed.month - 1);
+  packed.v.forEach((val, i) => {
+    if (val === null) return;
+    const m = start + i;
+    out.push([Math.floor(m / 12) + ((m % 12) + 0.5) / 12, val]);
+  });
+  return out;
+}
+
+// Means of a monthly series over calendar periods of `years` years (1 for years, 10 for
+// decades), at the middle of each period, keeping only periods with every month present.
+function periodMeans(monthly, years) {
+  const sums = new Map();
+  for (const [t, v] of monthly) {
+    const k = Math.floor(Math.floor(t) / years);
+    const s = sums.get(k) ?? {n: 0, sum: 0};
+    s.n++; s.sum += v;
+    sums.set(k, s);
+  }
+  return [...sums].filter(([, s]) => s.n === 12 * years)
+    .map(([k, s]) => [(k + 0.5) * years, s.sum / s.n]).sort((a, b) => a[0] - b[0]);
+}
+
+function mean(values) {
+  return values.reduce((s, v) => s + v, 0) / values.length;
+}
+
+function monthName(t) {
+  return MONTHS[Math.min(11, Math.floor((t - Math.floor(t)) * 12))];
+}
 
 // First index whose time is >= t, in an array of [t, ...] rows sorted by t.
 function lowerBound(pts, t) {

@@ -15,19 +15,33 @@
 # The sheet also carries a Cretaceous record (Friedrich et al. 2012) that the figure does not
 # draw, so it is left out here too.
 #
+# The one record that has moved on since 2015 is the thermometer one. The figure's Berkeley
+# Earth decadal means (from a 2014 download) are replaced by Berkeley Earth's current global
+# land-ocean monthly series, which runs to the latest month:
+#
+#   https://storage.googleapis.com/berkeley-earth-temperature-hr/global/Global_TAVG_monthly.txt
+#
+# the high-resolution (0.25°) product that Berkeley Earth now updates in place of the old
+# 1° one, which stopped at December 2024. It is downloaded here unless a local copy is given
+# (the file has no CORS headers, so the page cannot fetch it live the way the CO₂ widget
+# fetches NOAA's). Its anomalies are against 1951-1980; the widget shifts them to the
+# figure's 1960-1990 baseline itself, from the data, and derives the annual and decadal means.
+#
 # Needs openpyxl. From the repo root:
 #   python3 -m venv .venv && .venv/bin/pip install openpyxl
-#   .venv/bin/python scripts/temperature-history.py <All_palaeotemps.xlsx>
+#   .venv/bin/python scripts/temperature-history.py <All_palaeotemps.xlsx> [Global_TAVG_monthly.txt]
 # which writes src/temperature-history/data/temperature-history.json.
 
 import json
 import os
 import sys
+import urllib.request
 
 import openpyxl
 from openpyxl.utils import column_index_from_string
 
 PRESENT = 2015   # the figure's "present": ages are thousands of years before this
+BERKELEY_URL = "https://storage.googleapis.com/berkeley-earth-temperature-hr/global/Global_TAVG_monthly.txt"
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "src", "temperature-history", "data",
                    "temperature-history.json")
@@ -37,7 +51,15 @@ def num(v):
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
-def main(path):
+def main(path, berkeley_path=None):
+    if berkeley_path:
+        with open(berkeley_path, encoding="utf-8", errors="replace") as f:
+            berkeley_text = f.read()
+    else:
+        print("downloading", BERKELEY_URL)
+        with urllib.request.urlopen(BERKELEY_URL) as r:
+            berkeley_text = r.read().decode("utf-8", errors="replace")
+
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     ws = wb["Data compilation"]
     rows = list(ws.iter_rows(min_row=4, values_only=True))
@@ -89,11 +111,9 @@ def main(path):
         "ngrip": series("AG", ["AK"], drop_leading_zeros=True),
         # Marcott et al. (2013) Holocene stack: value and 1-sigma.
         "marcott": series("AM", ["AN", "AO"]),
-        # Berkeley Earth land-ocean, decadal means, by year CE.
-        "berkeley": {
-            "columns": ["year CE", "T"],
-            "rows": sorted({(r[0], round(r[1], 3)) for r in zip(col("AQ"), col("AS")) if num(r[0]) and num(r[1])}),
-        },
+        # Berkeley Earth global land-ocean, monthly anomalies against 1951-1980, packed as
+        # {year, month, v: [...]} from the first month, null where a month is missing.
+        "berkeley": berkeley(berkeley_text),
         # IPCC AR5 RCP8.5 projections, by year CE.
         "ipcc": {
             "columns": ["year CE", "T"],
@@ -103,8 +123,10 @@ def main(path):
 
     for k in ("zachos", "lisieckiRaymo", "epica", "ngrip", "marcott"):
         print(f"{k}: {len(data[k])} rows, {data[k][0][0]}–{data[k][-1][0]} kyr")
-    print(f"royer: {len(data['royer']['rows'])} rows; berkeley: {len(data['berkeley']['rows'])}; "
-          f"ipcc: {len(data['ipcc']['rows'])}")
+    b = data["berkeley"]
+    last = b["year"] * 12 + b["month"] - 1 + len(b["v"]) - 1
+    print(f"royer: {len(data['royer']['rows'])} rows; ipcc: {len(data['ipcc']['rows'])}; "
+          f"berkeley: {len(b['v'])} months, {b['year']}-{b['month']:02d} to {last // 12}-{last % 12 + 1:02d}")
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as f:
@@ -132,7 +154,36 @@ def royer(col):
     return out
 
 
+def berkeley(text):
+    # Data lines: year, month, monthly anomaly, uncertainty, then the moving averages. The
+    # file has two sections (air and water temperature over sea ice); the first is the one
+    # Berkeley Earth reports, and the second repeats the same months, so a month already
+    # seen is left as it was.
+    months = {}
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("%"):
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        try:
+            year, month, v = int(parts[0]), int(parts[1]), float(parts[2])
+        except ValueError:
+            continue
+        key = year * 12 + month - 1
+        if key not in months and v == v:   # not NaN
+            months[key] = round(v, 3)
+    first, last = min(months), max(months)
+    return {
+        "source": BERKELEY_URL,
+        "baseline": "1951-1980",
+        "year": first // 12,
+        "month": first % 12 + 1,
+        "v": [months.get(k) for k in range(first, last + 1)],
+    }
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        sys.exit(__doc__ or "usage: temperature-history.py <All_palaeotemps.xlsx>")
-    main(sys.argv[1])
+    if len(sys.argv) not in (2, 3):
+        sys.exit("usage: temperature-history.py <All_palaeotemps.xlsx> [Global_TAVG_monthly.txt]")
+    main(*sys.argv[1:])
