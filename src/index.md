@@ -11,6 +11,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>The history of atmospheric CO₂</h2>
     <img class="thumb" src="./assets/thumbnails/co2-history.png" alt="Atmospheric CO₂ since 1958 as the rising red Mauna Loa and blue South Pole curves, with a look-back slider under the time axis that stretches it out to 800,000 years">
   </a>
+  <a class="card" href="./temperature-history/">
+    <h2>The history of global temperature</h2>
+    <img class="thumb" src="./assets/thumbnails/temperature-history.png" alt="Global temperature over the last 20,000 years as the blue Antarctic and green Greenland ice-core curves climbing out of the last ice age into the flat Holocene, with the geological periods in a band along the top and a look-back slider under the time axis that stretches it out to 540 million years">
+  </a>
   <a class="card" href="./co2-latitude/">
     <h2>CO₂ around the world</h2>
     <img class="thumb" src="./assets/thumbnails/co2-latitude.png" alt="An Equal Earth world map dotted with CO₂ stations, and beside it a thin plot of CO₂ against latitude lined up with the map, a black curve leaning towards the north with the stations as dots; underneath, the Mauna Loa and South Pole records since 1957 with a scrubber and a small clock riding the red curve">

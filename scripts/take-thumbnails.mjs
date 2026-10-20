@@ -65,6 +65,7 @@ const WIDGETS = [
   {name: "atmospheric-composition", query: "?level=2"},
   {name: "atmospheric-transmission"},
   {name: "co2-history", figure: "canvas"},
+  {name: "temperature-history", figure: "canvas"},
   {name: "co2-latitude", figure: "canvas"},
   {name: "carbon-budget-pie"},
   {name: "co2-per-capita-bars"},
