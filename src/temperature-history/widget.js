@@ -133,6 +133,7 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
   const landmarkAlpha = m => fadeIn(m.age * 1.02, m.age * 1.06) * fadeOut(m.age * 5, m.age * 8);
   const latest = monthly[monthly.length - 1];
   const latestLabel = `${monthName(latest[0])} ${Math.floor(latest[0])}: ${formatTemp(latest[1])}`;
+  const thermometerLow = Math.min(...decadal.map(p => p[1]));
 
   // The record's point a landmark hangs its leader on.
   function anchorPoint(m) {
@@ -270,8 +271,12 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
   applyLayout(maxW);
 
   // ---- scales ---------------------------------------------------------------------------------
+  // The window runs from `look` years before the latest month to a little after it, so
+  // the marker at the end of the record always has room and is never cut by the edge.
+  const RIGHT_PAD = 0.03;
   const tStart = () => tEnd - look;
-  const x = t => plotL + ((t - tStart()) / look) * (plotR - plotL);
+  const tRight = () => tEnd + look * RIGHT_PAD;
+  const x = t => plotL + ((t - tStart()) / (look * (1 + RIGHT_PAD))) * (plotR - plotL);
   const y = v => PLOT_B - ((v - yLo) / (yHi - yLo)) * PLOT_H;
 
   function sliderToLook(s) {
@@ -291,7 +296,10 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
   const alphas = () => ({
     monthly: fadeOut(40, 120),
     annual: fadeIn(25, 60) * fadeOut(1500, 5000),
-    decadal: fadeIn(250, 700) * fadeOut(30000, 100000),
+    decadal: fadeIn(250, 700) * fadeOut(20000, 60000),
+    // Once the decades are too narrow to draw, the thermometer record stays on screen as a
+    // bar from its coolest decade up to the latest month, so today is always in context.
+    spike: fadeIn(5000, 20000),
     marcott: fadeIn(400, 1200) * fadeOut(300000, 1e6),
     ngrip: fadeIn(800, 2500) * fadeOut(2e6, 6e6),
     epica: fadeIn(800, 2500) * fadeOut(10e6, 30e6),
@@ -305,7 +313,7 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
   // drawn, over the window.
   function targetRange() {
     const a = alphas();
-    const t0 = tStart(), t1 = tEnd + look * 0.02;
+    const t0 = tStart(), t1 = tRight();
     let lo = Infinity, hi = -Infinity;
     const take = v => { if (v < lo) lo = v; if (v > hi) hi = v; };
     const scan = (pts, alpha, cols = [1]) => {
@@ -325,6 +333,8 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
     scan(royer, a.royer, [1, 2, 3, 4]);
     if (!Number.isFinite(lo)) { lo = -1; hi = 1; }
     take(0);   // the 1960–1990 baseline is always in view
+    take(latest[1]);   // and so is the latest month
+    if (a.spike > 0.02) take(thermometerLow);
     const pad = Math.max(0.2, (hi - lo) * 0.08);
     return [lo - pad, hi + pad * 1.6];   // extra room above for the labels
   }
@@ -361,7 +371,7 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
 
   function drawChart(shown) {
     const a = alphas();
-    const t0 = tStart(), t1 = tEnd + look * 0.02;
+    const t0 = tStart(), t1 = tRight();
 
     // Gridlines and axes.
     const yt = yTicks(yLo, yHi, PLOT_H);
@@ -388,23 +398,27 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
     if (a.epica > 0.02) strokeSeries(epica, t0, t1, COLORS.epica, 1.2, a.epica);
     if (a.ngrip > 0.02) strokeSeries(ngrip, t0, t1, COLORS.ngrip, 1.2, a.ngrip);
     if (a.marcott > 0.02) drawMarcott(a.marcott, t0, t1);
+    if (a.spike > 0.02) {
+      context.globalAlpha = a.spike;
+      context.strokeStyle = COLORS.berkeley;
+      context.lineWidth = 2;
+      line(x(latest[0]), y(thermometerLow), x(latest[0]), y(latest[1]));
+      context.lineWidth = 1;
+      context.globalAlpha = 1;
+    }
     if (a.decadal > 0.02) strokeSeries(decadal, t0, t1, COLORS.berkeleyDecadal, 2, a.decadal);
     if (a.annual > 0.02) strokeSeries(annual, t0, t1, COLORS.berkeley, 1.5, a.annual);
     if (a.monthly > 0.02) drawMonthly(a.monthly, t0, t1);
 
-    // Latest month, labelled at the end of the record.
-    if (Math.max(a.monthly, a.annual) > 0.02) {
-      context.globalAlpha = Math.max(a.monthly, a.annual);
-      context.font = labelFont;
-      context.fillStyle = COLORS.berkeley;
-      context.textAlign = "right"; context.textBaseline = "bottom";
-      const endX = x(latest[0]), endY = y(latest[1]);
-      context.beginPath();
-      context.arc(endX, endY, dotR, 0, 2 * Math.PI);
-      context.fill();
-      haloText(latestLabel, Math.min(plotR - 4, endX + 4), endY - dotR - 3);
-      context.globalAlpha = 1;
-    }
+    // The latest month, always: a dot at the end of the record and its label.
+    context.font = labelFont;
+    context.fillStyle = COLORS.berkeley;
+    context.textAlign = "right"; context.textBaseline = "bottom";
+    const endX = x(latest[0]), endY = y(latest[1]);
+    context.beginPath();
+    context.arc(endX, endY, dotR, 0, 2 * Math.PI);
+    context.fill();
+    haloText(latestLabel, Math.min(plotR - 4, endX + 4), endY - dotR - 3);
 
     drawLandmarks(shown);
     context.restore();
@@ -643,6 +657,7 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
     if (a.epica > 0.02) items.push(["EPICA Dome C, Antarctica (×0.5)", COLORS.epica, "line"]);
     if (a.ngrip > 0.02) items.push(["NGRIP, Greenland (×0.5)", COLORS.ngrip, "line"]);
     if (a.marcott > 0.02) items.push(["Marcott et al. (2013)", COLORS.marcott, "line"]);
+    if (a.spike > 0.02) items.push(["Berkeley Earth land-ocean, 1850 to now", COLORS.berkeley, "line"]);
     if (a.decadal > 0.02) items.push(["Berkeley Earth land-ocean, decades", COLORS.berkeleyDecadal, "line"]);
     if (a.annual > 0.02) items.push(["Berkeley Earth land-ocean, years", COLORS.berkeley, "line"]);
     if (a.monthly > 0.02) items.push(["Berkeley Earth land-ocean, months", COLORS.berkeley, "thin"]);
@@ -712,7 +727,7 @@ export function createTemperatureHistoryWidget({data, width = FIGURE_WIDTH, look
     if (look <= 12000) {
       // Calendar years, negative ones as BCE.
       const step = niceStep(look, innerW, 62);
-      for (let yr = Math.ceil(t0 / step) * step; yr <= tEnd + look * 0.02; yr += step) {
+      for (let yr = Math.ceil(t0 / step) * step; yr <= tRight(); yr += step) {
         out.push({t: yr, label: yr > 0 ? `${yr}` : yr === 0 ? "1 BCE" : `${-yr} BCE`});
       }
       return out;
