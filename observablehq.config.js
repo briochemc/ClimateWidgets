@@ -26,6 +26,7 @@ export default {
     {name: "The carbon budget as a pie", path: "/carbon-budget-pie/"},
     {name: "CO\u2082 per person, as bars", path: "/co2-per-capita-bars/"},
     {name: "CO\u2082 per person today", path: "/co2-per-capita-today/"},
+    {name: "Paying into the climate funds", path: "/climate-funds/"},
     {name: "Extreme events", path: "/extreme-events/"},
     {name: "Extreme events, simply", path: "/extreme-events-simple/"},
     {name: "Extreme events, in real cities", path: "/extreme-events-cities/"},

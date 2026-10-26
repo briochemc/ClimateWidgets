@@ -79,6 +79,10 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>CO₂ per person today</h2>
     <img class="thumb" src="./assets/thumbnails/co2-per-capita-today.png" alt="The same stack of bars for the latest year only, with no slider: each country a bar as tall as its population and as long as its CO₂ per person, coloured by region, with notes around China's bar explaining height, length and area">
   </a>
+  <a class="card" href="./climate-funds/">
+    <h2>Paying into the climate funds</h2>
+    <img class="thumb" src="./assets/thumbnails/climate-funds.png" alt="Horizontal bars ranked from the top, one per donor country, Germany, Japan, France and the United States longest, each bar in segments coloured by fund with the Green Climate Fund's blue first, the dollar figure at the end of each bar, and above them a toggle between in all, per person and share of GDP and a key of six funds">
+  </a>
   <a class="card" href="./extreme-events/">
     <h2>Extreme events</h2>
     <img class="thumb" src="./assets/thumbnails/extreme-events.png" alt="A gray bell curve and a black one on a gray plate, over a bare axis reading cold, average, hot, under the title Small changes in the distribution can mean big changes in extremes; brackets under the axis mark the high extremes in red and the low in blue, the black curve's extra in the high tail is filled vivid red, and tabs for the distribution and three sliders for the mean, spread and skewness sit above">

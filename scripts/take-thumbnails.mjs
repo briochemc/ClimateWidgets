@@ -70,6 +70,7 @@ const WIDGETS = [
   {name: "carbon-budget-pie"},
   {name: "co2-per-capita-bars"},
   {name: "co2-per-capita-today"},
+  {name: "climate-funds"},
   {name: "extreme-events"},
   {name: "extreme-events-simple"},
   {name: "extreme-events-cities"},
