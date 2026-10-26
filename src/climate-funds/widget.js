@@ -12,16 +12,24 @@
 // wide enough to hold it; the arrow keys then walk the ranking. Donors that are not countries
 // (the European Union, development banks, the Adaptation Fund's sale of carbon credits, and the
 // receipts the record does not attribute to anyone) are one grey bar in the dollar view and
-// absent from the others, having no people or GDP of their own. Self-contained: no d3, no
-// imports.
+// absent from the others, having no people or GDP of their own. Drawn in the style of the
+// Hickman et al. widget, after Makie: a grey plate under the whole thing, a big bold title in
+// the corner, quiet grey gridlines with their labels on them, dark pill buttons, and the data
+// source in small grey type at the bottom right. Self-contained: no d3, no imports.
 //
 // Options: {measure: "total" | "perCapita" | "gdp" | "gdp1850"} opens on that measure; {fund:
 // "gcf"} on that fund alone; {width} caps the figure's width (it shrinks with its container
 // below that).
 
-const FIGURE_WIDTH = 720;
+const CARD_WIDTH = 640;         // the page column, as the other widgets fill it
+const CARD_PAD = 12;            // the plate's padding either side of the figure
+const FIGURE_WIDTH = CARD_WIDTH - 2 * CARD_PAD;
 const MIN_WIDTH = 320;
-const ACCENT = "#0b57d0";
+const BACKGROUND = "#f2f2f2";   // Makie's :gray95, as in the Hickman widget
+const GRID = "#b3b3b3";
+const LINK = "#0b57d0";
+const TITLE = "Contributions to climate funds";
+const SOURCE_URL = "https://financesone.worldbank.org/api-explorer?id=DS00073";
 const EPS = 1e-9;
 const ROW_H = 16;            // one country
 const OTHER_CODE = "__other";
@@ -105,66 +113,78 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
   }
 
   // ---- layout ---------------------------------------------------------------------------------
+  // Text is measured, not estimated, so the names take exactly the room the longest needs
+  // and nothing written along the axis runs past its end.
+  const ctx = document.createElement("canvas").getContext("2d");
+  function textWidth(text, px, weight = "normal") {
+    ctx.font = `${weight} ${px}px sans-serif`;
+    return ctx.measureText(text).width;
+  }
+  const NAME_FONT = 12;
+  const longestName = Math.max(...rows.map(r => textWidth(r.name, NAME_FONT, "bold")));
+
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
-  let w, nameRoom, plotL, plotR, plotT, plotB, svgH;
+  let w, nameRoom, plotL, plotR, plotT, plotB, svgH, titleFont, sourceFont;
   function applyLayout(newW, n) {
     w = newW;
-    nameRoom = clamp(Math.round(w * 0.22), 92, 150);   // the country names, right-aligned against the bars
+    const t = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
+    const lerp = (a, b) => a + (b - a) * t;
+    titleFont = lerp(16, 22);
+    sourceFont = lerp(7, 8);
+    nameRoom = Math.min(Math.ceil(longestName) + 4, Math.round(w * 0.3));   // the country names, right-aligned against the bars
     plotL = nameRoom + 6;
     plotR = w - clamp(Math.round(w * 0.12), 56, 84);   // room for the value at the end of the longest bar
     plotT = 44;                                          // the axis title and ticks, above the bars
     plotB = plotT + n * ROW_H;
-    svgH = plotB + 8;
+    svgH = plotB + 26;                                   // the source line under the bars
   }
   applyLayout(maxW, ranking().length);
 
   // ---- DOM ------------------------------------------------------------------------------------
+  // The plate runs under the whole widget, title and buttons included, so it reads as one card;
+  // the SVG paints its own background in the same colour, so it stands on its own if pulled out.
   const container = document.createElement("div");
-  container.style.cssText = "font:16px sans-serif;color:#333;";
+  container.style.cssText = `font:16px sans-serif;color:#333;background:${BACKGROUND};padding:10px ${CARD_PAD}px ${CARD_PAD}px;` +
+    `border-radius:6px;box-sizing:border-box;max-width:${maxW + 2 * CARD_PAD}px;`;
+
+  const heading = document.createElement("div");
+  heading.style.cssText = "font-weight:bold;color:#111;line-height:1.2;padding:4px 0 10px;";
+  heading.textContent = TITLE;
+  container.appendChild(heading);
 
   const controls = document.createElement("div");
-  controls.style.cssText = "display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 16px;padding:0 0 8px;font-size:13px;";
+  controls.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0 0 8px;";
   container.appendChild(controls);
 
+  // Pill buttons as in the Hickman widget: the one pressed is dark with white type.
+  const PILL = "font:14px sans-serif;padding:6px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;" +
+    "display:inline-flex;align-items:center;gap:7px;transition:background-color .15s,color .15s,border-color .15s;";
+  function stylePill(b, active) {
+    b.style.border = active ? "1px solid #333" : "1px solid #ccc";
+    b.style.background = active ? "#333" : "#fff";
+    b.style.color = active ? "#fff" : "#333";
+    b.setAttribute("aria-pressed", String(active));
+  }
   function buttonRow(choices, onPick) {
-    const bar = document.createElement("div");
-    bar.style.cssText = "display:flex;align-items:center;gap:6px;color:#666;";
-    const buttons = choices.map((choice, i) => {
+    const buttons = choices.map(choice => {
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = choice.label;
       if (choice.title) b.title = choice.title;
-      const first = i === 0, last = i === choices.length - 1;
-      b.style.cssText =
-        "font:13px sans-serif;padding:3px 10px;cursor:pointer;border:1px solid #ccc;position:relative;white-space:nowrap;" +
-        `border-radius:${first ? "999px 0 0 999px" : last ? "0 999px 999px 0" : "0"};${first ? "" : "margin-left:-1px;"}`;
+      b.style.cssText = PILL;
       b.addEventListener("click", () => onPick(choice.id));
-      bar.appendChild(b);
+      controls.appendChild(b);
       return b;
     });
-    const update = current => buttons.forEach((b, i) => {
-      const on = choices[i].id === current;
-      b.style.background = on ? hexToRgba(ACCENT, 0.08) : "#fff";
-      b.style.borderColor = on ? ACCENT : "#ccc";
-      b.style.color = on ? ACCENT : "#333";
-      b.style.zIndex = on ? 1 : 0;
-      b.setAttribute("aria-pressed", on);
-    });
-    controls.appendChild(bar);
-    return update;
+    return current => buttons.forEach((b, i) => stylePill(b, choices[i].id === current));
   }
   const updateMeasureButtons = buttonRow(MEASURES, setMeasure);
-
-  const asOf = document.createElement("span");
-  asOf.style.cssText = "color:#666;margin-left:auto;";
-  asOf.textContent = `Received by ${formatDate(data.meta?.dataAsOf)}`;
-  controls.appendChild(asOf);
 
   // The key: "All", with an empty swatch, then one swatch per fund by its acronym; click a fund
   // to see it alone, "All" for the six together. Hovering (or focusing) an entry names the fund
   // in full, in a tip just under it.
   const key = document.createElement("div");
-  key.style.cssText = "position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;padding:0 0 6px;font-size:13px;color:#333;";
+  key.style.cssText = "position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0 0 10px;";
   const tip = document.createElement("div");
   tip.style.cssText = "position:absolute;display:none;z-index:2;pointer-events:none;background:#222;color:#fff;font:12px sans-serif;" +
     "padding:3px 8px;border-radius:4px;white-space:nowrap;";
@@ -172,11 +192,10 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
     const item = document.createElement("button");
     item.type = "button";
     item.setAttribute("aria-label", f.name);
-    item.style.cssText = "display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font:inherit;color:inherit;" +
-      "background:none;border:1px solid transparent;border-radius:999px;padding:1px 6px 1px 4px;margin:-2px -6px -2px -4px;cursor:pointer;";
+    item.style.cssText = PILL + "padding-left:10px;";
     const swatch = document.createElement("span");
     swatch.style.cssText = f.id === null
-      ? "width:9px;height:9px;border-radius:2px;border:1px solid #666;background:none;flex:none;"
+      ? "width:9px;height:9px;border-radius:2px;border:1px solid currentColor;background:none;flex:none;"
       : `width:11px;height:11px;border-radius:2px;background:${FUND_COLOURS[f.id] ?? "#888"};flex:none;`;
     item.append(swatch, f.short);
     item.addEventListener("click", () => setFund(f.id));
@@ -196,12 +215,7 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
   });
   key.appendChild(tip);
   function updateKey() {
-    for (const {item, id} of keyItems) {
-      const on = keyFund === id;
-      item.style.borderColor = on ? ACCENT : "transparent";
-      item.style.color = on ? ACCENT : "inherit";
-      item.setAttribute("aria-pressed", on);
-    }
+    for (const {item, id} of keyItems) stylePill(item, keyFund === id);
   }
   container.appendChild(key);
 
@@ -230,13 +244,15 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
   const pxOf = v => (plotR - plotL) * clamp(v / vMax, 0, 1);
 
   // ---- drawing --------------------------------------------------------------------------------
-  let axisGroup, barGroup, labelGroup, pickPath;
+  let axisGroup, barGroup, labelGroup, pickPath, plate, sourceLink = null;
   const barEls = new Map();   // code → {g, segs: {fundId: rect}, name}
 
   function build() {
+    heading.style.fontSize = `${titleFont.toFixed(1)}px`;
     svg.setAttribute("width", w.toFixed(0));
     svg.setAttribute("height", svgH.toFixed(0));
     svg.replaceChildren();
+    plate = svgEl("rect", {x: 0, y: 0, width: F(w), height: F(svgH), fill: BACKGROUND}, svg);
     axisGroup = svgEl("g", {"pointer-events": "none", "font-family": "sans-serif"}, svg);
     barGroup = svgEl("g", {}, svg);
     barEls.clear();
@@ -319,7 +335,7 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
         x += sw;
       }
       const picked = code === pick;
-      const nameFont = Math.min(12, (nameRoom - 2) / (CHAR * r.name.length));
+      const nameFont = Math.min(NAME_FONT, NAME_FONT * (nameRoom - 2) / textWidth(r.name, NAME_FONT, "bold"));
       el.name.setAttribute("y", F(ROW_H / 2));
       el.name.setAttribute("font-size", nameFont.toFixed(1));
       el.name.setAttribute("font-weight", picked ? "bold" : "normal");
@@ -336,23 +352,40 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
     describe(list);
   }
 
-  // The scale along the top: ticks, faint gridlines down through the rows, and a title that
-  // says what is measured.
+  // The scale along the top: quiet grey gridlines down through the rows with their labels on
+  // them, no spine, and above them a line in the same grey that says what is measured; the
+  // data source in small grey type under the bars, at the right.
   function drawAxis() {
     axisGroup.replaceChildren();
     const step = niceStep(vMax / 5);
     for (let v = 0; v <= vMax + EPS; v += step) {
       const x = plotL + pxOf(v);
-      svgEl("path", {d: `M${F(x)},${F(plotT - 4)}V${F(plotB)}`, stroke: v === 0 ? "#222" : "rgba(0,0,0,0.08)", "stroke-width": 1}, axisGroup);
-      const tl = svgEl("text", {x: F(x), y: F(plotT - 7), "text-anchor": "middle", "font-size": 11, fill: "#333"}, axisGroup);
+      svgEl("path", {d: `M${F(x)},${F(plotT - 4)}V${F(plotB)}`, stroke: GRID, "stroke-width": 1}, axisGroup);
+      const tl = svgEl("text", {x: F(x), y: F(plotT - 7), "text-anchor": "middle", "font-size": 11, fill: GRID}, axisGroup);
       tl.textContent = formatTick(v);
     }
-    // The title in full where it fits at 12 px, else the short form, shrunk if even that is too long.
-    const room = w - plotL - 4;
-    const [long, short] = axisTitle();
-    const text = CHAR * 12 * long.length <= room ? long : short;
-    const title = svgEl("text", {x: F(plotL), y: F(plotT - 24), "font-size": Math.min(12, room / (CHAR * text.length)).toFixed(1), fill: "#333"}, axisGroup);
-    title.textContent = text;
+    // The title and the source line each in full where it fits within the axis, else the short
+    // form, shrunk if even that is too long: neither runs past the axis's end.
+    const room = plotR - plotL;
+    const fit = (long, short, px) => {
+      const text = textWidth(long, px) <= room ? long : short;
+      return {text, font: Math.min(px, px * room / textWidth(text, px))};
+    };
+    const title = fit(...axisTitle(), 12);
+    const titleEl = svgEl("text", {x: F(plotL), y: F(plotT - 24), "font-size": title.font.toFixed(1), fill: "#808080"}, axisGroup);
+    titleEl.textContent = title.text;
+    const asOf = formatDate(data.meta?.dataAsOf);
+    const source = fit(`Data source: World Bank, Contributions (Receipts) to Trust Funds, Finances One DS00073, receipts to ${asOf}`,
+      `Data source: World Bank Finances One DS00073, to ${asOf}`, sourceFont);
+    // A link to the dataset, in link blue; its own group, since the axis group takes no pointer.
+    const link = svgEl("a", {href: SOURCE_URL, target: "_blank", rel: "noopener"}, svg);
+    link.style.cssText = "cursor:pointer;";
+    link.addEventListener("click", e => e.stopPropagation());
+    const sourceEl = svgEl("text", {x: F(plotR), y: F(svgH - 8), "text-anchor": "end", "font-size": source.font.toFixed(1), fill: LINK, "text-decoration": "underline", "font-family": "sans-serif"}, link);
+    sourceEl.textContent = source.text;
+    axisGroup.after(link);
+    sourceLink?.remove();
+    sourceLink = link;
   }
   function axisTitle() {
     const what = keyFund ? `paid into the ${fundById.get(keyFund).name}` : "paid into the six funds";
@@ -459,6 +492,7 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
     const n = ranking().length;
     applyLayout(w, n);
     svg.setAttribute("height", svgH.toFixed(0));
+    plate.setAttribute("height", F(svgH));
     for (const el of barEls.values()) { el.hit.setAttribute("width", F(w)); el.name.setAttribute("x", F(plotL - 6)); }
   }
   function setMeasure(m) {
@@ -557,8 +591,4 @@ function niceStep(v) {
 }
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
-}
-function hexToRgba(hex, alpha) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }

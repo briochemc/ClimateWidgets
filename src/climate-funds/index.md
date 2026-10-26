@@ -35,10 +35,10 @@ import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
 ```js
 display(embedSnippets({
   embedPath: "climate-funds/embed",
-  height: 1060,
+  height: 1160,
   title: "Paying into the climate funds",
-  note: "The figure is about 1,000&nbsp;px tall whatever the width, one row per donor, and fills the frame up to 720&nbsp;px wide; " +
-    "allow about 1,100&nbsp;px of height at phone width, where the controls wrap. The embed page accepts <code>?measure=perCapita</code>, " +
+  note: "The figure is about 1,140&nbsp;px tall whatever the width, one row per donor, and fills the frame up to 640&nbsp;px wide; " +
+    "allow about 1,200&nbsp;px of height at phone width, where the buttons wrap. The embed page accepts <code>?measure=perCapita</code>, " +
     "<code>?measure=gdp</code> or <code>?measure=gdp1850</code> to open on that measure, and <code>?fund=gcf</code> (or gef, ldcf, sccf, af, frld) to open on one fund.",
   script: `<div id="climate-funds"></div>
 
