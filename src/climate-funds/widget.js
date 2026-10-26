@@ -1,25 +1,28 @@
-// What each country has paid into the UNFCCC's climate funds, as a ranked stack of bars. Every
-// country that has paid anything is a row; its bar is the money it has paid in since July
-// 2011, when the World Bank's open record of receipts begins, in segments coloured by fund, the
-// Green Climate Fund first. Four measures: the dollars in all; dollars per person, by today's
-// population; the money as a share of the country's GDP summed over the same years, which is
-// the fairest of the three since the numerator is fifteen years of payments; and as a share of
-// GDP summed since 1850, the wealth a country has made over the period the CO₂ widgets count
-// its emissions over. The rows are ranked by the measure shown, the most at the top, and slide
-// to their new places when the measure or the fund changes. Click a fund in the key to see that
-// fund alone (and the ranking by it), and "All" for the six together; hovering a key entry
-// names the fund in full. Click or tap a bar for its breakdown by fund, written in the segments
-// wide enough to hold it; the arrow keys then walk the ranking. Donors that are not countries
-// (the European Union, development banks, the Adaptation Fund's sale of carbon credits, and the
-// receipts the record does not attribute to anyone) are one grey bar in the dollar view and
-// absent from the others, having no people or GDP of their own. Drawn in the style of the
-// Hickman et al. widget, after Makie: a grey plate under the whole thing, a big bold title in
-// the corner, quiet grey gridlines with their labels on them, dark pill buttons, and the data
-// source in small grey type at the bottom right. Self-contained: no d3, no imports.
+// What each country has pledged to and paid into the UNFCCC's climate funds, as a ranked stack
+// of bars. Every country that has paid anything is a row; its bar is the money, in segments
+// coloured by fund, the Green Climate Fund first. Two bases: what was received (the Green
+// Climate Fund, the Adaptation Fund and the Loss and Damage fund as their own reports count it,
+// cash plus promissory notes deposited; the GEF, LDCF and SCCF as the World Bank's record of
+// receipts has it, cash and notes encashed since July 2011), and what was pledged, which only
+// the first three publish donor by donor, so the pledged view shows those three alone. Four
+// measures: the dollars in all; dollars per person, by today's population; the money as a
+// share of the country's GDP summed over the years the receipts cover; and as a share of GDP
+// summed since 1850, the wealth a country has made over the period the CO₂ widgets count its
+// emissions over. The rows are ranked by the measure shown, the most at the top, and slide to
+// their new places when anything changes. Click a fund in the key to see that fund alone (and
+// the ranking by it), and "All" for the funds together; hovering a key entry names the fund in
+// full. Click or tap a bar for its breakdown by fund, written in the segments wide enough to
+// hold it; the arrow keys then walk the ranking. Donors that are not countries (the European
+// Union, the UNFCCC secretariat, development banks, private donors, and the receipts the World
+// Bank does not attribute to anyone) are one grey bar in the dollar view and absent from the
+// others, having no people or GDP of their own. Drawn in the style of the Hickman et al.
+// widget, after Makie: a grey plate under the whole thing, a big bold title in the corner,
+// quiet grey gridlines with their labels on them, dark pill buttons, and the sources, one link
+// per report, in small type at the bottom right. Self-contained: no d3, no imports.
 //
-// Options: {measure: "total" | "perCapita" | "gdp" | "gdp1850"} opens on that measure; {fund:
-// "gcf"} on that fund alone; {width} caps the figure's width (it shrinks with its container
-// below that).
+// Options: {basis: "received" | "pledged"}, {measure: "total" | "perCapita" | "gdp" | "gdp1850"}
+// and {fund: "gcf"} open on that basis, measure or fund; {width} caps the figure's width (it
+// shrinks with its container below that).
 
 const CARD_WIDTH = 640;         // the page column, as the other widgets fill it
 const CARD_PAD = 12;            // the plate's padding either side of the figure
@@ -29,25 +32,29 @@ const BACKGROUND = "#f2f2f2";   // Makie's :gray95, as in the Hickman widget
 const GRID = "#b3b3b3";
 const LINK = "#0b57d0";
 const TITLE = "Contributions to climate funds";
-const SOURCE_URL = "https://financesone.worldbank.org/api-explorer?id=DS00073";
 const EPS = 1e-9;
 const ROW_H = 16;            // one country
 const OTHER_CODE = "__other";
 const OTHER_NAME = "EU and other donors";   // the non-country donors and the unattributed receipts, as one bar
 
-export const MEASURES = [
-  {id: "total", label: "In all", title: "Dollars paid in since July 2011"},
-  {id: "perCapita", label: "Per person", title: "Dollars paid in since July 2011, divided by today's population"},
-  {id: "gdp", label: "Share of GDP", title: "Dollars paid in since July 2011, divided by GDP summed over the same years"},
-  {id: "gdp1850", label: "Share of GDP since 1850", title: "Dollars paid in since July 2011, divided by GDP summed since 1850"},
+export const BASES = [
+  {id: "received", label: "Received", title: "What the funds have received: cash, and promissory notes deposited"},
+  {id: "pledged", label: "Pledged", title: "What was pledged, for the three funds that publish pledges donor by donor"},
 ];
+export const MEASURES = [
+  {id: "total", label: "In all", title: "Dollars"},
+  {id: "perCapita", label: "Per person", title: "Dollars divided by today's population"},
+  {id: "gdp", label: "Share of GDP", title: "Dollars divided by GDP summed over the years the receipts cover"},
+  {id: "gdp1850", label: "Share of GDP since 1850", title: "Dollars divided by GDP summed since 1850"},
+];
+const BASIS_IDS = BASES.map(b => b.id);
 const MEASURE_IDS = MEASURES.map(m => m.id);
 
 // Okabe–Ito, one per fund, in the order the segments are stacked.
 export const FUND_COLOURS = {gcf: "#0072B2", gef: "#009E73", ldcf: "#E69F00", sccf: "#56B4E9", af: "#D55E00", frld: "#CC79A7"};
 const OTHER_COLOUR = "#9a9a9a";
 
-export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: initialMeasure, fund: initialFund} = {}) {
+export function createClimateFundsWidget({data, width = FIGURE_WIDTH, basis: initialBasis, measure: initialMeasure, fund: initialFund} = {}) {
   if (!data?.funds || !data?.countries) throw new Error("createClimateFundsWidget needs {data}: the contents of climate-funds.json");
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
 
@@ -55,30 +62,36 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
   const funds = data.funds;
   const fundIds = funds.map(f => f.id);
   const fundById = new Map(funds.map(f => [f.id, f]));
+  const pledgeFunds = funds.filter(f => f.pledges).map(f => f.id);
   const sum = arr => arr.reduce((s, v) => s + (v ?? 0), 0);
-  const firstYear = data.years[0], lastYear = data.years[data.years.length - 1];
   const [gdpFirst, gdpLast] = data.gdpYears;
   const [g1850First, g1850Last] = data.gdp1850Years ?? [1850, gdpLast];
-  // Each row: the dollars paid to each fund (millions), and the denominators.
+  // Each row: the dollars (millions) per fund on each basis, and the denominators.
   const rows = data.countries.map(c => ({
     code: c.code, name: c.name, pop: c.pop, gdp: c.gdp, popYear: c.popYear, gdp1850: c.gdp1850, gdp1850From: c.gdp1850From,
-    byFund: Object.fromEntries(fundIds.map(id => [id, sum(c.paid[id])])),
+    received: c.received, pledged: c.pledged,
   }));
   const otherRow = {
-    code: OTHER_CODE, name: OTHER_NAME, pop: null, gdp: null, other: true,
-    byFund: Object.fromEntries(fundIds.map(id => [id, sum(data.other.map(o => sum(o.paid[id])))])),
-    parts: data.other.map(o => ({name: o.name, total: sum(Object.values(o.paid).flat())})).sort((a, b) => b.total - a.total),
+    code: OTHER_CODE, name: OTHER_NAME, pop: null, gdp: null, gdp1850: null, other: true,
+    received: Object.fromEntries(fundIds.map(id => [id, sum(data.other.map(o => o.received[id]))])),
+    pledged: Object.fromEntries(fundIds.map(id => [id, sum(data.other.map(o => o.pledged[id]))])),
+    parts: data.other.map(o => ({name: o.name, total: sum(Object.values(o.received))})).sort((a, b) => b.total - a.total),
   };
   rows.push(otherRow);
   const rowByCode = new Map(rows.map(r => [r.code, r]));
 
   // ---- state ----------------------------------------------------------------------------------
+  let basis = BASIS_IDS.includes(initialBasis) ? initialBasis : "received";
   let measure = MEASURE_IDS.includes(initialMeasure) ? initialMeasure : "total";
   let keyFund = fundIds.includes(initialFund) ? initialFund : null;
   let selected = null, hovered = null;
   const shown = () => hovered ?? selected;
   const layout = new Map();   // code → {y, w: {fundId: px}, alpha}: where each bar is now, chasing its target
   let raf = null, lastFrame = 0;
+
+  // The funds that have figures on the basis shown.
+  const shownFunds = () => basis === "received" ? fundIds : pledgeFunds;
+  const amountOf = (r, id) => r[basis][id] ?? 0;
 
   // The denominator of a row in the measure shown: 1 for dollars, millions of people, billions
   // of dollars of GDP, trillions of GDP since 1850. Null when the row has none (the non-country
@@ -99,14 +112,16 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
     if (measure === "gdp") return 100 * millions / (1000 * d); // $m / $bn, as a percentage
     return 100 * millions / (1e6 * d);                         // $m / $tn, as a percentage
   }
-  // The ranking: every row with something to show in the measure and the fund(s) shown.
+  // The ranking: every row with something to show on the basis, in the measure and for the
+  // fund(s) shown.
   function ranking() {
     const list = [];
+    const ids = shownFunds().filter(id => !keyFund || id === keyFund);
     for (const r of rows) {
-      const paid = keyFund ? r.byFund[keyFund] : sum(Object.values(r.byFund));
+      const paid = sum(ids.map(id => amountOf(r, id)));
       const v = valueOf(paid, r);
       if (v === null || !(paid > 0)) continue;
-      list.push({r, paid, v, seg: Object.fromEntries(fundIds.map(id => [id, keyFund && id !== keyFund ? 0 : valueOf(r.byFund[id], r)]))});
+      list.push({r, paid, v, seg: Object.fromEntries(fundIds.map(id => [id, ids.includes(id) ? valueOf(amountOf(r, id), r) : 0]))});
     }
     list.sort((a, b) => b.v - a.v || a.r.name.localeCompare(b.r.name));
     return list;
@@ -123,8 +138,25 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
   const NAME_FONT = 12;
   const longestName = Math.max(...rows.map(r => textWidth(r.name, NAME_FONT, "bold")));
 
+  // The sources, spelt out: the funds whose own PDF reports were read, one link each, then the
+  // World Bank's record for the rest, as pieces of one line that wraps when it must.
+  const sourcePieces = (() => {
+    const own = funds.filter(f => f.pledges && f.source?.url);
+    const rest = funds.filter(f => !f.pledges && f.source?.url);
+    const pieces = [{text: `Figures for the ${own.map(f => f.short).join(", ")} were extracted from PDF reports: `}];
+    own.forEach((f, i) => {
+      if (i) pieces.push({text: ", "});
+      pieces.push({text: `${f.short} (${formatDate(f.source.asOf)})`, url: f.source.url, title: f.source.title});
+    });
+    if (rest.length) {
+      pieces.push({text: `. Figures for the ${rest.map(f => f.short).join(", ")}: `});
+      pieces.push({text: `World Bank receipts (${formatDate(rest[0].source.asOf)})`, url: rest[0].source.url, title: rest[0].source.title});
+    }
+    return pieces;
+  })();
+
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
-  let w, nameRoom, plotL, plotR, plotT, plotB, svgH, titleFont, sourceFont;
+  let w, nameRoom, plotL, plotR, plotT, plotB, svgH, titleFont, sourceFont, sourceLines;
   function applyLayout(newW, n) {
     w = newW;
     const t = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
@@ -136,7 +168,18 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
     plotR = w - clamp(Math.round(w * 0.12), 56, 84);   // room for the value at the end of the longest bar
     plotT = 44;                                          // the axis title and ticks, above the bars
     plotB = plotT + n * ROW_H;
-    svgH = plotB + 26;                                   // the source line under the bars
+    // The source line, wrapped into as many lines as the axis's width needs, a piece never
+    // split and a comma never starting a line.
+    sourceLines = [];
+    let line = [], lineW = 0;
+    for (const p of sourcePieces) {
+      const pw = textWidth(p.text, sourceFont);
+      if (line.length && p.url && lineW + pw > plotR - plotL) { sourceLines.push(line); line = []; lineW = 0; }
+      line.push({...p, w: pw});
+      lineW += pw;
+    }
+    if (line.length) sourceLines.push(line);
+    svgH = plotB + 12 + sourceLines.length * (sourceFont + 4) + 4;
   }
   applyLayout(maxW, ranking().length);
 
@@ -152,20 +195,20 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
   heading.textContent = TITLE;
   container.appendChild(heading);
 
-  const controls = document.createElement("div");
-  controls.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0 0 8px;";
-  container.appendChild(controls);
-
-  // Pill buttons as in the Hickman widget: the one pressed is dark with white type.
+  // Pill buttons as in the Hickman widget: the one pressed is dark with white type; one that
+  // cannot be pressed now (a fund with no pledges, in the pledged view) is faded.
   const PILL = "font:14px sans-serif;padding:6px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;" +
-    "display:inline-flex;align-items:center;gap:7px;transition:background-color .15s,color .15s,border-color .15s;";
-  function stylePill(b, active) {
+    "display:inline-flex;align-items:center;gap:7px;transition:background-color .15s,color .15s,border-color .15s,opacity .15s;";
+  function stylePill(b, active, enabled = true) {
     b.style.border = active ? "1px solid #333" : "1px solid #ccc";
     b.style.background = active ? "#333" : "#fff";
     b.style.color = active ? "#fff" : "#333";
+    b.style.opacity = enabled ? "1" : "0.4";
+    b.style.cursor = enabled ? "pointer" : "default";
     b.setAttribute("aria-pressed", String(active));
+    b.setAttribute("aria-disabled", String(!enabled));
   }
-  function buttonRow(choices, onPick) {
+  function buttonRow(parent, choices, onPick) {
     const buttons = choices.map(choice => {
       const b = document.createElement("button");
       b.type = "button";
@@ -173,22 +216,31 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
       if (choice.title) b.title = choice.title;
       b.style.cssText = PILL;
       b.addEventListener("click", () => onPick(choice.id));
-      controls.appendChild(b);
+      parent.appendChild(b);
       return b;
     });
     return current => buttons.forEach((b, i) => stylePill(b, choices[i].id === current));
   }
-  const updateMeasureButtons = buttonRow(MEASURES, setMeasure);
+  const controls = document.createElement("div");
+  controls.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;padding:0 0 8px;";
+  container.appendChild(controls);
+  const basisRow = document.createElement("div");
+  basisRow.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:8px;";
+  const measureRow = document.createElement("div");
+  measureRow.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:8px;";
+  controls.append(basisRow, measureRow);
+  const updateBasisButtons = buttonRow(basisRow, BASES, setBasis);
+  const updateMeasureButtons = buttonRow(measureRow, MEASURES, setMeasure);
 
   // The key: "All", with an empty swatch, then one swatch per fund by its acronym; click a fund
-  // to see it alone, "All" for the six together. Hovering (or focusing) an entry names the fund
-  // in full, in a tip just under it.
+  // to see it alone, "All" for the funds together. Hovering (or focusing) an entry names the
+  // fund in full, in a tip just under it.
   const key = document.createElement("div");
   key.style.cssText = "position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0 0 10px;";
   const tip = document.createElement("div");
   tip.style.cssText = "position:absolute;display:none;z-index:2;pointer-events:none;background:#222;color:#fff;font:12px sans-serif;" +
     "padding:3px 8px;border-radius:4px;white-space:nowrap;";
-  const keyItems = [{id: null, short: "All", name: "All six funds together"}, ...funds].map(f => {
+  const keyItems = [{id: null, short: "All", name: "All the funds together"}, ...funds].map(f => {
     const item = document.createElement("button");
     item.type = "button";
     item.setAttribute("aria-label", f.name);
@@ -198,9 +250,9 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
       ? "width:9px;height:9px;border-radius:2px;border:1px solid currentColor;background:none;flex:none;"
       : `width:11px;height:11px;border-radius:2px;background:${FUND_COLOURS[f.id] ?? "#888"};flex:none;`;
     item.append(swatch, f.short);
-    item.addEventListener("click", () => setFund(f.id));
+    item.addEventListener("click", () => { if (f.id === null || shownFunds().includes(f.id)) setFund(f.id); });
     const show = () => {
-      tip.textContent = f.name;
+      tip.textContent = f.id !== null && !shownFunds().includes(f.id) ? `${f.name}: no pledge table published` : f.name;
       tip.style.left = `${item.offsetLeft}px`;
       tip.style.top = `${item.offsetTop + item.offsetHeight + 2}px`;
       tip.style.display = "block";
@@ -215,7 +267,7 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
   });
   key.appendChild(tip);
   function updateKey() {
-    for (const {item, id} of keyItems) stylePill(item, keyFund === id);
+    for (const {item, id} of keyItems) stylePill(item, keyFund === id, id === null || shownFunds().includes(id));
   }
   container.appendChild(key);
 
@@ -244,7 +296,7 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
   const pxOf = v => (plotR - plotL) * clamp(v / vMax, 0, 1);
 
   // ---- drawing --------------------------------------------------------------------------------
-  let axisGroup, barGroup, labelGroup, pickPath, plate, sourceLink = null;
+  let axisGroup, barGroup, labelGroup, pickPath, plate, sourceGroup;
   const barEls = new Map();   // code → {g, segs: {fundId: rect}, name}
 
   function build() {
@@ -258,6 +310,8 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
     barEls.clear();
     pickPath = svgEl("path", {fill: "none", stroke: "#111", "stroke-width": 1.5, "pointer-events": "none"}, svg);
     labelGroup = svgEl("g", {"pointer-events": "none", "font-family": "sans-serif"}, svg);
+    sourceGroup = svgEl("g", {"font-family": "sans-serif"}, svg);
+    drawSources();
     snapLayout();
     render();
   }
@@ -353,8 +407,7 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
   }
 
   // The scale along the top: quiet grey gridlines down through the rows with their labels on
-  // them, no spine, and above them a line in the same grey that says what is measured; the
-  // data source in small grey type under the bars, at the right.
+  // them, no spine, and above them a line in the same grey that says what is measured.
   function drawAxis() {
     axisGroup.replaceChildren();
     const step = niceStep(vMax / 5);
@@ -364,36 +417,46 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
       const tl = svgEl("text", {x: F(x), y: F(plotT - 7), "text-anchor": "middle", "font-size": 11, fill: GRID}, axisGroup);
       tl.textContent = formatTick(v);
     }
-    // The title and the source line each in full where it fits within the axis, else the short
-    // form, shrunk if even that is too long: neither runs past the axis's end.
+    // The title in full where it fits within the axis at 12 px, else the short form, shrunk if
+    // even that is too long: it never runs past the axis's end.
     const room = plotR - plotL;
-    const fit = (long, short, px) => {
-      const text = textWidth(long, px) <= room ? long : short;
-      return {text, font: Math.min(px, px * room / textWidth(text, px))};
-    };
-    const title = fit(...axisTitle(), 12);
-    const titleEl = svgEl("text", {x: F(plotL), y: F(plotT - 24), "font-size": title.font.toFixed(1), fill: "#808080"}, axisGroup);
-    titleEl.textContent = title.text;
-    const asOf = formatDate(data.meta?.dataAsOf);
-    const source = fit(`Data source: World Bank, Contributions (Receipts) to Trust Funds, Finances One DS00073, receipts to ${asOf}`,
-      `Data source: World Bank Finances One DS00073, to ${asOf}`, sourceFont);
-    // A link to the dataset, in link blue; its own group, since the axis group takes no pointer.
-    const link = svgEl("a", {href: SOURCE_URL, target: "_blank", rel: "noopener"}, svg);
-    link.style.cssText = "cursor:pointer;";
-    link.addEventListener("click", e => e.stopPropagation());
-    const sourceEl = svgEl("text", {x: F(plotR), y: F(svgH - 8), "text-anchor": "end", "font-size": source.font.toFixed(1), fill: LINK, "text-decoration": "underline", "font-family": "sans-serif"}, link);
-    sourceEl.textContent = source.text;
-    axisGroup.after(link);
-    sourceLink?.remove();
-    sourceLink = link;
+    const [long, short] = axisTitle();
+    const text = textWidth(long, 12) <= room ? long : short;
+    const title = svgEl("text", {x: F(plotL), y: F(plotT - 24), "font-size": Math.min(12, 12 * room / textWidth(text, 12)).toFixed(1), fill: "#808080"}, axisGroup);
+    title.textContent = text;
   }
   function axisTitle() {
-    const what = keyFund ? `paid into the ${fundById.get(keyFund).name}` : "paid into the six funds";
-    const since = `since July ${firstYear - 1}`;
-    if (measure === "total") return [`${what} ${since} (millions of US$)`, `millions of US$ ${since}`];
-    if (measure === "perCapita") return [`${what} ${since}, per person (US$)`, `US$ per person, ${since}`];
-    if (measure === "gdp") return [`${what} ${since}, as a share of GDP over ${gdpFirst}–${gdpLast} (%)`, `% of GDP over ${gdpFirst}–${gdpLast}`];
-    return [`${what} ${since}, as a share of GDP over ${g1850First}–${g1850Last} (%)`, `% of GDP over ${g1850First}–${g1850Last}`];
+    const what = keyFund ? fundById.get(keyFund).name
+      : basis === "received" ? "the six funds" : `the ${pledgeFunds.map(id => fundById.get(id).short).join(", ")}`;
+    const verb = basis === "received" ? "paid into" : "pledged to";
+    if (measure === "total") return [`${verb} ${what} (millions of US$)`, `millions of US$ ${verb} ${what}`];
+    if (measure === "perCapita") return [`${verb} ${what}, per person (US$)`, `US$ per person ${verb} ${what}`];
+    if (measure === "gdp") return [`${verb} ${what}, as a share of GDP over ${gdpFirst}–${gdpLast} (%)`, `% of GDP over ${gdpFirst}–${gdpLast}`];
+    return [`${verb} ${what}, as a share of GDP over ${g1850First}–${g1850Last} (%)`, `% of GDP over ${g1850First}–${g1850Last}`];
+  }
+
+  // The sources under the bars, right-aligned against the axis's end, each report a link in
+  // link blue; their own group, since the axis group takes no pointer.
+  function drawSources() {
+    sourceGroup.replaceChildren();
+    const lineH = sourceFont + 4;
+    sourceLines.forEach((line, i) => {
+      const y = plotB + 12 + i * lineH + sourceFont;
+      let x = plotR - line.reduce((s, p) => s + p.w, 0);
+      for (const p of line) {
+        let parent = sourceGroup;
+        if (p.url) {
+          parent = svgEl("a", {href: p.url, target: "_blank", rel: "noopener"}, sourceGroup);
+          parent.style.cssText = "cursor:pointer;";
+          parent.addEventListener("click", e => e.stopPropagation());
+          if (p.title) svgEl("title", {}, parent).textContent = p.title;
+        }
+        const tx = svgEl("text", {x: F(x), y: F(y), "font-size": sourceFont.toFixed(1), fill: p.url ? LINK : "#808080", "xml:space": "preserve",
+          ...(p.url ? {"text-decoration": "underline"} : {})}, parent);
+        tx.textContent = p.text;
+        x += p.w;
+      }
+    });
   }
 
   // The value at the end of each bar; for the bar picked out, bold and black, and each fund's
@@ -434,7 +497,9 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
   function describe(list) {
     const code = shown();
     const it = code ? list.find(x => x.r.code === code) : null;
-    const scope = keyFund ? `the ${fundById.get(keyFund).name}` : "the six UNFCCC climate funds";
+    const scope = keyFund ? `the ${fundById.get(keyFund).name}`
+      : basis === "received" ? "the six UNFCCC climate funds" : `the ${pledgeFunds.map(id => fundById.get(id).name).join(", ")}`;
+    const verb = basis === "received" ? "paid into" : "pledged to";
     const unit = measure === "total" ? "" : measure === "perCapita" ? " per person"
       : measure === "gdp" ? ` of GDP over ${gdpFirst}–${gdpLast}` : ` of GDP over ${g1850First}–${g1850Last}`;
     let text;
@@ -443,12 +508,12 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
       const from = measure === "gdp1850" && it.r.gdp1850From > g1850First ? ` Its GDP record begins in ${it.r.gdp1850From}.` : "";
       text = it.r.other
         ? `${it.r.name}: ${formatValue(it.v, measure)} in all (${parts}); of which ${it.r.parts.map(p => `${p.name} ${formatValue(p.total, "total")}`).join(", ")}.`
-        : `${it.r.name}, ranked ${list.indexOf(it) + 1} of ${list.length}: ${formatValue(it.v, measure)}${unit} paid into ${scope} since July ${firstYear - 1} (${parts}).${from}`;
+        : `${it.r.name}, ranked ${list.indexOf(it) + 1} of ${list.length}: ${formatValue(it.v, measure)}${unit} ${verb} ${scope} (${parts}).${from}`;
     } else {
       const top = list.slice(0, 3).map(x => `${x.r.name} ${formatValue(x.v, measure)}`).join(", ");
-      text = `${list.length} donors ranked by what they paid into ${scope} since July ${firstYear - 1}${unit}; the top three are ${top}.`;
+      text = `${list.length} donors ranked by what they ${verb} ${scope}${unit}; the top three are ${top}.`;
     }
-    svg.setAttribute("aria-label", `Money paid into the UNFCCC climate funds by country, as ranked bars in segments coloured by fund. ${text}`);
+    svg.setAttribute("aria-label", `Money ${verb} the UNFCCC climate funds by country, as ranked bars in segments coloured by fund. ${text}`);
   }
 
   // ---- pointer --------------------------------------------------------------------------------
@@ -493,27 +558,35 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
     applyLayout(w, n);
     svg.setAttribute("height", svgH.toFixed(0));
     plate.setAttribute("height", F(svgH));
+    drawSources();
     for (const el of barEls.values()) { el.hit.setAttribute("width", F(w)); el.name.setAttribute("x", F(plotL - 6)); }
   }
-  function setMeasure(m) {
-    if (m === measure || !MEASURE_IDS.includes(m)) return;
-    measure = m;
-    updateMeasureButtons(measure);
-    hovered = null;
-    // The non-country bar has no people or GDP, so it leaves with the dollar view.
-    if (selected === OTHER_CODE && measure !== "total") selected = null;
-    resize();
-    requestRender();
-    emit();
-  }
-  function setFund(f) {
-    keyFund = f;
-    updateKey();
+  function afterChange() {
     hovered = null;
     if (selected && !ranking().some(it => it.r.code === selected)) selected = null;
     resize();
     requestRender();
     emit();
+  }
+  function setBasis(b) {
+    if (b === basis || !BASIS_IDS.includes(b)) return;
+    basis = b;
+    updateBasisButtons(basis);
+    // A fund with no pledges cannot be the one shown in the pledged view.
+    if (keyFund && !shownFunds().includes(keyFund)) keyFund = null;
+    updateKey();
+    afterChange();
+  }
+  function setMeasure(m) {
+    if (m === measure || !MEASURE_IDS.includes(m)) return;
+    measure = m;
+    updateMeasureButtons(measure);
+    afterChange();
+  }
+  function setFund(f) {
+    keyFund = f;
+    updateKey();
+    afterChange();
   }
 
   // ---- value ----------------------------------------------------------------------------------
@@ -521,7 +594,7 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
     const list = ranking();
     const sel = selected ? list.find(it => it.r.code === selected) : null;
     return {
-      measure, fund: keyFund, donors: list.length,
+      basis, measure, fund: keyFund, donors: list.length,
       selected: sel ? {name: sel.r.name, value: Number(sel.v.toPrecision(4)), rank: list.indexOf(sel) + 1} : null,
       total: Number(list.reduce((s, it) => s + it.paid, 0).toPrecision(5)),
     };
@@ -531,6 +604,8 @@ export function createClimateFundsWidget({data, width = FIGURE_WIDTH, measure: i
     container.dispatchEvent(new CustomEvent("input", {bubbles: true}));
   }
 
+  if (keyFund && !shownFunds().includes(keyFund)) keyFund = null;
+  updateBasisButtons(basis);
   updateMeasureButtons(measure);
   updateKey();
   build();
@@ -582,7 +657,7 @@ function formatTick(v) {
 function formatDate(iso) {
   if (!iso) return "";
   const d = new Date(`${iso}T00:00:00Z`);
-  return d.toLocaleDateString("en-GB", {day: "numeric", month: "long", year: "numeric", timeZone: "UTC"});
+  return d.toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"});
 }
 function niceStep(v) {
   const mag = Math.pow(10, Math.floor(Math.log10(v)));

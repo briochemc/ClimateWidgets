@@ -32,12 +32,13 @@ import {createClimateFundsWidget} from "./widget.js";
 const data = await FileAttachment("./data/climate-funds.json").json();
 
 // ?measure=perCapita, ?measure=gdp or ?measure=gdp1850 opens on that measure; ?fund=gcf (gef,
-// ldcf, sccf, af, frld) on that fund alone.
+// ldcf, sccf, af, frld) on that fund alone; ?basis=pledged on what was pledged rather than paid.
 const params = new URLSearchParams(location.search);
 const measure = params.get("measure") ?? undefined;
 const fund = params.get("fund") ?? undefined;
+const basis = params.get("basis") ?? undefined;
 ```
 
 ```js
-const funds = view(createClimateFundsWidget({data, measure, fund}));
+const funds = view(createClimateFundsWidget({data, measure, fund, basis}));
 ```
