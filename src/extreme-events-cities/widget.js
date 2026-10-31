@@ -33,8 +33,8 @@
 // back in. Two things carry it: `alpha`, the curves' opacity, and `wave`, how far the bars
 // are through their sink or rise, which each bin joins a little after the one to its left.
 
-import {geoEqualEarth, geoPath} from "https://cdn.jsdelivr.net/npm/d3-geo@3/+esm";
-import {feature} from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
+import {geoEqualEarth, geoPath} from "npm:d3-geo@3";
+import {feature} from "npm:topojson-client@3";
 import {pearson3, formatShare} from "../extreme-events/widget.js";
 
 const BACKGROUND = "#f2f2f2";

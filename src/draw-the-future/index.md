@@ -7,7 +7,7 @@ import {createClimateWidget} from "./widget.js";
 
 const co2 = await FileAttachment("data/co2_all.json").json();
 const pco2 = await FileAttachment("data/pco2_all.json").json();
-const d3 = await import("https://esm.sh/d3@5");
+const d3 = await import("npm:d3@5");
 ```
 
 ```js

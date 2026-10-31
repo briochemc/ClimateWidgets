@@ -22,8 +22,8 @@
 // The data file is built by scripts/co2-history.mjs; see its header for the layout of the
 // packed monthly series.
 
-import {geoEqualEarth, geoPath} from "https://cdn.jsdelivr.net/npm/d3-geo@3/+esm";
-import {feature} from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
+import {geoEqualEarth, geoPath} from "npm:d3-geo@3";
+import {feature} from "npm:topojson-client@3";
 
 const ACCENT = "#0b57d0";
 const MLO_COLOR = "#d62728";

@@ -27,8 +27,8 @@
 // passed in as `world` (the repo's countries-110m.json) and is optional: without it the
 // globe is ocean and graticule.
 
-import {geoOrthographic, geoPath, geoGraticule, geoDistance, geoContains} from "https://cdn.jsdelivr.net/npm/d3-geo@3/+esm";
-import {feature} from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
+import {geoOrthographic, geoPath, geoGraticule, geoDistance, geoContains} from "npm:d3-geo@3";
+import {feature} from "npm:topojson-client@3";
 
 const BACKGROUND = "#f2f2f2";
 const ACCENT = "#0b57d0";

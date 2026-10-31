@@ -16,9 +16,9 @@
 // the existing elements, no rebuild), so the CSS transitions below animate every switch:
 // the Framework runtime itself does not offer this — a reactive Framework cell re-runs its
 // whole block and replaces the DOM outright, discarding any mid-animation state.
-import {geoEqualEarth, geoPath} from "https://cdn.jsdelivr.net/npm/d3-geo@3/+esm";
-import {feature} from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
-import {interpolateBrBG, interpolateViridis} from "https://cdn.jsdelivr.net/npm/d3-scale-chromatic@3/+esm";
+import {geoEqualEarth, geoPath} from "npm:d3-geo@3";
+import {feature} from "npm:topojson-client@3";
+import {interpolateBrBG, interpolateViridis} from "npm:d3-scale-chromatic@3";
 
 const BACKGROUND = "#f2f2f2";
 const OCEAN = "#e6e6e6";
