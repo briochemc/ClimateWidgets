@@ -23,7 +23,7 @@ No pie rounds up. The original graphic prints a tidy 97% over several of these s
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -37,9 +37,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createConsensusStudiesWidget, parseConsensusStudies}
-    from "${cdnUrl("consensus-studies/widget.js")}";
+    from "${libUrl("consensus-studies/widget.js")}";
 
-  const csv = await fetch("${cdnUrl("consensus-studies/data/consensus-studies.csv")}")
+  const csv = await fetch("${libUrl("consensus-studies/data/consensus-studies.csv")}")
     .then(r => r.text());
 
   document.getElementById("consensus-studies")

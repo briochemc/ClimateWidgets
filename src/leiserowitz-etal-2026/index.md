@@ -19,7 +19,7 @@ The values are derived in [`scripts/leiserowitz-etal-2026.jl`](https://github.co
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -33,9 +33,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createLeiserowitzEtal2026Widget, parseLeiserowitzEtal2026}
-    from "${cdnUrl("leiserowitz-etal-2026/widget.js")}";
+    from "${libUrl("leiserowitz-etal-2026/widget.js")}";
 
-  const csv = await fetch("${cdnUrl("leiserowitz-etal-2026/data/leiserowitz-etal-2026.csv")}")
+  const csv = await fetch("${libUrl("leiserowitz-etal-2026/data/leiserowitz-etal-2026.csv")}")
     .then(r => r.text());
 
   document.getElementById("leiserowitz-etal-2026")

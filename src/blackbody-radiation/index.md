@@ -64,7 +64,7 @@ The two stellar values, for the Sun and Sirius, are effective temperatures: the 
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -79,7 +79,7 @@ display(embedSnippets({
 
 <script type="module">
   import {createBlackbodyRadiationWidget}
-    from "${cdnUrl("blackbody-radiation/widget.js")}";
+    from "${libUrl("blackbody-radiation/widget.js")}";
 
   // Options: {temperature: 288} opens on the Earth's surface instead of the Sun,
   // {scale: "linear"} on the linear wavelength axis instead of the logarithmic one.

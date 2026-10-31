@@ -17,7 +17,7 @@ const today = view(createCo2PerCapitaTodayWidget({data}));
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -32,9 +32,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createCo2PerCapitaTodayWidget}
-    from "${cdnUrl("co2-per-capita-today/widget.js")}";
+    from "${libUrl("co2-per-capita-today/widget.js")}";
 
-  const data = await fetch("${cdnUrl("co2-per-capita/data/co2-per-capita.json")}")
+  const data = await fetch("${libUrl("co2-per-capita/data/co2-per-capita.json")}")
     .then(r => r.json());
 
   // Options: {mode: "cumulative"} opens on emissions since 1850.

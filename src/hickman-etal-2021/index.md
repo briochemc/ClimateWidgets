@@ -21,7 +21,7 @@ Bars are shown as a percentage of the selected group's respondents, on a fixed 0
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -36,9 +36,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createHickmanEtal2021Widget, parseHickmanEtal2021}
-    from "${cdnUrl("hickman-etal-2021/widget.js")}";
+    from "${libUrl("hickman-etal-2021/widget.js")}";
 
-  const csv = await fetch("${cdnUrl("hickman-etal-2021/data/hickman-etal-2021.csv")}")
+  const csv = await fetch("${libUrl("hickman-etal-2021/data/hickman-etal-2021.csv")}")
     .then(r => r.text());
 
   document.getElementById("hickman-etal-2021")

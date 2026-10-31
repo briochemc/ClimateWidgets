@@ -31,7 +31,7 @@ The figures come from each fund's own report where it publishes one donor by don
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -47,9 +47,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createClimateFundsWidget}
-    from "${cdnUrl("climate-funds/widget.js")}";
+    from "${libUrl("climate-funds/widget.js")}";
 
-  const data = await fetch("${cdnUrl("climate-funds/data/climate-funds.json")}")
+  const data = await fetch("${libUrl("climate-funds/data/climate-funds.json")}")
     .then(r => r.json());
 
   // Options: {basis: "pledged"} opens on pledges; {measure: "perCapita"}, {measure: "gdp"} or {measure: "gdp1850"}

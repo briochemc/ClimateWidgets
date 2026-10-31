@@ -51,7 +51,7 @@ Things to know before quoting a number from it:
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -72,9 +72,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createAtmosphericTransmissionWidget}
-    from "${cdnUrl("atmospheric-transmission/widget.js")}";
+    from "${libUrl("atmospheric-transmission/widget.js")}";
 
-  const data = await fetch("${cdnUrl("atmospheric-transmission/data/transmission.json")}")
+  const data = await fetch("${libUrl("atmospheric-transmission/data/transmission.json")}")
     .then(r => r.json());
 
   // Options: {amounts: {h2o: "tropical", co2: 278, ch4: "1750", n2o: "doubled"}} opens on those amounts,

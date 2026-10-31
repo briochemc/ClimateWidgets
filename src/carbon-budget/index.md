@@ -88,7 +88,7 @@ The layout is a waffle chart: a grid of unit squares, 60 wide, filled from the b
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -105,9 +105,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createCarbonBudgetWidget}
-    from "${cdnUrl("carbon-budget/widget.js")}";
+    from "${libUrl("carbon-budget/widget.js")}";
 
-  const data = await fetch("${cdnUrl("carbon-budget/data/carbon-budget.json")}")
+  const data = await fetch("${libUrl("carbon-budget/data/carbon-budget.json")}")
     .then(r => r.json());
 
   // Options: {year: 1990} opens on that year, {colour: "region"}, {colour: "year"} or

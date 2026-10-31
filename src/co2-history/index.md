@@ -29,7 +29,7 @@ The small labels are landmarks for the scale of the axis, from the Paris Agreeme
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -45,9 +45,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createCo2HistoryWidget, updateMaunaLoa}
-    from "${cdnUrl("co2-history/widget.js")}";
+    from "${libUrl("co2-history/widget.js")}";
 
-  const data = await fetch("${cdnUrl("co2-history/data/co2-history.json")}")
+  const data = await fetch("${libUrl("co2-history/data/co2-history.json")}")
     .then(r => r.json());
 
   // Optional: bring Mauna Loa up to date from NOAA (the bundled data are the fallback).

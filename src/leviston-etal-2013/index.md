@@ -23,7 +23,7 @@ The four opinion-group sample sizes (Not happening 283, Don't know 189, Natural 
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -37,9 +37,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createLevistonEtal2013Widget, parseLevistonEtal2013}
-    from "${cdnUrl("leviston-etal-2013/widget.js")}";
+    from "${libUrl("leviston-etal-2013/widget.js")}";
 
-  const csv = await fetch("${cdnUrl("leviston-etal-2013/data/leviston-etal-2013.csv")}")
+  const csv = await fetch("${libUrl("leviston-etal-2013/data/leviston-etal-2013.csv")}")
     .then(r => r.text());
 
   document.getElementById("leviston-etal-2013")

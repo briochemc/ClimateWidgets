@@ -25,7 +25,7 @@ For the same picture with the year fixed and nothing moving, see [CO₂ per pers
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -40,9 +40,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createCo2PerCapitaBarsWidget}
-    from "${cdnUrl("co2-per-capita-bars/widget.js")}";
+    from "${libUrl("co2-per-capita-bars/widget.js")}";
 
-  const data = await fetch("${cdnUrl("co2-per-capita/data/co2-per-capita.json")}")
+  const data = await fetch("${libUrl("co2-per-capita/data/co2-per-capita.json")}")
     .then(r => r.json());
 
   // Options: {year: 1990} opens on that year, {mode: "cumulative"} on emissions since 1850.

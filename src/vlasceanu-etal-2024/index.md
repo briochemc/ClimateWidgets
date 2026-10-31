@@ -35,7 +35,7 @@ Belief, policy support and sharing are all reported on a 0–100 scale, so the t
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -50,15 +50,15 @@ display(embedSnippets({
 
 <script type="module">
   import {createVlasceanuEtal2024Widget, parseVlasceanuEtal2024}
-    from "${cdnUrl("vlasceanu-etal-2024/widget.js")}";
+    from "${libUrl("vlasceanu-etal-2024/widget.js")}";
 
-  const base = "${cdnUrl("vlasceanu-etal-2024/data/")}";
+  const base = "${libUrl("vlasceanu-etal-2024/data/")}";
   const [belief, policy, sharing, wept, world] = await Promise.all([
     fetch(base + "tabS5.csv").then(r => r.text()),
     fetch(base + "tabS6.csv").then(r => r.text()),
     fetch(base + "tabS7.csv").then(r => r.text()),
     fetch(base + "tabS8.csv").then(r => r.text()),
-    fetch("${cdnUrl("data/countries-110m.json")}").then(r => r.json()),
+    fetch("${libUrl("data/countries-110m.json")}").then(r => r.json()),
   ]);
 
   document.getElementById("vlasceanu-etal-2024").appendChild(

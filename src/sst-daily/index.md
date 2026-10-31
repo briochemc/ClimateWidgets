@@ -26,7 +26,7 @@ The current year's loop ends at the most recent available observation, prelimina
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -42,7 +42,7 @@ display(embedSnippets({
 
 <script type="module">
   import {createSstDailyWidget, sstUnavailableNotice}
-    from "${cdnUrl("sst-daily/widget.js")}";
+    from "${libUrl("sst-daily/widget.js")}";
 
   const host = document.getElementById("sst-daily");
   try {

@@ -73,7 +73,7 @@ The layout is the one xkcd used for its [Money](https://xkcd.com/980/) chart: a 
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -90,9 +90,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createAtmosphericCompositionWidget}
-    from "${cdnUrl("atmospheric-composition/widget.js")}";
+    from "${libUrl("atmospheric-composition/widget.js")}";
 
-  const data = await fetch("${cdnUrl("atmospheric-composition/data/composition.json")}")
+  const data = await fetch("${libUrl("atmospheric-composition/data/composition.json")}")
     .then(r => r.json());
 
   // Options: {level: 2} opens zoomed in to the second grid, {waterVapour: 10000} with

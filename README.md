@@ -2,7 +2,7 @@
 
 Small, self-contained interactive figures for teaching climate science, built with [Observable Framework](https://observablehq.com/framework/) and published at **https://briochemc.github.io/ClimateWidgets/**.
 
-Each widget is one page. The page explains the figure, says where its numbers come from, and ends with a copy-pastable snippet for dropping the widget into your own site or LMS, either as an `<iframe>` or as a `<script type="module">` tag that renders it inline (the module is served from jsDelivr straight out of this repository).
+Each widget is one page. The page explains the figure, says where its numbers come from, and ends with a copy-pastable snippet for dropping the widget into your own site or LMS, either as an `<iframe>` or as a `<script type="module">` tag that renders it inline. Both load everything from this site: the build writes an unhashed copy of each widget's module and data under `lib/` for the script snippets to point at.
 
 Widgets so far: drawing your own future CO₂ emissions, the history of atmospheric CO₂ from the ice ages to this week, the history of global temperature from the Cambrian to the thermometer record, CO₂ against latitude month by month, global temperature trends, daily sea surface temperature, several surveys of what people believe about climate change and what a probability word means to them, blackbody radiation, what the air is made of, what the atmosphere lets through at each wavelength, the carbon budget filling up as a pie, CO₂ per person by country as a stack of bars, with the years playing or fixed to the latest one, what each country has paid into the UNFCCC's climate funds, in all, per person or as a share of GDP, how a shift in a probability distribution changes the odds of its extremes, and the Coriolis effect, as a ball thrown across a spinning turntable and as a parcel of air launched over the spinning Earth.
 
@@ -19,7 +19,7 @@ npm run dev
 
 Then open http://localhost:3000. The preview reloads as you edit files under `src/`.
 
-`npm run build` writes the static site to `dist/`. Pushing to `main` deploys it to GitHub Pages through `.github/workflows/deploy.yml`.
+`npm run build` writes the static site to `dist/`, then runs `scripts/stable-paths.mjs`, which adds the unhashed `dist/lib/` copies that the script-tag snippets import. Pushing to `main` deploys it to GitHub Pages through `.github/workflows/deploy.yml`.
 
 ## Layout
 
@@ -30,4 +30,4 @@ Then open http://localhost:3000. The preview reloads as you edit files under `sr
 - `scripts/`: the Julia, Python and Node scripts that produced those data files (never run by the site; `co2-history.mjs` downloads every CO₂ record afresh and feeds both CO₂ widgets, so re-run it to refresh their data, `temperature-history.py` downloads Berkeley Earth's latest months the same way, and `climate-funds.mjs` pulls the World Bank's quarterly record of receipts for the climate-funds widget), and `take-thumbnails.mjs`, which re-captures the homepage cards with `npm run thumbnails` after a build. The atmospheric-transmission script needs RADIS and the carbon-budget and temperature-history ones need openpyxl; their headers say how to set that up.
 - `observablehq.config.js`: the sidebar, one entry per widget, with the archived ones in a collapsed section at the end.
 
-Most widgets have no runtime dependencies beyond the browser. The exceptions are *Draw the future*, which uses d3 v5, and the three world-map widgets and the Coriolis globe, which import d3-geo and topojson-client (and, for the two survey maps, d3-scale-chromatic) from a CDN and share the land outline in `src/data/countries-110m.json`.
+Most widgets have no dependencies beyond the browser. The exceptions are *Draw the future*, which uses d3-array, d3-scale and d3-shape, and the three world-map widgets and the Coriolis globe, which use d3-geo and topojson-client (and, for the two survey maps, d3-scale-chromatic) and share the land outline in `src/data/countries-110m.json`. These are imported with Framework's `npm:` specifiers, so the build copies them into the site and nothing is fetched from a third-party CDN at runtime; some students' networks (mainland China's, for one) block those CDNs, and a widget that does reach for one fails for them with a misleading "Failed to fetch dynamically imported module" error.

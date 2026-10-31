@@ -26,7 +26,7 @@ The values are derived in [`scripts/andre-etal-2024.jl`](https://github.com/brio
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -42,12 +42,12 @@ display(embedSnippets({
 
 <script type="module">
   import {createAndreEtal2024Widget, parseAndreEtal2024}
-    from "${cdnUrl("andre-etal-2024/widget.js")}";
+    from "${libUrl("andre-etal-2024/widget.js")}";
 
   const [csv, world] = await Promise.all([
-    fetch("${cdnUrl("andre-etal-2024/data/andre-etal-2024.csv")}")
+    fetch("${libUrl("andre-etal-2024/data/andre-etal-2024.csv")}")
       .then(r => r.text()),
-    fetch("${cdnUrl("data/countries-110m.json")}").then(r => r.json()),
+    fetch("${libUrl("data/countries-110m.json")}").then(r => r.json()),
   ]);
 
   document.getElementById("andre-etal-2024")

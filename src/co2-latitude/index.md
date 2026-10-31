@@ -22,7 +22,7 @@ Before 1979 there is no reference curve, only the handful of stations that exist
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -35,16 +35,16 @@ display(embedSnippets({
     "the frame. The map keeps its 2:1 shape, so the figure is shorter in a narrow column " +
     "(about 440 at 320&nbsp;px). The bundled data are refreshed now and then; the last few " +
     "months are always sparse because the stations' monthly means are published about a " +
-    "year behind. The map's projection comes from d3-geo on a CDN.",
+    "year behind.",
   script: `<div id="co2-latitude"></div>
 
 <script type="module">
   import {createCo2LatitudeWidget}
-    from "${cdnUrl("co2-latitude/widget.js")}";
+    from "${libUrl("co2-latitude/widget.js")}";
 
   const [data, world] = await Promise.all([
-    fetch("${cdnUrl("co2-latitude/data/co2-latitude.json")}").then(r => r.json()),
-    fetch("${cdnUrl("data/countries-110m.json")}").then(r => r.json()),
+    fetch("${libUrl("co2-latitude/data/co2-latitude.json")}").then(r => r.json()),
+    fetch("${libUrl("data/countries-110m.json")}").then(r => r.json()),
   ]);
 
   const host = document.getElementById("co2-latitude");

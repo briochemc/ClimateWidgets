@@ -25,7 +25,7 @@ Left alone, the figure winds back to 1850, plays the years through once and stop
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -42,9 +42,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createCarbonBudgetPieWidget}
-    from "${cdnUrl("carbon-budget-pie/widget.js")}";
+    from "${libUrl("carbon-budget-pie/widget.js")}";
 
-  const data = await fetch("${cdnUrl("carbon-budget/data/carbon-budget.json")}")
+  const data = await fetch("${libUrl("carbon-budget/data/carbon-budget.json")}")
     .then(r => r.json());
 
   // Options: {year: 1990}, {colour: "country"} (or "region", "year"; "decade" is the default),

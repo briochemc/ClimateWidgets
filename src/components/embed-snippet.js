@@ -9,12 +9,17 @@
 export const SITE = "https://briochemc.github.io/ClimateWidgets/";
 
 // Framework fingerprints everything it builds (`_import/widget.<hash>.js`), so built URLs
-// change on every deploy and cannot be pasted into a snippet. jsDelivr serves the source
-// files straight from the GitHub repo instead: stable paths, CORS enabled, no build step.
-export const CDN = "https://cdn.jsdelivr.net/gh/briochemc/ClimateWidgets@main/src/";
+// change from one deploy to the next and cannot be pasted into a snippet. After each build,
+// scripts/stable-paths.mjs writes an unhashed copy of every widget module and data file
+// under `lib/` on this site, mirroring the `src/` layout, so the snippets load from the
+// same origin as the iframes and depend on no third-party CDN (which some students'
+// networks block). The snippets used to load the raw source from jsDelivr's GitHub
+// mirror; that stopped working once the widgets imported their libraries with Framework's
+// `npm:` specifiers, which only the build understands.
+export const LIB = SITE + "lib/";
 
 export const siteUrl = path => new URL(path, SITE).href;
-export const cdnUrl = path => CDN + path;
+export const libUrl = path => LIB + path;
 
 export function embedSnippets({embedPath, height, title, script, note}) {
   const root = document.createElement("div");
@@ -36,7 +41,8 @@ export function embedSnippets({embedPath, height, title, script, note}) {
   root.appendChild(snippetBlock({
     heading: "As a script tag",
     blurb: "Renders the widget directly in your page, with no iframe, so it inherits your " +
-      "page width. Needs a browser that supports ES modules, which all current ones do.",
+      "page width. Needs a browser that supports ES modules, which all current ones do. " +
+      "Code and data come from this site, nothing from a third-party CDN.",
     code: script,
   }));
 

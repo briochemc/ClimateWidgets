@@ -21,7 +21,7 @@ The last two buttons take that to its limit: they are the flattest and the steep
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -37,9 +37,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createTemperatureTrendWidget, parseGistemp}
-    from "${cdnUrl("temperature-trend/widget.js")}";
+    from "${libUrl("temperature-trend/widget.js")}";
 
-  const csv = await fetch("${cdnUrl("temperature-trend/data/GLB.Ts+dSST.csv")}")
+  const csv = await fetch("${libUrl("temperature-trend/data/GLB.Ts+dSST.csv")}")
     .then(r => r.text());
 
   const host = document.getElementById("temperature-trend");

@@ -29,7 +29,7 @@ What the rider sees is described in the rotating frame by two fictitious forces:
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -44,7 +44,7 @@ display(embedSnippets({
 
 <script type="module">
   import {createCoriolisWidget}
-    from "${cdnUrl("coriolis/widget.js")}";
+    from "${libUrl("coriolis/widget.js")}";
 
   // Options: {frame: "rotating"} opens with the view from the turntable instead of
   // the room; {rpm: 6} sets the rotation in turns per minute, negative for

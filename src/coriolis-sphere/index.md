@@ -45,7 +45,7 @@ The tour has two scenes. The first flies the view to 153.5° E, 31.5° S at nine
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -59,9 +59,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createCoriolisSphereWidget}
-    from "${cdnUrl("coriolis-sphere/widget.js")}";
+    from "${libUrl("coriolis-sphere/widget.js")}";
 
-  const world = await fetch("${cdnUrl("data/countries-110m.json")}").then(r => r.json());
+  const world = await fetch("${libUrl("data/countries-110m.json")}").then(r => r.json());
 
   // Options: {width: 480} caps the figure's side; {tour: false} leaves the figure
   // still until it is touched. Leave out \`world\` for a globe with no land.

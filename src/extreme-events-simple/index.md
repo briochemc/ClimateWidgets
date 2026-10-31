@@ -27,7 +27,7 @@ The curve is a Pearson type III distribution, a bell that can be skewed, and it 
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -41,7 +41,7 @@ display(embedSnippets({
 
 <script type="module">
   import {createSimpleExtremesWidget}
-    from "${cdnUrl("extreme-events-simple/widget.js")}";
+    from "${libUrl("extreme-events-simple/widget.js")}";
 
   // Options, all in °C: {mean: 25, sd: 4} is the baseline's average and spread;
   // {hot: 35, cold: 15} the thresholds; {warming: 0} opens with the two curves on

@@ -95,7 +95,7 @@ For the baseline and the last thirty years:
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -110,11 +110,11 @@ display(embedSnippets({
 
 <script type="module">
   import {createCityExtremesWidget}
-    from "${cdnUrl("extreme-events-cities/widget.js")}";
+    from "${libUrl("extreme-events-cities/widget.js")}";
 
   const [data, world] = await Promise.all([
-    fetch("${cdnUrl("extreme-events-cities/data/hot-season-tmax.json")}").then(r => r.json()),
-    fetch("${cdnUrl("data/countries-110m.json")}").then(r => r.json()),
+    fetch("${libUrl("extreme-events-cities/data/hot-season-tmax.json")}").then(r => r.json()),
+    fetch("${libUrl("data/countries-110m.json")}").then(r => r.json()),
   ]);
 
   // Options: {city: "Beijing"} opens on another city; {xRange: [0, 55]} sets the

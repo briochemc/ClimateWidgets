@@ -46,7 +46,7 @@ Observable Plot has no parametric distributions and d3-random has only samplers,
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -61,7 +61,7 @@ display(embedSnippets({
 
 <script type="module">
   import {createExtremeEventsWidget}
-    from "${cdnUrl("extreme-events/widget.js")}";
+    from "${libUrl("extreme-events/widget.js")}";
 
   // Options: {family: "gamma"} opens on another family ("normal", "pearson3",
   // "student", "gamma", "lognormal", "weibull"); {shift: 0} opens with the two

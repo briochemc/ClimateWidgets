@@ -17,7 +17,7 @@ This is Glen Fergus's figure [*All palaeotemps*](https://commons.wikimedia.org/w
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -32,9 +32,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createTemperatureHistoryWidget}
-    from "${cdnUrl("temperature-history/widget.js")}";
+    from "${libUrl("temperature-history/widget.js")}";
 
-  const data = await fetch("${cdnUrl("temperature-history/data/temperature-history.json")}")
+  const data = await fetch("${libUrl("temperature-history/data/temperature-history.json")}")
     .then(r => r.json());
 
   const host = document.getElementById("temperature-history");

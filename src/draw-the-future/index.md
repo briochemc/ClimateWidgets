@@ -16,7 +16,7 @@ const stroke = view(createClimateWidget({co2, pco2}));
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -31,9 +31,9 @@ display(embedSnippets({
   script: `<div id="draw-the-future"></div>
 
 <script type="module">
-  import {createClimateWidget} from "${cdnUrl("draw-the-future/widget.js")}";
+  import {createClimateWidget} from "${libUrl("draw-the-future/widget.js")}";
 
-  const base = "${cdnUrl("draw-the-future/data/")}";
+  const base = "${libUrl("draw-the-future/data/")}";
   const [co2, pco2] = await Promise.all(
     ["co2_all.json", "pco2_all.json"]
       .map(f => fetch(base + f).then(r => r.json()))

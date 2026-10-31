@@ -46,7 +46,7 @@ Quantiles use linear interpolation between order statistics.
 ## Embed this widget
 
 ```js
-import {embedSnippets, cdnUrl} from "../components/embed-snippet.js";
+import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 ```
 
 ```js
@@ -62,9 +62,9 @@ display(embedSnippets({
 
 <script type="module">
   import {createProbabilityWordsWidget, parseProbabilityWords}
-    from "${cdnUrl("probability-words/widget.js")}";
+    from "${libUrl("probability-words/widget.js")}";
 
-  const data = await fetch("${cdnUrl("probability-words/data/probability-words.json")}")
+  const data = await fetch("${libUrl("probability-words/data/probability-words.json")}")
     .then(r => r.json());
 
   document.getElementById("probability-words")
