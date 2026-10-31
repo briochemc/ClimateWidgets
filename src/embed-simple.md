@@ -35,9 +35,8 @@ import {createClimateWidget} from "./draw-the-future/widget.js";
 
 const co2 = await FileAttachment("draw-the-future/data/co2_all.json").json();
 const pco2 = await FileAttachment("draw-the-future/data/pco2_all.json").json();
-const d3 = await import("npm:d3@5");
 ```
 
 ```js
-const stroke = view(createClimateWidget({co2, pco2, d3}));
+const stroke = view(createClimateWidget({co2, pco2}));
 ```

@@ -1,3 +1,12 @@
+// The widget brings its own d3: just the three pieces it uses, which Framework copies into
+// the site at build time, so neither the pages nor the script-tag snippet have to fetch d3
+// from anywhere else. Kept under a `d3` namespace so the drawing code reads as before.
+import {extent} from "npm:d3-array@3";
+import {scaleLinear} from "npm:d3-scale@4";
+import {line, curveCatmullRom, curveMonotoneX} from "npm:d3-shape@3";
+
+const d3 = {extent, scaleLinear, line, curveCatmullRom, curveMonotoneX};
+
 const colors = {
   HL: "#E744F6",
   H:  "#a41212",
@@ -21,7 +30,7 @@ const colors = {
 const FIGURE_WIDTH = 640;
 const MIN_WIDTH = 320;
 
-export function createClimateWidget({co2, pco2, d3, width = FIGURE_WIDTH}) {
+export function createClimateWidget({co2, pco2, width = FIGURE_WIDTH}) {
   const YEAR_START = 1900, SCENARIO_START = 2024, YEAR_END = 2150;
   const YEAR_STEP = 25;
   const GT_MIN = -20, GT_MAX = 70;

@@ -7,11 +7,10 @@ import {createClimateWidget} from "./widget.js";
 
 const co2 = await FileAttachment("data/co2_all.json").json();
 const pco2 = await FileAttachment("data/pco2_all.json").json();
-const d3 = await import("npm:d3@5");
 ```
 
 ```js
-const stroke = view(createClimateWidget({co2, pco2, d3}));
+const stroke = view(createClimateWidget({co2, pco2}));
 ```
 
 ## Embed this widget
@@ -33,7 +32,6 @@ display(embedSnippets({
 
 <script type="module">
   import {createClimateWidget} from "${cdnUrl("draw-the-future/widget.js")}";
-  import * as d3 from "https://esm.sh/d3@5";
 
   const base = "${cdnUrl("draw-the-future/data/")}";
   const [co2, pco2] = await Promise.all(
@@ -42,7 +40,7 @@ display(embedSnippets({
   );
 
   const host = document.getElementById("draw-the-future");
-  host.appendChild(createClimateWidget({co2, pco2, d3}));
+  host.appendChild(createClimateWidget({co2, pco2}));
 <\/script>`
 }));
 ```
