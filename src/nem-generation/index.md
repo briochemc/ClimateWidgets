@@ -47,4 +47,4 @@ display(embedSnippets({
 
 ---
 
-Data: [Open Electricity](https://openelectricity.org.au/) (The Superpower Institute), [CC BY-NC 4.0](https://platform.openelectricity.org.au/license): the monthly energy by fuel technology for the NEM, each of its regions and the WEM from its v4 data files (`data.openelectricity.org.au/v4/stats/au/…/energy/all.json`). Colours are Open Electricity's. The data file is refreshed by `scripts/nem-generation.mjs`; the last month in it is written under the chart.
+Data: [Open Electricity](https://openelectricity.org.au/) (The Superpower Institute), [CC BY-NC 4.0](https://platform.openelectricity.org.au/license): the monthly energy by fuel technology for the NEM, each of its regions and the WEM from its v4 data files (`data.openelectricity.org.au/v4/stats/au/…/energy/all.json`). Colours are Okabe and Ito's. The data file is refreshed by `scripts/nem-generation.mjs`; the last month in it is written under the chart.

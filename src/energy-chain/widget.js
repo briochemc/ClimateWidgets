@@ -261,9 +261,12 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
 
     const what = {coal: "in the coal", gas: "in the gas", nuclear: "in the nuclear fuel", biomass: "in the biomass", geothermal: "in the geothermal steam",
       hydro: "in the falling water", wind: "in the wind through the rotor", solar: "in the sunlight on the panel"}[source];
-    subheading.textContent = `Of ${SOURCE} units of energy ${what}, ${formatUnits(c.light)} become light. ` +
-      `The ${src.station.toLowerCase()} sends out ${formatUnits(c.toGrid)}, ${formatUnits(c.delivered)} reach the house, ${b.the} uses ${formatUnits(c.device)} of them` +
-      (c.surplus > 0.05 ? ` and the other ${formatUnits(c.surplus)} need not be generated at all.` : ".") +
+    // The note under the title states the final numbers at once, while the drawing and the
+    // figures on the bands glide to them.
+    const f = chain(bulb, efficiency);
+    subheading.textContent = `Of ${SOURCE} units of energy ${what}, ${formatUnits(f.light)} become light. ` +
+      `The ${src.station.toLowerCase()} sends out ${formatUnits(f.toGrid)}, ${formatUnits(f.delivered)} reach the house, ${b.the} uses ${formatUnits(f.device)} of them` +
+      (f.surplus > 0.05 ? ` and the other ${formatUnits(f.surplus)} need not be generated at all.` : ".") +
       (src.burns ? "" : " Nothing is burned here: what the plant does not capture simply passes by.");
     svg.setAttribute("aria-label", `Sankey diagram of the energy chain from ${src.label.toLowerCase()} to light. ${subheading.textContent}`);
   }

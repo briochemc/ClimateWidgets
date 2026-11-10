@@ -38,23 +38,25 @@ export const MEASURES = [
   {id: "share", label: "% of generation", title: "Each source as a percentage of the electricity generated"},
 ];
 
-// The seven sources, in stacking order from the bottom, with Open Electricity's colours, and
-// the fuel technologies each gathers; then imports, and the three loads. `kind` says how a
-// series is treated: sources make up the generation that shares are shares of; imports are
-// drawn in GWh under the sources but are another region's generation; loads hang below zero.
+// The seven sources, in stacking order from the bottom, in Okabe and Ito's colours (coal black,
+// gas orange, other vermilion, batteries blue, hydro sky blue, wind bluish green, solar
+// yellow), and the fuel technologies each gathers; then imports, in reddish purple, and the
+// three loads, each a tint of its source's colour. `kind` says how a series is treated:
+// sources make up the generation that shares are shares of; imports are drawn in GWh under
+// the sources but are another region's generation; loads hang below zero.
 export const GROUPS = [
-  {id: "imports", label: "Imports", colour: "#CFA7FF", kind: "imports", members: ["imports"]},
-  {id: "coal", label: "Coal", colour: "#251C00", kind: "source", members: ["coal_brown", "coal_black"]},
-  {id: "other", label: "Other", colour: "#0B757C", kind: "source", members: ["bioenergy_biogas", "bioenergy_biomass", "distillate"],
+  {id: "imports", label: "Imports", colour: "#CC79A7", kind: "imports", members: ["imports"]},
+  {id: "coal", label: "Coal", colour: "#000000", kind: "source", members: ["coal_brown", "coal_black"]},
+  {id: "other", label: "Other", colour: "#D55E00", kind: "source", members: ["bioenergy_biogas", "bioenergy_biomass", "distillate"],
     long: "Bioenergy and distillate"},
-  {id: "gas", label: "Gas", colour: "#E78114", kind: "source", members: ["gas_steam", "gas_ccgt", "gas_ocgt", "gas_recip", "gas_wcmg"]},
-  {id: "batteries", label: "Batteries", colour: "#3145CE", kind: "source", members: ["battery_discharging"]},
-  {id: "hydro", label: "Hydro", colour: "#ACE9FE", kind: "source", members: ["hydro"]},
-  {id: "wind", label: "Wind", colour: "#2A7E3F", kind: "source", members: ["wind"]},
-  {id: "solar", label: "Solar", colour: "#FECE00", kind: "source", members: ["solar_utility", "solar_rooftop"]},
-  {id: "pumps", label: "Pumping", colour: "#00A5F1", kind: "load", members: ["pumps"], long: "Pumped hydro, pumping"},
-  {id: "battery_charging", label: "Battery charging", colour: "#4F5FD7", kind: "load", members: ["battery_charging"]},
-  {id: "exports", label: "Exports", colour: "#722AF7", kind: "load", members: ["exports"]},
+  {id: "gas", label: "Gas", colour: "#E69F00", kind: "source", members: ["gas_steam", "gas_ccgt", "gas_ocgt", "gas_recip", "gas_wcmg"]},
+  {id: "batteries", label: "Batteries", colour: "#0072B2", kind: "source", members: ["battery_discharging"]},
+  {id: "hydro", label: "Hydro", colour: "#56B4E9", kind: "source", members: ["hydro"]},
+  {id: "wind", label: "Wind", colour: "#009E73", kind: "source", members: ["wind"]},
+  {id: "solar", label: "Solar", colour: "#F0E442", kind: "source", members: ["solar_utility", "solar_rooftop"]},
+  {id: "pumps", label: "Pumping", colour: "#9AD2F2", kind: "load", members: ["pumps"], long: "Pumped hydro, pumping"},
+  {id: "battery_charging", label: "Battery charging", colour: "#66AAD1", kind: "load", members: ["battery_charging"]},
+  {id: "exports", label: "Exports", colour: "#995B7D", kind: "load", members: ["exports"]},
 ];
 const REGION_ALIASES = {nem: "NEM", _all: "NEM", all: "NEM", nsw: "NSW1", qld: "QLD1", sa: "SA1", tas: "TAS1", vic: "VIC1", wa: "WEM", swis: "WEM"};
 

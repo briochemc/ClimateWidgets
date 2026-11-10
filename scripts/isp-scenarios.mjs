@@ -59,29 +59,32 @@ const SCENARIOS = [
     description: "Weaker economic growth and slower electrification, so less new demand and a slower build."},
 ];
 
-// The technology groups, in stacking order from the bottom, with Open Electricity's colours,
-// and which of the source's fuel technologies each gathers in the history and the projections.
+// The technology groups, in stacking order from the bottom, in Okabe and Ito's colours (coal
+// black, with brown coal a lighter shade of it; gas orange; bioenergy vermilion; hydro sky
+// blue; wind bluish green, darker onshore and lighter offshore; solar yellow, utility as it
+// is and rooftop lighter; storage blue), and which of the source's fuel technologies each
+// gathers in the history and the projections.
 const TECHS = [
-  {id: "coal_black", label: "Coal (black)", colour: "#251C00",
+  {id: "coal_black", label: "Coal (black)", colour: "#000000",
     history: ["coal_black"], projection: ["coal_black"]},
-  {id: "coal_brown", label: "Coal (brown)", colour: "#675B42",
+  {id: "coal_brown", label: "Coal (brown)", colour: "#4D4D4D",
     history: ["coal_brown"], projection: ["coal_brown"]},
-  {id: "gas", label: "Gas (and distillate)", colour: "#ED9C2C",
+  {id: "gas", label: "Gas (and distillate)", colour: "#E69F00",
     history: ["gas_ccgt", "gas_ocgt", "gas_steam", "gas_recip", "gas_wcmg", "distillate"],
     projection: ["gas_ccgt", "gas_ccgt_ccs", "gas_ocgt"]},
-  {id: "bioenergy", label: "Bioenergy", colour: "#0B757C",
+  {id: "bioenergy", label: "Bioenergy", colour: "#D55E00",
     history: ["bioenergy_biomass", "bioenergy_biogas"], projection: ["bioenergy"]},
-  {id: "hydro", label: "Hydro", colour: "#ACE9FE",
+  {id: "hydro", label: "Hydro", colour: "#56B4E9",
     history: ["hydro"], projection: ["hydro"]},
-  {id: "wind", label: "Wind (onshore)", colour: "#2A7E3F",
+  {id: "wind", label: "Wind (onshore)", colour: "#007E5C",
     history: ["wind"], projection: ["wind"]},
-  {id: "wind_offshore", label: "Wind (offshore)", colour: "#53AD69",
+  {id: "wind_offshore", label: "Wind (offshore)", colour: "#59C0A4",
     history: [], projection: ["wind_offshore"]},
-  {id: "solar_utility", label: "Solar (utility)", colour: "#FECE00",
+  {id: "solar_utility", label: "Solar (utility)", colour: "#F0E442",
     history: ["solar_utility"], projection: ["solar_utility"]},
-  {id: "solar_rooftop", label: "Solar (rooftop)", colour: "#FFEB5C",
+  {id: "solar_rooftop", label: "Solar (rooftop)", colour: "#F7F097",
     history: ["solar_rooftop"], projection: ["solar_rooftop"]},
-  {id: "storage", label: "Storage (batteries)", colour: "#3145CE", storage: true,
+  {id: "storage", label: "Storage (batteries)", colour: "#0072B2", storage: true,
     history: ["battery_discharging"], historyCapacity: ["battery"],
     projection: ["battery_discharging", "battery_VPP_discharging", "battery_distributed_discharging"],
     projectionCapacity: ["battery", "battery_VPP", "battery_distributed"]},
