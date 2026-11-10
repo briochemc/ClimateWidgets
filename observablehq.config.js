@@ -32,6 +32,9 @@ export default {
     {name: "Extreme events, in real cities", path: "/extreme-events-cities/"},
     {name: "The Coriolis effect", path: "/coriolis/"},
     {name: "The Coriolis effect on the Earth", path: "/coriolis-sphere/"},
+    {name: "Electricity generation in the NEM", path: "/nem-generation/"},
+    {name: "The NEM to 2050", path: "/isp-scenarios/"},
+    {name: "From coal to a light bulb", path: "/energy-chain/"},
     {
       name: "Archive",
       open: false,

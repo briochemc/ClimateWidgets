@@ -99,6 +99,18 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <h2>The Coriolis effect</h2>
     <img class="thumb" src="./assets/thumbnails/coriolis.png" alt="A white turntable with faint spokes inside a ring of tick marks, seen from the room, with three coloured balls, each on a dashed straight line with its paint curving on the table behind it; above it a toggle between the room and the turntable and a rotation slider reading 4 rpm anticlockwise">
   </a>
+  <a class="card" href="./nem-generation/">
+    <h2>Electricity generation in the NEM</h2>
+    <img class="thumb" src="./assets/thumbnails/nem-generation.png" alt="A stacked area of the National Electricity Market's generation by source over the last year, week by week, as shares: black and brown coal filling the bottom half, gas and hydro in thin bands, then wind in green and the two solars in yellow across the top, with pill buttons above for the region, period and measure and a key listing each source's share">
+  </a>
+  <a class="card" href="./isp-scenarios/">
+    <h2>The NEM to 2050</h2>
+    <img class="thumb" src="./assets/thumbnails/isp-scenarios.png" alt="A stacked area of the National Electricity Market's annual generation by technology from 2010 to 2050, the history in solid colour and AEMO's Step Change projection hatched after a dashed line: coal shrinking to nothing by the 2040s while wind and solar grow to more than twice today's total">
+  </a>
+  <a class="card" href="./energy-chain/">
+    <h2>From coal to a light bulb</h2>
+    <img class="thumb" src="./assets/thumbnails/energy-chain.png" alt="A Sankey diagram running left to right: a wide orange band of 100 units of coal energy narrows at each station as grey bands of loss peel off upwards, 62 at the power station, 2 in the wires and 34 as heat in the bulb, leaving a thin yellow band of 2 units of light at the right; two pill buttons switch between an incandescent bulb and an LED, and a slider sets the station's efficiency">
+  </a>
   <a class="card" href="./coriolis-sphere/">
     <h2>The Coriolis effect on the Earth</h2>
     <img class="thumb" src="./assets/thumbnails/coriolis-sphere.png" alt="A globe seen from above the Indian Ocean with Australia and Asia in pale green on pale blue, with three small parcels and their traces in shades of blue and pink by speed: one looping clockwise over China, one looping anticlockwise off south-east Australia, and one running nearly straight east near the equator; above it a short note with a Play tour button, four small triangles at the sides of the figure for turning the view, and + and − in the bottom corner for zooming">

@@ -1,0 +1,42 @@
+# Refreshes the NEM generation widget's data once a month: re-runs scripts/nem-generation.mjs,
+# which pulls Open Electricity's latest months and weeks, and commits the new data file if it
+# changed. The push to main then deploys the site through deploy.yml.
+#
+# The script needs no credentials: Open Electricity's history files are public and its API
+# answers anonymously for the last two years. If that ever changes, set a repository secret
+# OPENELECTRICITY_API_KEY (an Academic key is free for .edu.au addresses) and the script will
+# send it. Run it by hand from the Actions tab with "Run workflow".
+
+name: Refresh NEM generation data
+
+on:
+  schedule:
+    - cron: "17 3 3 * *"   # 03:17 UTC on the 3rd of each month, once the previous month is in
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Fetch the latest data
+        run: node scripts/nem-generation.mjs
+        env:
+          OPENELECTRICITY_API_KEY: ${{ secrets.OPENELECTRICITY_API_KEY }}
+      - name: Commit if anything changed
+        run: |
+          if git diff --quiet -- src/nem-generation/data/nem-generation.json; then
+            echo "No change in the data"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/nem-generation/data/nem-generation.json
+          git commit -m "NEM generation: data refreshed from Open Electricity ($(date -u +%Y-%m-%d))"
+          git push
