@@ -114,45 +114,18 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
   subheading.style.cssText = "font-size:12px;color:#666;padding:0 0 10px;line-height:1.35;";
   container.appendChild(subheading);
 
-  const PILL = "font:13px sans-serif;padding:5px 12px;border-radius:999px;cursor:pointer;white-space:nowrap;" +
-    "display:inline-flex;align-items:center;gap:6px;transition:background-color .15s,color .15s,border-color .15s;";
-  function stylePill(b, active) {
-    b.style.border = active ? "1px solid #333" : "1px solid #ccc";
-    b.style.background = active ? "#333" : "#fff";
-    b.style.color = active ? "#fff" : "#333";
-    b.setAttribute("aria-pressed", String(active));
-  }
-  // The source: one pill each, which sets the slider to that source's typical efficiency.
+  // The source, one segmented control, each choice setting the slider to that source's
+  // typical efficiency; then the bulb and the slider on the next row.
   const sourceRow = document.createElement("div");
   sourceRow.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 0 6px;";
-  const sourceButtons = SOURCES.map(s => {
-    const el = document.createElement("button");
-    el.type = "button";
-    el.textContent = s.label;
-    el.title = `${s.label}: typically ${Math.round(s.efficiency * 100)}% (${s.range})`;
-    el.style.cssText = PILL;
-    el.addEventListener("click", () => setSource(s.id));
-    sourceRow.appendChild(el);
-    return el;
-  });
+  const updateSourceButtons = segmented(sourceRow, SOURCES.map(s => ({id: s.id, label: s.label,
+    title: `${s.label}: typically ${Math.round(s.efficiency * 100)}% (${s.range})`})), setSource);
   container.appendChild(sourceRow);
 
   const controls = document.createElement("div");
   controls.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:0 0 8px;";
   container.appendChild(controls);
-  const bulbRow = document.createElement("div");
-  bulbRow.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;";
-  const bulbButtons = BULBS.map(b => {
-    const el = document.createElement("button");
-    el.type = "button";
-    el.textContent = b.label;
-    el.title = b.title;
-    el.style.cssText = PILL;
-    el.addEventListener("click", () => setBulb(b.id));
-    bulbRow.appendChild(el);
-    return el;
-  });
-  controls.appendChild(bulbRow);
+  const updateBulbButtons = segmented(controls, BULBS.map(b => ({id: b.id, label: b.label, title: b.title})), setBulb);
 
   // The efficiency slider, with its marks named under it.
   const sliderBox = document.createElement("div");
@@ -316,8 +289,8 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
 
   // ---- state changes --------------------------------------------------------------------------
   function updateControls() {
-    bulbButtons.forEach((el, i) => stylePill(el, BULBS[i].id === bulb));
-    sourceButtons.forEach((el, i) => stylePill(el, SOURCES[i].id === source));
+    updateBulbButtons(bulb);
+    updateSourceButtons(source);
     slider.value = Math.round(efficiency * 100);
     const s = sourceOf();
     sliderLabel.textContent = `${s.station} efficiency: ${Math.round(efficiency * 100)}%`;
@@ -373,6 +346,33 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
   return container;
 }
 
+// A segmented control: the choices as one row of joined buttons, rounded at the ends, the one
+// chosen dark with white type. Returns a function that marks the current choice.
+function segmented(parent, choices, onPick) {
+  const box = document.createElement("div");
+  box.setAttribute("role", "group");
+  box.style.cssText = "display:inline-flex;flex-wrap:wrap;border-radius:999px;";
+  const buttons = choices.map((choice, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = choice.label;
+    if (choice.title) b.title = choice.title;
+    b.style.cssText = "font:13px sans-serif;padding:5px 12px;cursor:pointer;white-space:nowrap;border:1px solid #333;" +
+      `margin-left:${i ? -1 : 0}px;border-radius:${i === 0 ? "999px 0 0 999px" : i === choices.length - 1 ? "0 999px 999px 0" : "0"};` +
+      "transition:background-color .15s,color .15s;";
+    b.addEventListener("click", () => onPick(choice.id));
+    box.appendChild(b);
+    return b;
+  });
+  parent.appendChild(box);
+  return current => buttons.forEach((b, i) => {
+    const active = choices[i].id === current;
+    b.style.background = active ? "#333" : "#fff";
+    b.style.color = active ? "#fff" : "#333";
+    b.style.position = active ? "relative" : "static";
+    b.setAttribute("aria-pressed", String(active));
+  });
+}
 function formatUnits(v) {
   const r = Math.round(v * 10) / 10;
   return `${Number.isInteger(r) ? r : r.toFixed(1)} unit${r === 1 ? "" : "s"}`;

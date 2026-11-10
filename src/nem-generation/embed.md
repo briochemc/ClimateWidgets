@@ -32,8 +32,8 @@ import {createNemGenerationWidget} from "./widget.js";
 const data = await FileAttachment("./data/nem-generation.json").json();
 
 // Presets, for Moodle's plain iframes: ?region=sa1 (nem, nsw1, qld1, sa1, tas1, vic1, wem);
-// ?interval=year or month; ?measure=gwh or share; ?select=wind (coal, gas, hydro, wind, solar,
-// batteries, other) to open with that source picked out.
+// ?interval=month (by year is the default); ?measure=share (GWh is the default); ?select=wind
+// (coal, gas, hydro, wind, solar, batteries, other) to open with that source picked out.
 const params = new URLSearchParams(location.search);
 const region = params.get("region") ?? undefined;
 const interval = params.get("interval") ?? undefined;

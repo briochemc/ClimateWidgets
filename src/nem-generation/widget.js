@@ -14,7 +14,7 @@
 // refreshed monthly. Self-contained: no d3, no imports.
 //
 // Options: {region: "NEM" | "NSW1" | "QLD1" | "SA1" | "TAS1" | "VIC1" | "WEM"} (short forms
-// like "sa" and "nsw" work too), {interval: "month" | "year"}, {measure: "share" | "gwh"},
+// like "sa" and "nsw" work too), {interval: "year" | "month"}, {measure: "gwh" | "share"},
 // {select: "wind"} to open with a source picked out (coal, gas, hydro, wind, solar, batteries,
 // other, imports, pumps, battery_charging, exports); {width} caps the figure's width.
 
@@ -30,12 +30,12 @@ const MIN_LABEL_SHARE = 1;              // per cent of generation a source needs
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export const INTERVALS = [
-  {id: "month", label: "By month", title: "Every month since the record begins"},
   {id: "year", label: "By year", title: "Calendar years, the complete ones"},
+  {id: "month", label: "By month", title: "Every month since the record begins"},
 ];
 export const MEASURES = [
-  {id: "share", label: "Share of generation", title: "Each source as a percentage of the electricity generated"},
   {id: "gwh", label: "GWh", title: "Gigawatt hours; pumping, battery charging and exports below zero"},
+  {id: "share", label: "% of generation", title: "Each source as a percentage of the electricity generated"},
 ];
 
 // The seven sources, in stacking order from the bottom, with Open Electricity's colours, and
@@ -66,8 +66,8 @@ export function createNemGenerationWidget({
 
   // ---- state ----------------------------------------------------------------------------------
   let region = resolveRegion(initialRegion) ?? "NEM";
-  let interval = INTERVALS.some(i => i.id === initialInterval) ? initialInterval : /^(1y|year|yearly|1Y)$/.test(String(initialInterval ?? "")) ? "year" : "month";
-  let measure = MEASURES.some(m => m.id === initialMeasure) ? initialMeasure : "share";
+  let interval = INTERVALS.some(i => i.id === initialInterval) ? initialInterval : /^(1m|month|monthly|1M)$/.test(String(initialInterval ?? "")) ? "month" : "year";
+  let measure = MEASURES.some(m => m.id === initialMeasure) ? initialMeasure : /^(share|percent|%)$/.test(String(initialMeasure ?? "")) ? "share" : "gwh";
   let selected = GROUPS.some(g => g.id === initialSelect) ? initialSelect : null;   // the source picked out
   let pinned = null;      // the step the probe is pinned to, or null for the latest
   let probe = null;       // the step under the pointer, or null
@@ -167,41 +167,17 @@ export function createNemGenerationWidget({
   subheading.style.cssText = "font-size:12px;color:#666;padding:0 0 10px;";
   container.appendChild(subheading);
 
-  const PILL = "font:13px sans-serif;padding:5px 12px;border-radius:999px;cursor:pointer;white-space:nowrap;" +
-    "display:inline-flex;align-items:center;gap:6px;transition:background-color .15s,color .15s,border-color .15s;";
-  function stylePill(b, active) {
-    b.style.border = active ? "1px solid #333" : "1px solid #ccc";
-    b.style.background = active ? "#333" : "#fff";
-    b.style.color = active ? "#fff" : "#333";
-    b.setAttribute("aria-pressed", String(active));
-  }
-  function buttonRow(parent, choices, onPick) {
-    const buttons = choices.map(choice => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = choice.label;
-      if (choice.title) b.title = choice.title;
-      b.style.cssText = PILL;
-      b.addEventListener("click", () => onPick(choice.id));
-      parent.appendChild(b);
-      return b;
-    });
-    return current => buttons.forEach((b, i) => stylePill(b, choices[i].id === current));
-  }
+  // Each choice is a segmented control: its options joined into one pill, the one chosen dark,
+  // so that it reads as one thing or the other.
   const regionRow = document.createElement("div");
-  regionRow.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 0 6px;";
+  regionRow.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:0 0 6px;";
   container.appendChild(regionRow);
-  const updateRegionButtons = buttonRow(regionRow, data.regions.map(r => ({id: r.id, label: r.short, title: r.name})), setRegion);
+  const updateRegionButtons = segmented(regionRow, data.regions.map(r => ({id: r.id, label: r.short, title: r.name})), setRegion);
   const optionsRow = document.createElement("div");
   optionsRow.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:0 0 8px;";
   container.appendChild(optionsRow);
-  const intervalGroup = document.createElement("div");
-  intervalGroup.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;";
-  const measureGroup = document.createElement("div");
-  measureGroup.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;";
-  optionsRow.append(intervalGroup, measureGroup);
-  const updateIntervalButtons = buttonRow(intervalGroup, INTERVALS, setInterval_);
-  const updateMeasureButtons = buttonRow(measureGroup, MEASURES, setMeasure);
+  const updateIntervalButtons = segmented(optionsRow, INTERVALS, setInterval_);
+  const updateMeasureButtons = segmented(optionsRow, MEASURES, setMeasure);
 
   const SVG_NS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(SVG_NS, "svg");
@@ -510,6 +486,34 @@ export function createNemGenerationWidget({
 }
 
 // ---- helpers --------------------------------------------------------------------------------
+// A segmented control: the choices as one row of joined buttons, rounded at the ends, the one
+// chosen dark with white type. Returns a function that marks the current choice.
+export function segmented(parent, choices, onPick) {
+  const box = document.createElement("div");
+  box.setAttribute("role", "group");
+  box.style.cssText = "display:inline-flex;flex-wrap:wrap;border-radius:999px;";
+  const buttons = choices.map((choice, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = choice.label;
+    if (choice.title) b.title = choice.title;
+    b.style.cssText = "font:13px sans-serif;padding:5px 12px;cursor:pointer;white-space:nowrap;border:1px solid #333;" +
+      `margin-left:${i ? -1 : 0}px;border-radius:${i === 0 ? "999px 0 0 999px" : i === choices.length - 1 ? "0 999px 999px 0" : "0"};` +
+      "transition:background-color .15s,color .15s;";
+    b.addEventListener("click", () => onPick(choice.id));
+    box.appendChild(b);
+    return b;
+  });
+  parent.appendChild(box);
+  return current => buttons.forEach((b, i) => {
+    const active = choices[i].id === current;
+    b.style.background = active ? "#333" : "#fff";
+    b.style.color = active ? "#fff" : "#333";
+    b.style.position = active ? "relative" : "static";   // the dark one's border over its neighbours'
+    b.setAttribute("aria-pressed", String(active));
+  });
+}
+
 export function formatGwh(v) {
   const a = Math.abs(v);
   if (a >= 100) return Math.round(v).toLocaleString("en-US");

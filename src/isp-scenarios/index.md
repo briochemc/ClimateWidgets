@@ -1,6 +1,6 @@
 # The NEM to 2050
 
-What the Australian Energy Market Operator expects the National Electricity Market to run on, year by year to 2050, from its [2026 Integrated System Plan](https://aemo.com.au/energy-systems/major-publications/integrated-system-plan-isp/2026-integrated-system-plan-isp): a stack of each technology's annual **generation** in terawatt hours, or its installed **capacity** in gigawatts, the history in solid colour and AEMO's projection hatched after it. Pick the **scenario**: Step Change, the one AEMO rates most likely, Accelerated Transition or Slower Growth. Click a technology in the key to hide it (and **All** to bring everything back), and hover or touch a year for the numbers, including how much coal is left.
+What the Australian Energy Market Operator expects the National Electricity Market to run on, year by year to 2050, from its [2026 Integrated System Plan](https://aemo.com.au/energy-systems/major-publications/integrated-system-plan-isp/2026-integrated-system-plan-isp): a stack of each technology's annual **generation** in terawatt hours, or its installed **capacity** in gigawatts, or either as a **% of generation** or **% of capacity**, the history in solid colour and AEMO's projection hatched after it. Pick the **scenario**: Step Change, the one AEMO rates most likely, Accelerated Transition or Slower Growth. The numbers are on the chart: a probe stands at 2050 with each technology's figure beside its band, for every one above one per cent. Point at the chart for another year, click to pin it, and click a band to pick that technology out, which also names one too small to be labelled on its own.
 
 ```js
 import {createIspScenariosWidget} from "./widget.js";
@@ -27,7 +27,8 @@ display(embedSnippets({
   title: "The NEM to 2050",
   note: "The figure fills its column up to 640&nbsp;px wide and reflows down to about 320&nbsp;px; allow about 560&nbsp;px of height at phone width. " +
     "The embed page is preset through its URL: <code>?scenario=step-change</code>, <code>accelerated-transition</code> or <code>slower-growth</code>, " +
-    "and <code>?measure=generation</code> or <code>capacity</code>.",
+    "<code>?measure=generation</code> or <code>capacity</code>, <code>?unit=share</code> for percentages, and <code>?select=coal_black</code> " +
+    "(coal_brown, gas, hydro, bioenergy, wind, wind_offshore, solar_utility, solar_rooftop, storage) to open with that technology picked out.",
   script: `<div id="isp-scenarios"></div>
 
 <script type="module">
@@ -37,7 +38,8 @@ display(embedSnippets({
   const data = await fetch("${libUrl("isp-scenarios/data/isp-2026.json")}")
     .then(r => r.json());
 
-  // Options: {scenario: "step_change" | "accelerated_transition" | "slower_growth"}, {measure: "generation" | "capacity"}.
+  // Options: {scenario: "step_change" | "accelerated_transition" | "slower_growth"}, {measure: "generation" | "capacity"},
+  // {unit: "absolute" | "share"}, {select: "coal_black"}.
   document.getElementById("isp-scenarios")
     .appendChild(createIspScenariosWidget({data}));
 <\/script>`

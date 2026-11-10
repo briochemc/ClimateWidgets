@@ -32,12 +32,15 @@ import {createIspScenariosWidget} from "./widget.js";
 const data = await FileAttachment("./data/isp-2026.json").json();
 
 // Presets: ?scenario=step-change, accelerated-transition or slower-growth; ?measure=generation
-// or capacity.
+// or capacity; ?unit=share for percentages; ?select=coal_black (a technology id) to open with
+// it picked out.
 const params = new URLSearchParams(location.search);
 const scenario = params.get("scenario") ?? undefined;
 const measure = params.get("measure") ?? undefined;
+const unit = params.get("unit") ?? undefined;
+const select = params.get("select") ?? undefined;
 ```
 
 ```js
-const isp = view(createIspScenariosWidget({data, scenario, measure}));
+const isp = view(createIspScenariosWidget({data, scenario, measure, unit, select}));
 ```

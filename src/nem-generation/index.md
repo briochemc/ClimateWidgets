@@ -1,6 +1,6 @@
 # Electricity generation in the NEM
 
-Where Australia's electricity comes from, and how that has changed: coal, gas, hydro, wind, solar, batteries and the rest, stacked, since the National Electricity Market began in December 1998, for the market as a whole, one of its five regions, or Western Australia's grid. Show it **by month** or **by year**, as each source's **share of generation** or in **GWh**; in GWh, the energy drawn from the grid to pump water uphill, charge batteries or export to a neighbouring state hangs below zero, and imports sit at the bottom of the stack. The numbers are written on the chart: a probe stands at the latest month or year with each source's value beside its band, for every source above one per cent. Point at the chart to read another time, click to pin it there, and click a band to pick that source out, which also names a source too small to be labelled on its own.
+Where Australia's electricity comes from, and how that has changed: coal, gas, hydro, wind, solar, batteries and the rest, stacked, since the National Electricity Market began in December 1998, for the market as a whole, one of its five regions, or Western Australia's grid. Show it **by year** or **by month**, in **GWh** or as each source's **% of generation**; in GWh, the energy drawn from the grid to pump water uphill, charge batteries or export to a neighbouring state hangs below zero, and imports sit at the bottom of the stack. The numbers are written on the chart: a probe stands at the latest month or year with each source's value beside its band, for every source above one per cent. Point at the chart to read another time, click to pin it there, and click a band to pick that source out, which also names a source too small to be labelled on its own.
 
 ```js
 import {createNemGenerationWidget} from "./widget.js";
@@ -27,7 +27,7 @@ display(embedSnippets({
   title: "Electricity generation in the NEM",
   note: "The figure fills its column up to 640&nbsp;px wide and reflows down to about 320&nbsp;px; allow about 520&nbsp;px of height at phone width, " +
     "where the buttons wrap. The embed page is preset through its URL: <code>?region=sa1</code> (nem, nsw1, qld1, sa1, tas1, vic1, wem), " +
-    "<code>?interval=year</code> or <code>month</code>, <code>?measure=gwh</code> or <code>share</code>, and <code>?select=wind</code> " +
+    "<code>?interval=month</code> (the default is by year), <code>?measure=share</code> (the default is GWh), and <code>?select=wind</code> " +
     "(coal, gas, hydro, wind, solar, batteries, other) to open with that source picked out.",
   script: `<div id="nem-generation"></div>
 
@@ -38,7 +38,7 @@ display(embedSnippets({
   const data = await fetch("${libUrl("nem-generation/data/nem-generation.json")}")
     .then(r => r.json());
 
-  // Options: {region: "SA1"}, {interval: "month" | "year"}, {measure: "share" | "gwh"}, {select: "wind"}.
+  // Options: {region: "SA1"}, {interval: "year" | "month"}, {measure: "gwh" | "share"}, {select: "wind"}.
   document.getElementById("nem-generation")
     .appendChild(createNemGenerationWidget({data}));
 <\/script>`
