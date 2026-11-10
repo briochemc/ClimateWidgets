@@ -1,10 +1,10 @@
-// The energy chain from a lump of coal to a lit bulb, as a Sankey: 100 units of energy enter at
+// The energy chain from a lump of coal to lit bulbs, as a Sankey: 100 units of energy enter at
 // the power station, most leave as heat up the cooling tower, a little more warms the wires,
-// what reaches the house goes into the bulb, and the bulb turns most of that into heat too,
-// leaving two units of light. Two bulbs: an incandescent one, which draws 36 units to make 2 of
-// light, and an LED, which draws 6 for the same light, so that 30 of the 36 units delivered
-// are no longer needed; the switch between them animates, since the shrinking draw at the
-// plug is the point. A slider sets the power station's efficiency, from an old coal plant to
+// and what reaches the house goes into as many bulbs as it can light, which turn most of it
+// into heat too. Two bulbs: an incandescent one, which draws 36 units to make 2 of light, so
+// the 36 delivered light one bulb, and an LED, which draws 6 for the same light, so they light
+// six and give 12 units of light; the switch between them animates, since the growing light
+// from the same coal is the point. A slider sets the power station's efficiency, from an old coal plant to
 // a gas combined-cycle one, and the first link of the chain moves with it; a row of sources
 // (coal, gas, nuclear, biomass, geothermal, hydro, wind, solar) sets it to each one's typical
 // efficiency and renames the plant, so the same chain can start from wind through a rotor or
@@ -26,7 +26,7 @@ const ACCENT = "#0b57d0";
 const SOURCE = 100;                 // units of energy in the coal
 const DEFAULT_EFFICIENCY = 0.38;    // the course figure: 62 of 100 lost at the station
 const LINE_LOSS_SHARE = 2 / 38;     // the course figure: 2 of the 38 units sent out
-const FLOW = "#f0a202", LOSS = "#b8b8b8", LIGHT = "#ffd54f", SURPLUS = "#52A972";
+const FLOW = "#f0a202", LOSS = "#b8b8b8", LIGHT = "#ffd54f";
 
 export const BULBS = [
   {id: "incandescent", label: "Incandescent bulb", short: "Incandescent", the: "the incandescent bulb", draw: 36, heat: 34, title: "Draws 36 units and gives 2 of light; the other 34 are heat"},
@@ -57,18 +57,20 @@ export const EFFICIENCY_MARKS = [
   {value: 0.60, label: "gas CCGT 60%"},
 ];
 
-// The chain's numbers for a bulb and a station efficiency.
+// The chain's numbers for a bulb and a station efficiency. Everything that reaches the house
+// goes into bulbs, as many as it can light (a fraction of one when there is not enough for
+// one), so the only losses are the plant's, the wires' and the bulbs' heat, and the light is
+// what is left.
 export function chain(bulbId, efficiency) {
   const bulb = BULBS.find(b => b.id === bulbId) ?? BULBS[0];
   const generationLoss = SOURCE * (1 - efficiency);
   const toGrid = SOURCE - generationLoss;
   const lineLoss = toGrid * LINE_LOSS_SHARE;
   const delivered = toGrid - lineLoss;
-  const device = Math.min(delivered, bulb.draw);
-  const surplus = Math.max(0, delivered - device);
-  const heat = device * bulb.heat / bulb.draw;
-  const light = device - heat;
-  return {generationLoss, toGrid, lineLoss, delivered, surplus, device, heat, light};
+  const bulbs = delivered / bulb.draw;
+  const heat = delivered * bulb.heat / bulb.draw;
+  const light = delivered - heat;
+  return {generationLoss, toGrid, lineLoss, delivered, bulbs, heat, light};
 }
 
 export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb, source: initialSource, efficiency: initialEfficiency} = {}) {
@@ -83,6 +85,7 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
   let raf = null, lastFrame = 0;
 
   // ---- layout ---------------------------------------------------------------------------------
+  const ctx = document.createElement("canvas").getContext("2d");   // for measuring labels
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
   let w, titleFont, labelFont, svgH, scale, plotL, plotR, baseY, topY;
   function applyLayout(newW) {
@@ -243,17 +246,32 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     peel(xs.wires, c.toGrid, c.lineLoss, LOSS, "Lost in the wires");
     band(xs.wires, xs.home, c.delivered, FLOW);
     station(xs.home, c.delivered, "Home");
-    // At the house: with an LED, most of what the incandescent needed is not needed at all.
-    peel(xs.home, c.delivered, c.surplus, SURPLUS, "Not needed", `with ${b.the}`);
-    band(xs.home, xs.bulb, c.device, FLOW);
-    station(xs.bulb, c.device, b.short);
-    peel(xs.bulb, c.device, c.heat, LOSS, "Lost as heat");
+    // Everything delivered goes into bulbs, as many as it lights.
+    band(xs.home, xs.bulb, c.delivered, FLOW);
+    station(xs.bulb, c.delivered, formatBulbs(c.bulbs, b));
+    peel(xs.bulb, c.delivered, c.heat, LOSS, "Lost as heat");
     band(xs.bulb, xs.out, c.light, LIGHT);
-    const lt = svgEl("text", {x: F(xs.out), y: F(baseY - c.light * scale - 6), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, g);
-    lt.textContent = `Light: ${formatUnits(c.light)}`;
+    // The light's label: inside its band when the band is tall enough, else above it, on one
+    // line if the last segment is wide enough for it and on two if not.
+    const lightText = `Light: ${formatUnits(c.light)}`;
+    const lightH = c.light * scale, segW = xs.out - xs.bulb - 6;
+    ctx.font = `bold ${labelFont}px sans-serif`;
+    const lightW = ctx.measureText(lightText).width;
+    if (lightH >= labelFont + 4 && lightW <= segW) {
+      const lt = svgEl("text", {x: F((xs.bulb + xs.out) / 2), y: F(baseY - lightH / 2 + labelFont * 0.35), "font-size": labelFont, "text-anchor": "middle", fill: "#5a3d00", "font-weight": "bold"}, g);
+      lt.textContent = lightText;
+    } else if (lightW <= segW) {
+      const lt = svgEl("text", {x: F(xs.out), y: F(baseY - lightH - 6), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, g);
+      lt.textContent = lightText;
+    } else {
+      const l1 = svgEl("text", {x: F(xs.out), y: F(baseY - lightH - 8 - lineH), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, g);
+      l1.textContent = "Light";
+      const l2 = svgEl("text", {x: F(xs.out), y: F(baseY - lightH - 6), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, g);
+      l2.textContent = formatUnits(c.light);
+    }
 
     // The numbers on the main band where there is room.
-    for (const [x0, x1, units] of [[xs.source, xs.station, SOURCE], [xs.station, xs.wires, c.toGrid], [xs.wires, xs.home, c.delivered], [xs.home, xs.bulb, c.device]]) {
+    for (const [x0, x1, units] of [[xs.source, xs.station, SOURCE], [xs.station, xs.wires, c.toGrid], [xs.wires, xs.home, c.delivered], [xs.home, xs.bulb, c.delivered]]) {
       if (units * scale < 14) continue;
       const tx = svgEl("text", {x: F((x0 + x1) / 2), y: F(baseY - units * scale / 2 + 4), "font-size": labelFont, "text-anchor": "middle", fill: "#5a3d00"}, g);
       tx.textContent = formatUnits(units);
@@ -264,9 +282,9 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     // The note under the title states the final numbers at once, while the drawing and the
     // figures on the bands glide to them.
     const f = chain(bulb, efficiency);
-    subheading.textContent = `Of ${SOURCE} units of energy ${what}, ${formatUnits(f.light)} become light. ` +
-      `The ${src.station.toLowerCase()} sends out ${formatUnits(f.toGrid)}, ${formatUnits(f.delivered)} reach the house, ${b.the} uses ${formatUnits(f.device)} of them` +
-      (f.surplus > 0.05 ? ` and the other ${formatUnits(f.surplus)} need not be generated at all.` : ".") +
+    const plural = f.bulbs >= 1.05;
+    subheading.textContent = `Of ${SOURCE} units of energy ${what}, ${formatUnits(f.light)} become light: enough for ${formatBulbs(f.bulbs, b)}. ` +
+      `The ${src.station.toLowerCase()} sends out ${formatUnits(f.toGrid)}, ${formatUnits(f.delivered)} reach the house, and the bulb${plural ? "s" : ""} turn${plural ? "" : "s"} ${formatUnits(f.heat)} of those into heat.` +
       (src.burns ? "" : " Nothing is burned here: what the plant does not capture simply passes by.");
     svg.setAttribute("aria-label", `Sankey diagram of the energy chain from ${src.label.toLowerCase()} to light. ${subheading.textContent}`);
   }
@@ -379,6 +397,12 @@ function segmented(parent, choices, onPick) {
 function formatUnits(v) {
   const r = Math.round(v * 10) / 10;
   return `${Number.isInteger(r) ? r : r.toFixed(1)} unit${r === 1 ? "" : "s"}`;
+}
+// "6 LED bulbs", "1 incandescent bulb", "14.2 LED bulbs".
+function formatBulbs(n, bulb) {
+  const r = Math.round(n * 10) / 10;
+  const count = Number.isInteger(r) ? `${r}` : r.toFixed(1);
+  return `${count} ${bulb.short === "LED" ? "LED" : "incandescent"} bulb${r === 1 ? "" : "s"}`;
 }
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
