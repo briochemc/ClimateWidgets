@@ -1,4 +1,4 @@
-# From coal to a light bulb
+# From plant to a light bulb
 
 Of 100 units of energy in a lump of coal, how many end up as light? The chain is drawn as a Sankey: the energy enters at the power station on the left and most of it leaves up the cooling tower as heat; a little more warms the wires on the way; what reaches the house goes into the bulb, and an incandescent bulb turns nearly all of that into heat too, leaving 2 units of light. Switch to the **LED**: it makes the same light from 6 units instead of 36, so 30 of the units delivered to the house are not needed at all, and the whole chain behind them shrinks. Pick another **source** and the plant takes that source's typical efficiency, which the slider then moves: a gas turbine keeps more than half, a reactor a third, a geothermal plant a sixth; a hydro turbine captures nine tenths of the water's energy, a wind turbine a little under half of the wind through its rotor, a solar panel a fifth of the sunlight that falls on it.
 
@@ -22,7 +22,7 @@ import {embedSnippets, libUrl} from "../components/embed-snippet.js";
 display(embedSnippets({
   embedPath: "energy-chain/embed",
   height: 400,
-  title: "From coal to a light bulb",
+  title: "From plant to a light bulb",
   note: "The figure fills its column up to 640&nbsp;px wide and reflows down to about 320&nbsp;px; allow about 440&nbsp;px of height at phone width. " +
     "The embed page is preset through its URL: <code>?source=wind</code> (coal, gas, nuclear, biomass, geothermal, hydro, wind, solar), " +
     "<code>?bulb=led</code> or <code>incandescent</code>, and <code>?efficiency=45</code> (per cent, overriding the source's typical figure).",

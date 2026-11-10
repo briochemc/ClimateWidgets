@@ -34,7 +34,7 @@ export default {
     {name: "The Coriolis effect on the Earth", path: "/coriolis-sphere/"},
     {name: "Electricity generation in the NEM", path: "/nem-generation/"},
     {name: "The NEM to 2050", path: "/isp-scenarios/"},
-    {name: "From coal to a light bulb", path: "/energy-chain/"},
+    {name: "From plant to a light bulb", path: "/energy-chain/"},
     {
       name: "Archive",
       open: false,

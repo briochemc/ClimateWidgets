@@ -1,5 +1,5 @@
 ---
-title: From coal to a light bulb (embed)
+title: From plant to a light bulb (embed)
 header: false
 footer: false
 sidebar: false

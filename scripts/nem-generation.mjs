@@ -1,35 +1,29 @@
 // Builds src/nem-generation/data/nem-generation.json: electricity generation by fuel technology
 // in Australia's National Electricity Market (the NEM as a whole and each of its five regions)
-// and in Western Australia's SWIS (the WEM), from Open Electricity (The Superpower Institute,
-// formerly OpenNEM), CC BY-NC 4.0, https://platform.openelectricity.org.au/license. Run it by
-// hand from the repo root (`node scripts/nem-generation.mjs`) or let the monthly GitHub Action
+// and in Western Australia's SWIS (the WEM), month by month from December 1998 to the last
+// complete month, from Open Electricity (The Superpower Institute, formerly OpenNEM), CC BY-NC
+// 4.0, https://platform.openelectricity.org.au/license. Run it by hand from the repo root
+// (`node scripts/nem-generation.mjs`) or let the monthly GitHub Action
 // (.github/workflows/refresh-nem-generation.yml) do it; the site never runs it. Node 18 or
-// later, no npm dependencies. `--cache <dir>` keeps the downloads for the next run.
+// later, no npm dependencies, no credentials. `--cache <dir>` keeps the downloads for the next run.
 //
-// Two sources, both public and both current:
-//
-//  - Monthly history, December 1998 to the last complete month, from Open Electricity's
-//    static v4 files, data.openelectricity.org.au/v4/stats/au/NEM/energy/all.json and the
-//    same for each region (NEM/NSW1/...) and for WEM. These are regenerated daily (the
-//    `created_at` field says when) and carry every fuel technology's energy in GWh per month,
-//    with emissions and market value alongside, which are not used here. Their v3 ancestor
-//    stopped in November 2024; the v4 ones are the files Open Electricity's own site reads.
-//  - The last 52 weeks, week by week, from the Open Electricity API v4
-//    (api.openelectricity.org.au/v4/data/network/NEM?metrics=energy&interval=7d...), which
-//    anonymous "community" access answers for the last two years, one call per network with
-//    the regions as a grouping. An Academic or other key in OPENELECTRICITY_API_KEY is sent
-//    if present but is not needed. The API's weeks start on Sunday; the running week is dropped.
+// The source is Open Electricity's static v4 files, data.openelectricity.org.au/v4/stats/au/
+// NEM/energy/all.json and the same for each region (NEM/NSW1/...) and for WEM. These are
+// regenerated daily (the `created_at` field says when) and carry every fuel technology's
+// energy in GWh per month, with emissions and market value alongside, which are not used
+// here. Their v3 ancestor stopped in November 2024; the v4 ones are the files Open
+// Electricity's own site reads. (An earlier version of this script also pulled the last year
+// of weeks from the API; the widget no longer shows weeks.)
 //
 // Fuel technologies are kept as Open Electricity names them, with its colours, in its stacking
 // order (loads first, then sources from the bottom of the stack up), and each is tagged as a
 // source, a load (pumping, battery charging, exports: energy drawn from the grid, which the
 // widget draws below zero and leaves out of the shares) or imports (a source for the region but
-// not generation, so also left out of the shares), and as renewable or not. The widget's
-// "simple" grouping (coal, gas, hydro, wind, solar, batteries, other) is in `group`.
+// not generation, so also left out of the shares), and as renewable or not. The widget groups
+// them into coal, gas, hydro, wind, solar, batteries and other itself.
 //
 // Output: `fuelTechs` (the table above), and `regions`, each with `monthly` ({start: "YYYY-MM",
-// values: {fuelTech: [GWh per month, null before the record begins]}}) and `weekly` ({start:
-// "YYYY-MM-DD" of the first week's Sunday, values: {fuelTech: [GWh per week]}}).
+// values: {fuelTech: [GWh per month, null before the record begins]}}).
 
 import {mkdirSync, readFileSync, writeFileSync, existsSync} from "node:fs";
 import {dirname, join} from "node:path";
@@ -39,15 +33,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(ROOT, "src/nem-generation/data/nem-generation.json");
 
 const STATS = "https://data.openelectricity.org.au/v4/stats/au";
-const API = "https://api.openelectricity.org.au/v4/data/network";
 const LICENCE = "https://platform.openelectricity.org.au/license";
-const KEY = process.env.OPENELECTRICITY_API_KEY;
 
 const cacheArg = process.argv.indexOf("--cache");
 const CACHE = cacheArg > 0 ? process.argv[cacheArg + 1] : null;
 
-// The regions: the NEM as a whole, its five regions, and the WEM. `stats` is the history file,
-// `weekly` says which API call the region's weeks come from and under which region column.
+// The regions: the NEM as a whole, its five regions, and the WEM; `stats` is each one's file.
 export const REGIONS = [
   {id: "NEM", name: "National Electricity Market", short: "NEM", network: "NEM", stats: `${STATS}/NEM/energy/all.json`},
   {id: "NSW1", name: "New South Wales", short: "NSW", network: "NEM", stats: `${STATS}/NEM/NSW1/energy/all.json`},
@@ -84,12 +75,10 @@ export const FUEL_TECHS = [
 ];
 const KNOWN = new Set(FUEL_TECHS.map(f => f.id));
 
-async function fetchJson(url, {auth = false} = {}) {
+async function fetchJson(url) {
   const file = CACHE && join(CACHE, url.replace(/^https?:\/\//, "").replace(/[^\w.-]+/g, "_") + ".json");
   if (file && existsSync(file)) return JSON.parse(readFileSync(file, "utf8"));
-  const headers = {accept: "application/json"};
-  if (auth && KEY) headers.authorization = `Bearer ${KEY}`;
-  const res = await fetch(url, {headers});
+  const res = await fetch(url, {headers: {accept: "application/json"}});
   if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
   const json = await res.json();
   if (file) { mkdirSync(dirname(file), {recursive: true}); writeFileSync(file, JSON.stringify(json)); }
@@ -119,50 +108,14 @@ function monthly(stats) {
   return {start: monthLabel(first), values, createdAt: stats.created_at};
 }
 
-// The last 52 complete weeks from one API response, for the region whose column is given
-// (none for the network as a whole). The API's weeks start on Sunday; a week that has not
-// ended yet is dropped.
-function weekly(api, regionColumn) {
-  const block = api.data?.[0];
-  if (!block) throw new Error("empty API response");
-  const results = block.results.filter(r => KNOWN.has(r.columns.fueltech) && (!regionColumn || r.columns.region === regionColumn));
-  const dates = [...new Set(results.flatMap(r => r.data.map(d => d[0].slice(0, 10))))].sort();
-  const now = Date.now();
-  const complete = dates.filter(d => Date.parse(d + "T00:00:00Z") + 7 * 86400e3 <= now + 86400e3 * 0.5);
-  const index = new Map(complete.map((d, i) => [d, i]));
-  const values = {};
-  for (const r of results) {
-    const arr = new Array(complete.length).fill(null);
-    for (const [t, v] of r.data) {
-      const i = index.get(t.slice(0, 10));
-      if (i !== undefined) arr[i] = round1(v / 1000);   // MWh → GWh
-    }
-    values[r.columns.fueltech] = arr;
-  }
-  return {start: complete[0], values};
-}
-
 async function main() {
-  // Weekly: 364 days back keeps inside the API's 366-day limit for 7d intervals.
-  const since = new Date(Date.now() - 364 * 86400e3).toISOString().slice(0, 10);
-  const weeklyUrl = (network, byRegion) =>
-    `${API}/${network}?metrics=energy&interval=7d&date_start=${since}&secondary_grouping=fueltech` +
-    (byRegion ? "&primary_grouping=network_region" : "");
-  const [nemWeeks, nemRegionWeeks, wemWeeks] = await Promise.all([
-    fetchJson(weeklyUrl("NEM", false), {auth: true}),
-    fetchJson(weeklyUrl("NEM", true), {auth: true}),
-    fetchJson(weeklyUrl("WEM", false), {auth: true}),
-  ]);
-
   const regions = [];
   for (const r of REGIONS) {
     const stats = await fetchJson(r.stats);
     const m = monthly(stats);
-    const w = r.id === "NEM" ? weekly(nemWeeks) : r.id === "WEM" ? weekly(wemWeeks) : weekly(nemRegionWeeks, r.id);
     const months = Object.values(m.values)[0].length;
-    console.log(`${r.id.padEnd(5)} ${Object.keys(m.values).length} techs, ${months} months from ${m.start}, ${Object.values(w.values)[0].length} weeks from ${w.start}`);
-    regions.push({id: r.id, name: r.name, short: r.short, network: r.network,
-      monthly: {start: m.start, values: m.values}, weekly: {start: w.start, values: w.values}});
+    console.log(`${r.id.padEnd(5)} ${Object.keys(m.values).length} techs, ${months} months from ${m.start} (file of ${m.createdAt})`);
+    regions.push({id: r.id, name: r.name, short: r.short, network: r.network, monthly: {start: m.start, values: m.values}});
   }
 
   const out = {
@@ -173,7 +126,6 @@ async function main() {
       licence: "CC BY-NC 4.0",
       licenceUrl: LICENCE,
       history: `${STATS}/NEM/energy/all.json`,
-      weekly: `${API}/NEM?metrics=energy&interval=7d`,
     },
     fuelTechs: FUEL_TECHS,
     regions,

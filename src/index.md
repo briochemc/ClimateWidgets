@@ -108,7 +108,7 @@ Small, self-contained interactive figures for teaching climate science. Each wid
     <img class="thumb" src="./assets/thumbnails/isp-scenarios.png" alt="A stacked area of the National Electricity Market's annual generation by technology from 2010 to 2050, the history in solid colour and AEMO's Step Change projection hatched after a dashed line: coal shrinking to nothing by the 2040s while wind and solar grow to more than twice today's total">
   </a>
   <a class="card" href="./energy-chain/">
-    <h2>From coal to a light bulb</h2>
+    <h2>From plant to a light bulb</h2>
     <img class="thumb" src="./assets/thumbnails/energy-chain.png" alt="A Sankey diagram running left to right: a wide orange band of 100 units of coal energy narrows at each station as grey bands of loss peel off upwards, 62 at the power station, 2 in the wires and 34 as heat in the bulb, leaving a thin yellow band of 2 units of light at the right; two pill buttons switch between an incandescent bulb and an LED, and a slider sets the station's efficiency">
   </a>
   <a class="card" href="./coriolis-sphere/">

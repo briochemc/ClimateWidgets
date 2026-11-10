@@ -32,20 +32,15 @@ import {createNemGenerationWidget} from "./widget.js";
 const data = await FileAttachment("./data/nem-generation.json").json();
 
 // Presets, for Moodle's plain iframes: ?region=sa1 (nem, nsw1, qld1, sa1, tas1, vic1, wem);
-// ?range=1y, 5y or all, with &interval=1y for years rather than months; ?measure=gwh or share;
-// ?only=wind or ?hide=coal,gas (fuel technologies or the simple groups); ?renewables=1;
-// ?group=simple.
+// ?interval=year or month; ?measure=gwh or share; ?select=wind (coal, gas, hydro, wind, solar,
+// batteries, other) to open with that source picked out.
 const params = new URLSearchParams(location.search);
 const region = params.get("region") ?? undefined;
-const range = params.get("range") ?? undefined;
 const interval = params.get("interval") ?? undefined;
 const measure = params.get("measure") ?? undefined;
-const grouping = params.get("group") ?? params.get("grouping") ?? undefined;
-const only = params.get("only") ?? undefined;
-const hide = params.get("hide") ?? undefined;
-const renewables = ["1", "true", "yes", "on"].includes((params.get("renewables") ?? "").toLowerCase());
+const select = params.get("select") ?? undefined;
 ```
 
 ```js
-const generation = view(createNemGenerationWidget({data, region, range, interval, measure, grouping, only, hide, renewables}));
+const generation = view(createNemGenerationWidget({data, region, interval, measure, select}));
 ```

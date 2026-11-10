@@ -1,11 +1,8 @@
 # Refreshes the NEM generation widget's data once a month: re-runs scripts/nem-generation.mjs,
-# which pulls Open Electricity's latest months and weeks, and commits the new data file if it
-# changed. The push to main then deploys the site through deploy.yml.
-#
-# The script needs no credentials: Open Electricity's history files are public and its API
-# answers anonymously for the last two years. If that ever changes, set a repository secret
-# OPENELECTRICITY_API_KEY (an Academic key is free for .edu.au addresses) and the script will
-# send it. Run it by hand from the Actions tab with "Run workflow".
+# which pulls Open Electricity's latest months, and commits the new data file if it changed.
+# The push to main then deploys the site through deploy.yml. The script needs no credentials:
+# Open Electricity's history files are public. Run it by hand from the Actions tab with "Run
+# workflow".
 
 name: Refresh NEM generation data
 
@@ -27,8 +24,6 @@ jobs:
           node-version: "22"
       - name: Fetch the latest data
         run: node scripts/nem-generation.mjs
-        env:
-          OPENELECTRICITY_API_KEY: ${{ secrets.OPENELECTRICITY_API_KEY }}
       - name: Commit if anything changed
         run: |
           if git diff --quiet -- src/nem-generation/data/nem-generation.json; then
