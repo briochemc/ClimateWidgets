@@ -5,13 +5,17 @@
 // light, and an LED, which draws 6 for the same light, so that 30 of the 36 units delivered
 // are no longer needed; the switch between them animates, since the shrinking draw at the
 // plug is the point. A slider sets the power station's efficiency, from an old coal plant to
-// a gas combined-cycle one, and the first link of the chain moves with it. Drawn in the style
+// a gas combined-cycle one, and the first link of the chain moves with it; a row of sources
+// (coal, gas, nuclear, biomass, geothermal, hydro, wind, solar) sets it to each one's typical
+// efficiency and renames the plant, so the same chain can start from wind through a rotor or
+// sunlight on a panel, where what is not captured is not burned. Drawn in the style
 // of the Hickman and climate-funds widgets: a grey plate, a bold title in the corner, dark
 // pill buttons. Static numbers, the course's own; no data file. Self-contained: no d3, no
 // imports.
 //
-// Options: {bulb: "incandescent" | "led"}, {efficiency: 0.38} (the power station's); {width}
-// caps the figure's width.
+// Options: {source: "coal" | "gas" | "nuclear" | "biomass" | "geothermal" | "hydro" | "wind" |
+// "solar"}, {bulb: "incandescent" | "led"}, {efficiency: 0.38} (the plant's, overriding the
+// source's typical figure); {width} caps the figure's width.
 
 const CARD_WIDTH = 640;
 const CARD_PAD = 12;
@@ -28,8 +32,25 @@ export const BULBS = [
   {id: "incandescent", label: "Incandescent bulb", short: "Incandescent", the: "the incandescent bulb", draw: 36, heat: 34, title: "Draws 36 units and gives 2 of light; the other 34 are heat"},
   {id: "led", label: "LED bulb", short: "LED", the: "the LED", draw: 6, heat: 4, title: "Draws 6 units for the same 2 of light"},
 ];
-// Round efficiencies for an old subcritical coal plant, a modern one, and a gas combined
-// cycle; the default, 38%, is the course figure's 62 units lost.
+// The sources the chain can start from, each with a typical efficiency for turning the energy
+// that reaches the plant into electricity (IPCC AR5 WG3 Annex III and IEA technology
+// assessments, rounded), the range the literature gives, and what the plant is called. For
+// coal the default is the course figure's 38% (62 units lost), not a typical plant's. For
+// wind the energy counted is what blows through the rotor (Betz's limit caps a turbine at
+// 59%), for solar the sunlight that falls on the panel; nothing is burned, so what is not
+// captured just passes by.
+export const SOURCES = [
+  {id: "coal", label: "Coal", efficiency: 0.38, range: "33–45% for coal plants, old to new", station: "Power station", burns: true},
+  {id: "gas", label: "Gas", efficiency: 0.58, range: "55–62% for a combined-cycle gas turbine, 35–40% for open cycle", station: "Gas turbine", burns: true},
+  {id: "nuclear", label: "Nuclear", efficiency: 0.33, range: "33–37% for a water-cooled reactor's steam cycle", station: "Reactor", burns: true},
+  {id: "biomass", label: "Biomass", efficiency: 0.30, range: "25–35% for a biomass boiler", station: "Power station", burns: true},
+  {id: "geothermal", label: "Geothermal", efficiency: 0.15, range: "10–20%, the steam being cool", station: "Geothermal plant", burns: false},
+  {id: "hydro", label: "Hydro", efficiency: 0.90, range: "85–95% of the water's energy", station: "Hydro turbine", burns: false},
+  {id: "wind", label: "Wind", efficiency: 0.45, range: "35–50% of the wind through the rotor; Betz's limit is 59%", station: "Wind turbine", burns: false},
+  {id: "solar", label: "Solar", efficiency: 0.20, range: "18–23% of the sunlight on the panel", station: "Solar panel", burns: false},
+];
+// Marks under the slider: round efficiencies for an old coal plant, a modern one, and a gas
+// combined cycle.
 export const EFFICIENCY_MARKS = [
   {value: 0.33, label: "old coal 33%"},
   {value: 0.45, label: "best coal 45%"},
@@ -50,12 +71,14 @@ export function chain(bulbId, efficiency) {
   return {generationLoss, toGrid, lineLoss, delivered, surplus, device, heat, light};
 }
 
-export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb, efficiency: initialEfficiency} = {}) {
+export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb, source: initialSource, efficiency: initialEfficiency} = {}) {
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
 
   // ---- state ----------------------------------------------------------------------------------
   let bulb = BULBS.some(b => b.id === initialBulb) ? initialBulb : "incandescent";
-  let efficiency = clamp(Number(initialEfficiency) || DEFAULT_EFFICIENCY, 0.2, 0.7);
+  let source = SOURCES.some(s => s.id === initialSource) ? initialSource : "coal";
+  const sourceOf = () => SOURCES.find(s => s.id === source);
+  let efficiency = clamp(Number(initialEfficiency) || sourceOf().efficiency, 0.05, 0.95);
   let shown = chain(bulb, efficiency);   // the numbers drawn now, chasing the target
   let raf = null, lastFrame = 0;
 
@@ -99,6 +122,21 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     b.style.color = active ? "#fff" : "#333";
     b.setAttribute("aria-pressed", String(active));
   }
+  // The source: one pill each, which sets the slider to that source's typical efficiency.
+  const sourceRow = document.createElement("div");
+  sourceRow.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 0 6px;";
+  const sourceButtons = SOURCES.map(s => {
+    const el = document.createElement("button");
+    el.type = "button";
+    el.textContent = s.label;
+    el.title = `${s.label}: typically ${Math.round(s.efficiency * 100)}% (${s.range})`;
+    el.style.cssText = PILL;
+    el.addEventListener("click", () => setSource(s.id));
+    sourceRow.appendChild(el);
+    return el;
+  });
+  container.appendChild(sourceRow);
+
   const controls = document.createElement("div");
   controls.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:0 0 8px;";
   container.appendChild(controls);
@@ -123,16 +161,16 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
   sliderLabel.style.cssText = "font-size:13px;color:#333;";
   const slider = document.createElement("input");
   slider.type = "range";
-  slider.min = 20; slider.max = 70; slider.step = 1;
+  slider.min = 5; slider.max = 95; slider.step = 1;
   slider.style.cssText = `width:100%;margin:0;accent-color:${ACCENT};cursor:pointer;`;
-  slider.setAttribute("aria-label", "Power station efficiency, per cent");
+  slider.setAttribute("aria-label", "The plant's efficiency, per cent");
   slider.addEventListener("input", e => { e.stopPropagation(); setEfficiency(Number(slider.value) / 100); });
   const marks = document.createElement("div");
   marks.style.cssText = "position:relative;height:26px;font-size:10px;color:#777;";
   EFFICIENCY_MARKS.forEach((m, i) => {
     const s = document.createElement("span");
     s.textContent = m.label;
-    const pct = (m.value * 100 - 20) / 50 * 100;
+    const pct = (m.value * 100 - 5) / 90 * 100;
     // Alternate rows, so that the marks never run into each other when the slider is short.
     s.style.cssText = `position:absolute;left:${pct}%;top:${(i % 2) * 12}px;transform:translateX(${pct < 20 ? "0" : pct > 75 ? "-100%" : "-50%"});white-space:nowrap;cursor:pointer;`;
     s.title = `Set the station to ${Math.round(m.value * 100)}%`;
@@ -221,11 +259,12 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
       tx.textContent = name;
     };
 
-    // The coal, and the band into the station.
+    // The source, and the band into the plant.
+    const src = sourceOf();
     band(xs.source, xs.station, SOURCE, FLOW);
-    station(xs.source - 3, SOURCE, "Coal", false);
-    station(xs.station, SOURCE, "Power station");
-    peel(xs.station, SOURCE, c.generationLoss, LOSS, "Lost at the station", `${Math.round(efficiency * 100)}% efficient`);
+    station(xs.source - 3, SOURCE, src.label, false);
+    station(xs.station, SOURCE, src.station);
+    peel(xs.station, SOURCE, c.generationLoss, LOSS, src.burns ? "Lost at the plant" : "Not captured", `${Math.round(efficiency * 100)}% efficient`);
     band(xs.station, xs.wires, c.toGrid, FLOW);
     station(xs.wires, c.toGrid, "Wires");
     peel(xs.wires, c.toGrid, c.lineLoss, LOSS, "Lost in the wires");
@@ -247,10 +286,13 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
       tx.textContent = formatUnits(units);
     }
 
-    subheading.textContent = `Of ${SOURCE} units of energy in the coal, ${formatUnits(c.light)} become light. ` +
-      `The station sends out ${formatUnits(c.toGrid)}, ${formatUnits(c.delivered)} reach the house, ${b.the} uses ${formatUnits(c.device)} of them` +
-      (c.surplus > 0.05 ? ` and the other ${formatUnits(c.surplus)} need not be generated at all.` : ".");
-    svg.setAttribute("aria-label", `Sankey diagram of the energy chain from coal to light. ${subheading.textContent}`);
+    const what = {coal: "in the coal", gas: "in the gas", nuclear: "in the nuclear fuel", biomass: "in the biomass", geothermal: "in the geothermal steam",
+      hydro: "in the falling water", wind: "in the wind through the rotor", solar: "in the sunlight on the panel"}[source];
+    subheading.textContent = `Of ${SOURCE} units of energy ${what}, ${formatUnits(c.light)} become light. ` +
+      `The ${src.station.toLowerCase()} sends out ${formatUnits(c.toGrid)}, ${formatUnits(c.delivered)} reach the house, ${b.the} uses ${formatUnits(c.device)} of them` +
+      (c.surplus > 0.05 ? ` and the other ${formatUnits(c.surplus)} need not be generated at all.` : ".") +
+      (src.burns ? "" : " Nothing is burned here: what the plant does not capture simply passes by.");
+    svg.setAttribute("aria-label", `Sankey diagram of the energy chain from ${src.label.toLowerCase()} to light. ${subheading.textContent}`);
   }
 
   // ---- animation ------------------------------------------------------------------------------
@@ -275,8 +317,11 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
   // ---- state changes --------------------------------------------------------------------------
   function updateControls() {
     bulbButtons.forEach((el, i) => stylePill(el, BULBS[i].id === bulb));
+    sourceButtons.forEach((el, i) => stylePill(el, SOURCES[i].id === source));
     slider.value = Math.round(efficiency * 100);
-    sliderLabel.textContent = `Power station efficiency: ${Math.round(efficiency * 100)}%`;
+    const s = sourceOf();
+    sliderLabel.textContent = `${s.station} efficiency: ${Math.round(efficiency * 100)}%`;
+    slider.title = `Typically ${Math.round(s.efficiency * 100)}%: ${s.range}`;
     heading.style.fontSize = `${titleFont.toFixed(1)}px`;
   }
   function setBulb(id) {
@@ -286,8 +331,17 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     requestRender();
     emit();
   }
+  // A new source brings its typical efficiency with it; the slider can then be moved.
+  function setSource(id) {
+    if (id === source) return;
+    source = id;
+    efficiency = sourceOf().efficiency;
+    updateControls();
+    requestRender();
+    emit();
+  }
   function setEfficiency(e) {
-    efficiency = clamp(e, 0.2, 0.7);
+    efficiency = clamp(e, 0.05, 0.95);
     updateControls();
     requestRender();
     emit();
@@ -296,7 +350,7 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
   // ---- value ----------------------------------------------------------------------------------
   function value() {
     const c = chain(bulb, efficiency);
-    return {bulb, efficiency, ...Object.fromEntries(Object.entries(c).map(([k, v]) => [k, Math.round(v * 10) / 10]))};
+    return {source, bulb, efficiency, ...Object.fromEntries(Object.entries(c).map(([k, v]) => [k, Math.round(v * 10) / 10]))};
   }
   function emit() {
     container.value = value();
