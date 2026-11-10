@@ -2,9 +2,9 @@
 // the power station, most leave as heat up the cooling tower, a little more warms the wires,
 // and what reaches the house goes into as many bulbs as it can light, which turn most of it
 // into heat too. Two bulbs: an incandescent one, which draws 36 units to make 2 of light, so
-// the 36 delivered light one bulb, and an LED, which draws 6 for the same light, so they light
-// six and give 12 units of light; the switch between them animates, since the growing light
-// from the same coal is the point. A slider sets the power station's efficiency, from an old coal plant to
+// the 36 delivered light one bulb, and an LED, which draws 2.4 for the same light, so they
+// light fifteen and give 30 units of light; the switch between them animates, since the
+// growing light from the same coal is the point. A slider sets the power station's efficiency, from an old coal plant to
 // a gas combined-cycle one, and the first link of the chain moves with it; a row of sources
 // (coal, gas, nuclear, biomass, geothermal, hydro, wind, solar) sets it to each one's typical
 // efficiency and renames the plant, so the same chain can start from wind through a rotor or
@@ -28,9 +28,16 @@ const DEFAULT_EFFICIENCY = 0.38;    // the course figure: 62 of 100 lost at the 
 const LINE_LOSS_SHARE = 2 / 38;     // the course figure: 2 of the 38 units sent out
 const FLOW = "#f0a202", LOSS = "#b8b8b8", LIGHT = "#ffd54f";
 
+// Each bulb gives 2 units of light: the incandescent for 36 units of electricity (the course
+// figure, about 14 lumens per watt), the LED for 2.4, since the most efficient lamps now sold
+// (Philips' ultra-efficient range, about 210 lumens per watt) give fifteen times the light per
+// watt. On that scale a perfect white light would be about 250 lumens per watt, so the LED
+// turns 84% of its electricity into light and the incandescent 6%.
 export const BULBS = [
-  {id: "incandescent", label: "Incandescent bulb", short: "Incandescent", the: "the incandescent bulb", draw: 36, heat: 34, title: "Draws 36 units and gives 2 of light; the other 34 are heat"},
-  {id: "led", label: "LED bulb", short: "LED", the: "the LED", draw: 6, heat: 4, title: "Draws 6 units for the same 2 of light"},
+  {id: "incandescent", label: "Incandescent bulb", short: "Incandescent", the: "the incandescent bulb", draw: 36, heat: 34,
+    title: "Draws 36 units and gives 2 of light; the other 34 are heat (about 14 lumens per watt)"},
+  {id: "led", label: "LED bulb", short: "LED", the: "the LED", draw: 2.4, heat: 0.4,
+    title: "Draws 2.4 units for the same 2 of light: the most efficient LED lamps sold, about 210 lumens per watt, fifteen times the incandescent"},
 ];
 // The sources the chain can start from, each with a typical efficiency for turning the energy
 // that reaches the plant into electricity (IPCC AR5 WG3 Annex III and IEA technology
@@ -231,7 +238,10 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     // name starting at the bar so that neighbours do not meet when the figure is narrow.
     const station = (x, units, name, bar = true) => {
       if (bar) svgEl("rect", {x: F(x - 2), y: F(baseY - units * scale - 2), width: 4, height: F(units * scale + 4), fill: "#333", rx: 1}, g);
-      const tx = svgEl("text", {x: F(x + 3), y: F(baseY + 15), "font-size": labelFont, fill: "#333"}, g);
+      // The name starts at the bar, unless it would run past the right edge.
+      ctx.font = `${labelFont}px sans-serif`;
+      const overflows = x + 3 + ctx.measureText(name).width > plotR;
+      const tx = svgEl("text", {x: F(overflows ? plotR : x + 3), y: F(baseY + 15), "font-size": labelFont, fill: "#333", ...(overflows ? {"text-anchor": "end"} : {})}, g);
       tx.textContent = name;
     };
 
@@ -257,9 +267,13 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     const lightH = c.light * scale, segW = xs.out - xs.bulb - 6;
     ctx.font = `bold ${labelFont}px sans-serif`;
     const lightW = ctx.measureText(lightText).width;
-    if (lightH >= labelFont + 4 && lightW <= segW) {
+    if (lightH >= labelFont + 4 && (lightW <= segW || ctx.measureText(formatUnits(c.light)).width <= segW)) {
       const lt = svgEl("text", {x: F((xs.bulb + xs.out) / 2), y: F(baseY - lightH / 2 + labelFont * 0.35), "font-size": labelFont, "text-anchor": "middle", fill: "#5a3d00", "font-weight": "bold"}, g);
-      lt.textContent = lightText;
+      lt.textContent = lightW <= segW ? lightText : formatUnits(c.light);
+      if (lightW > segW) {
+        const l1 = svgEl("text", {x: F(xs.out), y: F(baseY - lightH - 6), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, g);
+        l1.textContent = "Light";
+      }
     } else if (lightW <= segW) {
       const lt = svgEl("text", {x: F(xs.out), y: F(baseY - lightH - 6), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, g);
       lt.textContent = lightText;
