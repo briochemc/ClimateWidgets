@@ -77,6 +77,9 @@ const WIDGETS = [
   // With three balls already thrown, since an untouched turntable says nothing.
   {name: "coriolis", query: "?demo"},
   {name: "coriolis-sphere", query: "?demo"},
+  {name: "nem-generation"},
+  {name: "isp-scenarios"},
+  {name: "energy-chain"},
   // Archived, but still on the homepage.
   {name: "carbon-budget"},
   {name: "co2-per-capita"},
