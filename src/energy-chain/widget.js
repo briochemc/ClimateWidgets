@@ -196,8 +196,11 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
       const y2 = y1 + t;                          // the bottom of the loss band
       const yc = (y1 + y2) / 2, R = r + t / 2;
       const cy = yc - R;                          // the turn's centre
-      const d = `M${F(x)},${F(y2)}A${F(r + t)},${F(r + t)},0,0,1,${F(x + r + t)},${F(cy)}` +
-        `V${F(topY)}H${F(x + r)}V${F(cy)}A${F(r)},${F(r)},0,0,0,${F(x)},${F(y1)}Z`;
+      // Both arcs are centred on (x, cy), above the band's entry: the outer edge (radius r + t)
+      // sweeps anticlockwise from below the centre to its right, the inner edge (radius r)
+      // comes back clockwise. SVG's sweep flag is 0 for the former, 1 for the latter.
+      const d = `M${F(x)},${F(y2)}A${F(r + t)},${F(r + t)},0,0,0,${F(x + r + t)},${F(cy)}` +
+        `V${F(topY)}H${F(x + r)}V${F(cy)}A${F(r)},${F(r)},0,0,1,${F(x)},${F(y1)}Z`;
       svgEl("path", {d, fill}, g);
       // A thin leader from the stem up to the label when the label is in the upper row.
       const lx = x + r + t / 2;
