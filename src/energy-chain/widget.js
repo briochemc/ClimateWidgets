@@ -1,6 +1,7 @@
 // The energy chain from a lump of coal to lit bulbs, as a Sankey: 100 units of energy enter at
-// the power station, most leave as heat up the cooling tower, a little more warms the wires,
-// and what reaches the house goes into as many bulbs as it can light, which turn most of it
+// the power station, most leave as heat up the cooling tower, a little more warms the wires
+// along the way (a step in the band, with no bar, since it is spread out rather than at a
+// place), and what arrives goes into as many bulbs as it can light, which turn most of it
 // into heat too. Three bulbs: an incandescent one, which draws 36 units to make 2 of light, so
 // the 36 delivered light one bulb; an ordinary LED, which draws 6 for the same light, so they
 // light six and give 12 units of light; and the best LED sold, which draws 2.4, so they light
@@ -226,8 +227,9 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
 
     const inner = plotR - plotL;
     // Stations along the chain, as fractions of the width: the coal, the power station, the
-    // wires, the house, the bulb, and where the light leaves.
-    const xs = {source: plotL + 0.02 * inner, station: plotL + 0.2 * inner, wires: plotL + 0.42 * inner, home: plotL + 0.62 * inner, bulb: plotL + 0.8 * inner, out: plotR};
+    // bulb, and where the light leaves. The wires' loss leaves midway between the plant and
+    // the bulb, with no bar, since it is spread along the way rather than at a place.
+    const xs = {source: plotL + 0.02 * inner, station: plotL + 0.2 * inner, wires: plotL + 0.5 * inner, bulb: plotL + 0.8 * inner, out: plotR};
     const r = 8;   // the turns' inner radius
     const b = BULBS.find(x => x.id === bulb);
     const lineH = labelFont + 2;
@@ -299,13 +301,11 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     // sun, wind, water or ground heat that passes by, drawn pale.
     if (src.burns) peel(xs.station, SOURCE, c.generationLoss, HEAT, "Fuel wasted as heat", `${Math.round(efficiency * 100)}% efficient`);
     else peel(xs.station, SOURCE, c.generationLoss, PASSES_BY, "Passes by, not captured", `${Math.round(efficiency * 100)}% efficient`, PASSES_BY_EDGE);
+    // The electricity runs straight to the bulbs; on the way a little escapes from the wires.
     band(xs.station, xs.wires, c.toGrid, ELECTRICITY);
-    station(xs.wires, c.toGrid, "Wires");
     peel(xs.wires, c.toGrid, c.lineLoss, HEAT, "Lost in the wires");
-    band(xs.wires, xs.home, c.delivered, ELECTRICITY);
-    station(xs.home, c.delivered, "Home");
-    // Everything delivered goes into bulbs, as many as it lights.
-    band(xs.home, xs.bulb, c.delivered, ELECTRICITY);
+    // Everything that arrives goes into bulbs, as many as it lights.
+    band(xs.wires, xs.bulb, c.delivered, ELECTRICITY);
     const bulbRow = station(xs.bulb, c.delivered, formatBulbs(c.bulbs, b));
     peel(xs.bulb, c.delivered, c.heat, HEAT, "Lost as heat");
     band(xs.bulb, xs.out, c.light, LIGHT);
@@ -342,7 +342,7 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     plate.setAttribute("height", F(h));
 
     // The numbers on the main band where there is room, white on the dark fills.
-    for (const [x0, x1, units, fill] of [[xs.source, xs.station, SOURCE, src.colour], [xs.station, xs.wires, c.toGrid, ELECTRICITY], [xs.wires, xs.home, c.delivered, ELECTRICITY], [xs.home, xs.bulb, c.delivered, ELECTRICITY]]) {
+    for (const [x0, x1, units, fill] of [[xs.source, xs.station, SOURCE, src.colour], [xs.station, xs.wires, c.toGrid, ELECTRICITY], [xs.wires, xs.bulb, c.delivered, ELECTRICITY]]) {
       if (units * scale < 14) continue;
       const tx = svgEl("text", {x: F((x0 + x1) / 2), y: F(baseY - units * scale / 2 + 4), "font-size": labelFont, "text-anchor": "middle", fill: fill === MID_CARBON ? "#333" : "#fff"}, g);
       tx.textContent = formatUnits(units);
@@ -356,7 +356,7 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     const plural = f.bulbs >= 1.05;
     const carbon = src.burns && src.id !== "nuclear" ? `from burning the ${src.label.toLowerCase()}` : `from building the ${src.station.toLowerCase()}${src.id === "nuclear" ? " and making its fuel" : ""}, spread over its life`;
     subheading.textContent = `Of ${SOURCE} units of energy ${what}, ${formatUnits(f.light)} become light: enough for ${formatBulbs(f.bulbs, b)}, for ${formatCo2(src.co2)} ${carbon}, counting each unit as a megawatt-hour. ` +
-      `The ${src.station.toLowerCase()} sends out ${formatUnits(f.toGrid)}, ${formatUnits(f.delivered)} reach the house, and the bulb${plural ? "s" : ""} turn${plural ? "" : "s"} ${formatUnits(f.heat)} of those into heat.` +
+      `The ${src.station.toLowerCase()} sends out ${formatUnits(f.toGrid)}, ${formatUnits(f.delivered)} reach the bulb${plural ? "s" : ""}, which turn${plural ? "" : "s"} ${formatUnits(f.heat)} of those into heat.` +
       (src.burns ? "" : " Nothing is burned here: the pale band is energy that simply passes by.");
     svg.setAttribute("aria-label", `Sankey diagram of the energy chain from ${src.label.toLowerCase()} to light. ${subheading.textContent}`);
   }
