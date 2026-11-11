@@ -1,21 +1,24 @@
 // The energy chain from a lump of coal to lit bulbs, as a Sankey: 100 units of energy enter at
 // the power station, most leave as heat up the cooling tower, a little more warms the wires,
 // and what reaches the house goes into as many bulbs as it can light, which turn most of it
-// into heat too. Two bulbs: an incandescent one, which draws 36 units to make 2 of light, so
-// the 36 delivered light one bulb, and an LED, which draws 2.4 for the same light, so they
-// light fifteen and give 30 units of light; the switch between them animates, since the
-// growing light from the same coal is the point. A slider sets the power station's efficiency, from an old coal plant to
+// into heat too. Three bulbs: an incandescent one, which draws 36 units to make 2 of light, so
+// the 36 delivered light one bulb; an ordinary LED, which draws 6 for the same light, so they
+// light six and give 12 units of light; and the best LED sold, which draws 2.4, so they light
+// fifteen and give 30; the switch between them animates, since the growing light from the same
+// coal is the point. A slider sets the power station's efficiency, from an old coal plant to
 // a gas combined-cycle one, and the first link of the chain moves with it; a row of sources
 // (coal, gas, nuclear, biomass, geothermal, hydro, wind, solar) sets it to each one's typical
 // efficiency and renames the plant, so the same chain can start from wind through a rotor or
-// sunlight on a panel, where what is not captured is not burned. Drawn in the style
+// sunlight on a panel. The plant's loss is coloured by what it costs: sooty when it is fuel
+// burned for nothing, pale and outlined when it is sunlight, wind or water that simply passes
+// by; the wires' and bulbs' heat, electricity wasted, is the grey between. Drawn in the style
 // of the Hickman and climate-funds widgets: a grey plate, a bold title in the corner, dark
 // pill buttons. Static numbers, the course's own; no data file. Self-contained: no d3, no
 // imports.
 //
 // Options: {source: "coal" | "gas" | "nuclear" | "biomass" | "geothermal" | "hydro" | "wind" |
-// "solar"}, {bulb: "incandescent" | "led"}, {efficiency: 0.38} (the plant's, overriding the
-// source's typical figure); {width} caps the figure's width.
+// "solar"}, {bulb: "incandescent" | "led" | "best-led"}, {efficiency: 0.38} (the plant's,
+// overriding the source's typical figure); {width} caps the figure's width.
 
 const CARD_WIDTH = 640;
 const CARD_PAD = 12;
@@ -26,17 +29,25 @@ const ACCENT = "#0b57d0";
 const SOURCE = 100;                 // units of energy in the coal
 const DEFAULT_EFFICIENCY = 0.38;    // the course figure: 62 of 100 lost at the station
 const LINE_LOSS_SHARE = 2 / 38;     // the course figure: 2 of the 38 units sent out
-const FLOW = "#f0a202", LOSS = "#b8b8b8", LIGHT = "#ffd54f";
+const FLOW = "#f0a202", LIGHT = "#ffd54f";
+// The losses, coloured by what they cost: fuel burned for nothing is sooty, electricity wasted
+// in the wires or as a bulb's heat is grey, and energy that a plant does not capture from the
+// sun, wind, water or ground is pale and outlined, since it was never anyone's to lose.
+const LOSS = "#b8b8b8", FUEL_LOSS = "#5f5a56", PASSES_BY = "#e4ecf2", PASSES_BY_EDGE = "#8fa6b8";
 
 // Each bulb gives 2 units of light: the incandescent for 36 units of electricity (the course
-// figure, about 14 lumens per watt), the LED for 2.4, since the most efficient lamps now sold
-// (Philips' ultra-efficient range, about 210 lumens per watt) give fifteen times the light per
-// watt. On that scale a perfect white light would be about 250 lumens per watt, so the LED
-// turns 84% of its electricity into light and the incandescent 6%.
+// figure, about 14 lumens per watt); an ordinary LED for 6 (the course figure too, about 85
+// lumens per watt, six times the incandescent, in the 80–100 of the lamps in most shops); the
+// best LED for 2.4, since the most efficient lamps now sold (Philips' ultra-efficient range,
+// about 210 lumens per watt) give fifteen times the light per watt. On that scale a perfect
+// white light would be about 250 lumens per watt, so the best LED turns 84% of its electricity
+// into light, the ordinary one 33% and the incandescent 6%.
 export const BULBS = [
-  {id: "incandescent", label: "Incandescent bulb", short: "Incandescent", the: "the incandescent bulb", draw: 36, heat: 34,
+  {id: "incandescent", label: "Incandescent", short: "Incandescent", noun: "incandescent bulb", draw: 36, heat: 34,
     title: "Draws 36 units and gives 2 of light; the other 34 are heat (about 14 lumens per watt)"},
-  {id: "led", label: "LED bulb", short: "LED", the: "the LED", draw: 2.4, heat: 0.4,
+  {id: "led", label: "Ordinary LED", short: "Ordinary LED", noun: "ordinary LED bulb", draw: 6, heat: 4,
+    title: "Draws 6 units for the same 2 of light: a typical LED lamp, about 85 lumens per watt, six times the incandescent"},
+  {id: "best-led", label: "Best LED", short: "Best LED", noun: "best LED bulb", draw: 2.4, heat: 0.4,
     title: "Draws 2.4 units for the same 2 of light: the most efficient LED lamps sold, about 210 lumens per watt, fifteen times the incandescent"},
 ];
 // The sources the chain can start from, each with a typical efficiency for turning the energy
@@ -189,8 +200,12 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     svg.setAttribute("width", w.toFixed(0));
     svg.setAttribute("height", svgH.toFixed(0));
     svg.replaceChildren();
-    svgEl("rect", {x: 0, y: 0, width: F(w), height: F(svgH), fill: BACKGROUND}, svg);
+    const plate = svgEl("rect", {x: 0, y: 0, width: F(w), height: F(svgH), fill: BACKGROUND}, svg);
     const g = svgEl("g", {"font-family": "sans-serif"}, svg);
+    // The losses' leaders and labels sit in their own layers above the bands, the labels
+    // haloed in the plate's colour so that a leader passing behind one is hidden by it.
+    const leaderG = svgEl("g", {}, svg);
+    const labelG = svgEl("g", {"font-family": "sans-serif", "paint-order": "stroke", stroke: BACKGROUND, "stroke-width": 3, "stroke-linejoin": "round"}, svg);
 
     const inner = plotR - plotL;
     // Stations along the chain, as fractions of the width: the coal, the power station, the
@@ -209,7 +224,7 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     // the top of the band and turns up to the top edge, where it is named in two lines, in
     // the upper or lower of two rows so that neighbouring labels never meet.
     let lossCount = 0;
-    const peel = (x, incoming, units, fill, name, sub) => {
+    const peel = (x, incoming, units, fill, name, sub, edge) => {
       const row = lossCount++ % 2;   // alternate rows, whether or not the loss is drawn
       if (units <= 0.05) return;
       const t = units * scale;
@@ -222,26 +237,35 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
       // comes back clockwise. SVG's sweep flag is 0 for the former, 1 for the latter.
       const d = `M${F(x)},${F(y2)}A${F(r + t)},${F(r + t)},0,0,0,${F(x + r + t)},${F(cy)}` +
         `V${F(topY)}H${F(x + r)}V${F(cy)}A${F(r)},${F(r)},0,0,1,${F(x)},${F(y1)}Z`;
-      svgEl("path", {d, fill}, g);
+      // A loss that is only energy passing by is drawn pale, with a dashed edge so that it still
+      // reads against the plate.
+      svgEl("path", {d, fill, ...(edge ? {stroke: edge, "stroke-width": 1, "stroke-dasharray": "3 2"} : {})}, g);
       // A thin leader from the stem up to the label when the label is in the upper row.
       const lx = x + r + t / 2;
       const base = topY - 4 - row * (2 * lineH + 6);
-      if (row) svgEl("path", {d: `M${F(lx)},${F(topY)}V${F(base + 2)}`, stroke: "#999", "stroke-width": 1}, g);
+      if (row) svgEl("path", {d: `M${F(lx)},${F(topY)}V${F(base + 2)}`, stroke: "#999", "stroke-width": 1}, leaderG);
       const anchor = lx < plotL + 50 ? "start" : lx > plotR - 50 ? "end" : "middle";
       const ax = anchor === "start" ? Math.max(plotL, lx - 10) : anchor === "end" ? Math.min(plotR, lx + 10) : lx;
-      const t1 = svgEl("text", {x: F(ax), y: F(base - lineH), "font-size": labelFont, "text-anchor": anchor, fill: "#333", "font-weight": "bold"}, g);
+      const t1 = svgEl("text", {x: F(ax), y: F(base - lineH), "font-size": labelFont, "text-anchor": anchor, fill: "#333", "font-weight": "bold"}, labelG);
       t1.textContent = name;
-      const t2 = svgEl("text", {x: F(ax), y: F(base), "font-size": labelFont, "text-anchor": anchor, fill: "#555"}, g);
+      const t2 = svgEl("text", {x: F(ax), y: F(base), "font-size": labelFont, "text-anchor": anchor, fill: "#555"}, labelG);
       t2.textContent = sub ? `${formatUnits(units)}, ${sub}` : formatUnits(units);
     };
     // A station: a dark bar across the band where something happens, named beneath, the
     // name starting at the bar so that neighbours do not meet when the figure is narrow.
+    let nameEnd = -Infinity, twoRows = false;   // where the last station's name ended
     const station = (x, units, name, bar = true) => {
       if (bar) svgEl("rect", {x: F(x - 2), y: F(baseY - units * scale - 2), width: 4, height: F(units * scale + 4), fill: "#333", rx: 1}, g);
-      // The name starts at the bar, unless it would run past the right edge.
+      // The name starts at the bar, unless it would run past the right edge, when it ends
+      // there instead; and if it would then run into the name before it, it drops to a
+      // second row.
       ctx.font = `${labelFont}px sans-serif`;
-      const overflows = x + 3 + ctx.measureText(name).width > plotR;
-      const tx = svgEl("text", {x: F(overflows ? plotR : x + 3), y: F(baseY + 15), "font-size": labelFont, fill: "#333", ...(overflows ? {"text-anchor": "end"} : {})}, g);
+      const tw = ctx.measureText(name).width;
+      const overflows = x + 3 + tw > plotR;
+      const x0 = overflows ? plotR - tw : x + 3;
+      const row = x0 < nameEnd + 6 ? 1 : 0;
+      if (row) twoRows = true; else nameEnd = x0 + tw;
+      const tx = svgEl("text", {x: F(overflows ? plotR : x + 3), y: F(baseY + 15 + row * lineH), "font-size": labelFont, fill: "#333", ...(overflows ? {"text-anchor": "end"} : {})}, g);
       tx.textContent = name;
     };
 
@@ -250,7 +274,10 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     band(xs.source, xs.station, SOURCE, FLOW);
     station(xs.source - 3, SOURCE, src.label, false);
     station(xs.station, SOURCE, src.station);
-    peel(xs.station, SOURCE, c.generationLoss, LOSS, src.burns ? "Lost at the plant" : "Not captured", `${Math.round(efficiency * 100)}% efficient`);
+    // What the plant does not turn into electricity: fuel burned for nothing, drawn sooty, or
+    // sun, wind, water or ground heat that passes by, drawn pale.
+    if (src.burns) peel(xs.station, SOURCE, c.generationLoss, FUEL_LOSS, "Fuel wasted at the plant", `${Math.round(efficiency * 100)}% efficient`);
+    else peel(xs.station, SOURCE, c.generationLoss, PASSES_BY, "Passes by, not captured", `${Math.round(efficiency * 100)}% efficient`, PASSES_BY_EDGE);
     band(xs.station, xs.wires, c.toGrid, FLOW);
     station(xs.wires, c.toGrid, "Wires");
     peel(xs.wires, c.toGrid, c.lineLoss, LOSS, "Lost in the wires");
@@ -284,6 +311,11 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
       l2.textContent = formatUnits(c.light);
     }
 
+    // Room for the second row of station names, when one was needed.
+    const h = svgH + (twoRows ? lineH : 0);
+    svg.setAttribute("height", h.toFixed(0));
+    plate.setAttribute("height", F(h));
+
     // The numbers on the main band where there is room.
     for (const [x0, x1, units] of [[xs.source, xs.station, SOURCE], [xs.station, xs.wires, c.toGrid], [xs.wires, xs.home, c.delivered], [xs.home, xs.bulb, c.delivered]]) {
       if (units * scale < 14) continue;
@@ -299,7 +331,7 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     const plural = f.bulbs >= 1.05;
     subheading.textContent = `Of ${SOURCE} units of energy ${what}, ${formatUnits(f.light)} become light: enough for ${formatBulbs(f.bulbs, b)}. ` +
       `The ${src.station.toLowerCase()} sends out ${formatUnits(f.toGrid)}, ${formatUnits(f.delivered)} reach the house, and the bulb${plural ? "s" : ""} turn${plural ? "" : "s"} ${formatUnits(f.heat)} of those into heat.` +
-      (src.burns ? "" : " Nothing is burned here: what the plant does not capture simply passes by.");
+      (src.burns ? ` The dark band is ${src.id === "nuclear" ? "fuel" : src.label.toLowerCase()} burned for nothing.` : " Nothing is burned here: the pale band is energy that simply passes by.");
     svg.setAttribute("aria-label", `Sankey diagram of the energy chain from ${src.label.toLowerCase()} to light. ${subheading.textContent}`);
   }
 
@@ -412,11 +444,11 @@ function formatUnits(v) {
   const r = Math.round(v * 10) / 10;
   return `${Number.isInteger(r) ? r : r.toFixed(1)} unit${r === 1 ? "" : "s"}`;
 }
-// "6 LED bulbs", "1 incandescent bulb", "14.2 LED bulbs".
+// "6 ordinary LED bulbs", "1 incandescent bulb", "14.2 best LED bulbs".
 function formatBulbs(n, bulb) {
   const r = Math.round(n * 10) / 10;
   const count = Number.isInteger(r) ? `${r}` : r.toFixed(1);
-  return `${count} ${bulb.short === "LED" ? "LED" : "incandescent"} bulb${r === 1 ? "" : "s"}`;
+  return `${count} ${bulb.noun}${r === 1 ? "" : "s"}`;
 }
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));

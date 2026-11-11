@@ -29,8 +29,8 @@ body {
 ```js
 import {createEnergyChainWidget} from "./widget.js";
 
-// Presets: ?source=coal, gas, nuclear, biomass, geothermal, hydro, wind or solar; ?bulb=led or
-// incandescent; ?efficiency=45 (the plant's, per cent, overriding the source's typical figure).
+// Presets: ?source=coal, gas, nuclear, biomass, geothermal, hydro, wind or solar; ?bulb=incandescent,
+// led (an ordinary one) or best-led; ?efficiency=45 (the plant's, per cent, overriding the source's typical figure).
 const params = new URLSearchParams(location.search);
 const source = params.get("source") ?? undefined;
 const bulb = params.get("bulb") ?? undefined;
