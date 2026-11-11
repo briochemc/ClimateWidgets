@@ -21,16 +21,22 @@
 // pill buttons. Static numbers, the course's own; no data file. Self-contained: no d3, no
 // imports.
 //
+// There are no controls: clicking the source band opens a menu of plants, each with its
+// efficiency (coal at an old, the course's and a modern plant's, gas in open and combined
+// cycle, and the rest at their typical figure), and clicking the bulbs a menu of bulbs. When
+// the widget first comes into view a short tour points this out: a callout and an arrow to
+// the source, which changes a few times, then to the bulbs; any click or key ends it.
+//
 // Options: {source: "coal" | "gas" | "nuclear" | "biomass" | "geothermal" | "hydro" | "wind" |
 // "solar"}, {bulb: "incandescent" | "led" | "best-led"}, {efficiency: 0.38} (the plant's,
-// overriding the source's typical figure); {width} caps the figure's width.
+// overriding the source's typical figure); {tour: false} skips the tour; {width} caps the
+// figure's width.
 
 const CARD_WIDTH = 640;
 const CARD_PAD = 12;
 const FIGURE_WIDTH = CARD_WIDTH - 2 * CARD_PAD;
 const MIN_WIDTH = 320 - 2 * CARD_PAD;   // the card shrinks to 320 px, the figure inside it
 const BACKGROUND = "#f2f2f2";
-const ACCENT = "#0b57d0";
 const SOURCE = 100;                 // units of energy in the coal
 const DEFAULT_EFFICIENCY = 0.38;    // the course figure: 62 of 100 lost at the station
 const LINE_LOSS_SHARE = 2 / 38;     // the course figure: 2 of the 38 units sent out
@@ -84,12 +90,20 @@ export const SOURCES = [
   {id: "wind", label: "Wind", efficiency: 0.45, range: "35–50% of the wind through the rotor; Betz's limit is 59%", station: "Wind turbine", burns: false, co2: 0.5, colour: LOW_CARBON},
   {id: "solar", label: "Solar", efficiency: 0.20, range: "18–23% of the sunlight on the panel", station: "Solar panel", burns: false, co2: 1, colour: LOW_CARBON},
 ];
-// Marks under the slider: round efficiencies for an old coal plant, a modern one, and a gas
-// combined cycle.
-export const EFFICIENCY_MARKS = [
-  {value: 0.33, label: "old coal 33%"},
-  {value: 0.45, label: "best coal 45%"},
-  {value: 0.60, label: "gas CCGT 60%"},
+// The plants the source menu offers: each source at its typical efficiency, with coal at an
+// old plant's and a modern one's too, and gas in open cycle as well as combined.
+export const PLANTS = [
+  {source: "coal", label: "Coal, old plant", efficiency: 0.33},
+  {source: "coal", label: "Coal", efficiency: 0.38},
+  {source: "coal", label: "Coal, best plant", efficiency: 0.45},
+  {source: "gas", label: "Gas, open cycle", efficiency: 0.37},
+  {source: "gas", label: "Gas, combined cycle", efficiency: 0.58},
+  {source: "nuclear", label: "Nuclear", efficiency: 0.33},
+  {source: "biomass", label: "Biomass", efficiency: 0.30},
+  {source: "geothermal", label: "Geothermal", efficiency: 0.15},
+  {source: "hydro", label: "Hydro", efficiency: 0.90},
+  {source: "wind", label: "Wind", efficiency: 0.45},
+  {source: "solar", label: "Solar", efficiency: 0.20},
 ];
 
 // The chain's numbers for a bulb and a station efficiency. Everything that reaches the house
@@ -108,7 +122,7 @@ export function chain(bulbId, efficiency) {
   return {generationLoss, toGrid, lineLoss, delivered, bulbs, heat, light};
 }
 
-export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb, source: initialSource, efficiency: initialEfficiency} = {}) {
+export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb, source: initialSource, efficiency: initialEfficiency, tour = true} = {}) {
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
 
   // ---- state ----------------------------------------------------------------------------------
@@ -144,7 +158,7 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
   // ---- DOM ------------------------------------------------------------------------------------
   const container = document.createElement("div");
   container.style.cssText = `font:16px sans-serif;color:#333;background:${BACKGROUND};padding:10px ${CARD_PAD}px ${CARD_PAD}px;` +
-    `border-radius:6px;box-sizing:border-box;max-width:${maxW + 2 * CARD_PAD}px;`;
+    `border-radius:6px;box-sizing:border-box;max-width:${maxW + 2 * CARD_PAD}px;position:relative;`;
   const heading = document.createElement("div");
   heading.style.cssText = "font-weight:bold;color:#111;line-height:1.2;padding:4px 0 2px;";
   heading.textContent = "Energy lost on the way to a light bulb";
@@ -153,44 +167,166 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
   subheading.style.cssText = "font-size:12px;color:#666;padding:0 0 10px;line-height:1.35;";
   container.appendChild(subheading);
 
-  // The source, one segmented control, each choice setting the slider to that source's
-  // typical efficiency; then the bulb and the slider on the next row.
-  const sourceRow = document.createElement("div");
-  sourceRow.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 0 6px;";
-  const updateSourceButtons = segmented(sourceRow, SOURCES.map(s => ({id: s.id, label: s.label,
-    title: `${s.label}: typically ${Math.round(s.efficiency * 100)}% (${s.range})`})), setSource);
-  container.appendChild(sourceRow);
+  // No controls: the source and the bulbs are chosen on the drawing itself, from a menu that
+  // pops up under each when it is clicked.
+  const hint = document.createElement("div");
+  hint.style.cssText = "font-size:12px;color:#666;padding:0 0 6px;";
+  hint.textContent = "Click the source or the bulbs to change them.";
+  container.appendChild(hint);
 
-  const controls = document.createElement("div");
-  controls.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:0 0 8px;";
-  container.appendChild(controls);
-  const updateBulbButtons = segmented(controls, BULBS.map(b => ({id: b.id, label: b.label, title: b.title})), setBulb);
+  // The pop-up menu: a list of choices under the thing clicked, the current one dark, closed by
+  // a choice, a click elsewhere or Escape.
+  let menu = null;
+  function closeMenu() {
+    if (!menu) return;
+    menu.remove();
+    menu = null;
+    document.removeEventListener("pointerdown", onOutside, true);
+    document.removeEventListener("keydown", onKey, true);
+  }
+  function onOutside(e) { if (menu && !menu.contains(e.target)) closeMenu(); }
+  function onKey(e) { if (e.key === "Escape") closeMenu(); }
+  // `items`: [{label, note, title, active, pick}]; the menu's top-left or top-right corner is
+  // put at (x, y) in the container's own coordinates, or its bottom corner at `above` when it
+  // has to open upwards.
+  function openMenu(items, x, y, alignRight, heading, above) {
+    closeMenu();
+    menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    menu.style.cssText = "position:absolute;z-index:10;background:#fff;border:1px solid #333;border-radius:8px;" +
+      "box-shadow:0 3px 12px rgba(0,0,0,.25);padding:4px 0;min-width:200px;font:13px sans-serif;color:#333;overflow-y:auto;box-sizing:border-box;";
+    menu.style.top = `${y}px`;
+    if (alignRight) menu.style.right = `${container.clientWidth - x}px`; else menu.style.left = `${x}px`;
+    const head = document.createElement("div");
+    head.style.cssText = "font-size:11px;color:#777;padding:4px 12px 6px;text-transform:uppercase;letter-spacing:.04em;";
+    head.textContent = heading;
+    menu.appendChild(head);
+    for (const item of items) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute("role", "menuitemradio");
+      b.setAttribute("aria-checked", String(item.active));
+      if (item.title) b.title = item.title;
+      b.style.cssText = "display:flex;justify-content:space-between;gap:18px;width:100%;box-sizing:border-box;padding:4px 12px;" +
+        "border:0;font:inherit;text-align:left;cursor:pointer;white-space:nowrap;" +
+        (item.active ? "background:#333;color:#fff;" : "background:#fff;color:#333;");
+      if (!item.active) {
+        b.addEventListener("mouseenter", () => { b.style.background = "#e8e8e8"; });
+        b.addEventListener("mouseleave", () => { b.style.background = "#fff"; });
+      }
+      const l = document.createElement("span");
+      l.textContent = item.label;
+      const n = document.createElement("span");
+      n.textContent = item.note ?? "";
+      n.style.cssText = item.active ? "color:#ccc;" : "color:#777;";
+      b.append(l, n);
+      b.addEventListener("click", () => { closeMenu(); item.pick(); });
+      menu.appendChild(b);
+    }
+    container.appendChild(menu);
+    // Keep the menu inside the card sideways, and on screen downwards: in an iframe there may
+    // be little room under the chart, so when there is more above the label it opens upwards
+    // instead, and whichever way it opens it scrolls if it still does not fit.
+    const over = menu.offsetLeft + menu.offsetWidth - container.clientWidth + CARD_PAD;
+    if (!alignRight && over > 0) menu.style.left = `${Math.max(CARD_PAD, x - over)}px`;
+    const rect = menu.getBoundingClientRect(), need = menu.offsetHeight;
+    const below = window.innerHeight - rect.top - 8;
+    const anchorTop = rect.top - (y - (above ?? y)), aboveRoom = anchorTop - 8;
+    if (need > below && aboveRoom > below) {
+      menu.style.top = "";
+      menu.style.bottom = `${container.offsetHeight - (above ?? y)}px`;
+      menu.style.maxHeight = `${Math.max(120, Math.floor(aboveRoom))}px`;
+    } else {
+      menu.style.maxHeight = `${Math.max(120, Math.floor(below))}px`;
+    }
+    menu.querySelector("[aria-checked=true]")?.focus();
+    document.addEventListener("pointerdown", onOutside, true);
+    document.addEventListener("keydown", onKey, true);
+  }
+  function sourceMenu(x, y, above) {
+    openMenu(PLANTS.map(p => {
+      const s = SOURCES.find(s => s.id === p.source);
+      return {label: p.label, note: `${Math.round(p.efficiency * 100)}%`, title: `${s.station}: ${s.range}`,
+        active: p.source === source && Math.abs(p.efficiency - efficiency) < 0.005,
+        pick: () => setSource(p.source, p.efficiency)};
+    }), x, y, false, "Source and plant", above);
+  }
+  function bulbMenu(x, y, above) {
+    openMenu(BULBS.map(b => ({label: b.label, note: `draws ${b.draw} units`, title: b.title, active: b.id === bulb, pick: () => setBulb(b.id)})),
+      x, y, true, "Bulb, each giving 2 units of light", above);
+  }
+  // Where a point of the drawing sits in the container, which is the menus' and the tour's
+  // frame.
+  function at(x, y) {
+    const s = svg.getBoundingClientRect(), k = container.getBoundingClientRect();
+    return [s.left - k.left + x, s.top - k.top + y];
+  }
 
-  // The efficiency slider, with its marks named under it.
-  const sliderBox = document.createElement("div");
-  sliderBox.style.cssText = "display:flex;flex-direction:column;gap:2px;min-width:220px;flex:1 1 240px;";
-  const sliderLabel = document.createElement("label");
-  sliderLabel.style.cssText = "font-size:13px;color:#333;";
-  const slider = document.createElement("input");
-  slider.type = "range";
-  slider.min = 5; slider.max = 95; slider.step = 1;
-  slider.style.cssText = `width:100%;margin:0;accent-color:${ACCENT};cursor:pointer;`;
-  slider.setAttribute("aria-label", "The plant's efficiency, per cent");
-  slider.addEventListener("input", e => { e.stopPropagation(); setEfficiency(Number(slider.value) / 100); });
-  const marks = document.createElement("div");
-  marks.style.cssText = "position:relative;height:26px;font-size:10px;color:#777;";
-  EFFICIENCY_MARKS.forEach((m, i) => {
-    const s = document.createElement("span");
-    s.textContent = m.label;
-    const pct = (m.value * 100 - 5) / 90 * 100;
-    // Alternate rows, so that the marks never run into each other when the slider is short.
-    s.style.cssText = `position:absolute;left:${pct}%;top:${(i % 2) * 12}px;transform:translateX(${pct < 20 ? "0" : pct > 75 ? "-100%" : "-50%"});white-space:nowrap;cursor:pointer;`;
-    s.title = `Set the station to ${Math.round(m.value * 100)}%`;
-    s.addEventListener("click", () => setEfficiency(m.value));
-    marks.appendChild(s);
-  });
-  sliderBox.append(sliderLabel, slider, marks);
-  controls.appendChild(sliderBox);
+  // ---- the tour -------------------------------------------------------------------------------
+  // When the widget first comes into view it shows itself off: a callout takes the hint's
+  // place, an arrow runs from it down to the source, which is outlined, and the source changes
+  // a few times before the preset returns; then the same for the bulbs. Any click or key in
+  // the widget ends it at once, overlay and all, leaving things as they are.
+  let geo = null, tourStep = null, tourTimers = [], overlay = null;
+  const HINT = "Click the source or the bulbs to change them.";
+  const home = {source, efficiency, bulb};
+  function drawTour() {
+    if (!tourStep || !geo) return;
+    if (!overlay) {
+      overlay = svgEl("svg", {"aria-hidden": "true"});
+      overlay.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5;overflow:visible;";
+      container.appendChild(overlay);
+    }
+    overlay.replaceChildren();
+    const box = tourStep === "source" ? geo.sourceBox : geo.bulbBox;
+    const [x0, y0] = at(box[0], box[1]), [x1, y1] = at(box[2], box[3]);
+    const outline = svgEl("rect", {x: F(x0), y: F(y0), width: F(x1 - x0), height: F(y1 - y0), rx: 6, fill: "none", stroke: "#333", "stroke-width": 2, "stroke-dasharray": "6 4"}, overlay);
+    svgEl("animate", {attributeName: "stroke-dashoffset", from: 0, to: -20, dur: "1s", repeatCount: "indefinite"}, outline);
+    // The arrow: from under the callout straight down to the top edge of the outline.
+    const ax = tourStep === "source" ? x0 + 24 : x1 - 8;
+    const top = hint.offsetTop + hint.offsetHeight + 2;
+    const tip = y0 - 3;
+    if (tip > top + 12) {
+      svgEl("path", {d: `M${F(ax)},${F(top)}V${F(tip - 8)}`, stroke: "#333", "stroke-width": 2.5, fill: "none"}, overlay);
+      svgEl("path", {d: `M${F(ax - 6)},${F(tip - 9)}L${F(ax)},${F(tip)}L${F(ax + 6)},${F(tip - 9)}Z`, fill: "#333"}, overlay);
+    }
+  }
+  function showStep(step) {
+    tourStep = step;
+    hint.textContent = step === "source" ? "Click here to switch between sources" : "Click here to switch between bulbs";
+    hint.style.cssText = `font-size:13px;font-weight:bold;color:#111;background:#fff;border:1.5px solid #333;border-radius:6px;padding:5px 10px;margin:0 0 8px;` +
+      `display:inline-block;${step === "bulb" ? "float:right;" : ""}`;
+    scroller.style.clear = "both";
+    drawTour();
+  }
+  function stopTour() {
+    for (const t of tourTimers) clearTimeout(t);
+    tourTimers = [];
+    if (!tourStep) return;
+    tourStep = null;
+    overlay?.remove();
+    overlay = null;
+    hint.textContent = HINT;
+    hint.style.cssText = "font-size:12px;color:#666;padding:0 0 6px;";
+    container.removeEventListener("pointerdown", stopTour, true);
+    container.removeEventListener("keydown", stopTour, true);
+  }
+  function runTour() {
+    if (tourStep) return;
+    container.addEventListener("pointerdown", stopTour, true);
+    container.addEventListener("keydown", stopTour, true);
+    const later = (ms, f) => tourTimers.push(setTimeout(f, ms));
+    const others = ["gas", "wind", "solar"].filter(id => id !== home.source);
+    showStep("source");
+    others.forEach((id, i) => later(1300 * (i + 1), () => setSource(id)));
+    later(1300 * (others.length + 1), () => setSource(home.source, home.efficiency));
+    const t1 = 1300 * (others.length + 2);
+    later(t1, () => showStep("bulb"));
+    const bulbs = BULBS.map(b => b.id).filter(id => id !== home.bulb);
+    bulbs.forEach((id, i) => later(t1 + 1300 * (i + 1), () => setBulb(id)));
+    later(t1 + 1300 * (bulbs.length + 1), () => setBulb(home.bulb));
+    later(t1 + 1300 * (bulbs.length + 2), stopTour);
+  }
 
   const SVG_NS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(SVG_NS, "svg");
@@ -229,8 +365,12 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     // Stations along the chain, as fractions of the width: the coal, the power station, the
     // bulb, and where the light leaves. The wires' loss leaves midway between the plant and
     // the bulb, with no bar, since it is spread along the way rather than at a place.
-    const xs = {source: plotL + 0.02 * inner, station: plotL + 0.2 * inner, wires: plotL + 0.5 * inner, bulb: plotL + 0.8 * inner, out: plotR};
+    // The bulbs' bar slides left when the heat leaving them is so wide (hydro and an
+    // incandescent bulb) that its stem would run past the right edge.
     const r = 8;   // the turns' inner radius
+    const stationX = plotL + 0.2 * inner;
+    const bulbX = Math.min(plotL + 0.8 * inner, plotR - r - c.heat * scale - 4);
+    const xs = {source: plotL + 0.02 * inner, station: stationX, wires: (stationX + bulbX) / 2, bulb: bulbX, out: plotR};
     const b = BULBS.find(x => x.id === bulb);
     const lineH = labelFont + 2;
 
@@ -289,13 +429,13 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
       if (row) twoRows = true; else nameEnd = x0 + tw;
       const tx = svgEl("text", {x: F(overflows ? plotR : x + 3), y: F(baseY + 15 + row * lineH), "font-size": labelFont, fill: "#333", ...(overflows ? {"text-anchor": "end"} : {})}, g);
       tx.textContent = name;
-      return row;
+      return {row, text: tx};
     };
 
     // The source, and the band into the plant, in the source's carbon colour.
     const src = sourceOf();
     band(xs.source, xs.station, SOURCE, src.colour);
-    station(xs.source - 3, SOURCE, src.label, false);
+    const sourceStation = station(xs.source - 3, SOURCE, `${src.label} ▾`, false);
     station(xs.station, SOURCE, src.station);
     // What the plant does not turn into electricity: a fuel's heat up the cooling tower, or
     // sun, wind, water or ground heat that passes by, drawn pale.
@@ -306,35 +446,60 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     peel(xs.wires, c.toGrid, c.lineLoss, HEAT, "Lost in the wires");
     // Everything that arrives goes into bulbs, as many as it lights.
     band(xs.wires, xs.bulb, c.delivered, ELECTRICITY);
-    const bulbRow = station(xs.bulb, c.delivered, formatBulbs(c.bulbs, b));
+    const bulbStation = station(xs.bulb, c.delivered, `${formatBulbs(c.bulbs, b)} ▾`);
+    const bulbRow = bulbStation.row;
     peel(xs.bulb, c.delivered, c.heat, HEAT, "Lost as heat");
     band(xs.bulb, xs.out, c.light, LIGHT);
     // The carbon this light cost, under the bulbs, the units read as megawatt-hours.
     const co2 = svgEl("text", {x: F(plotR), y: F(baseY + 15 + (bulbRow + 1) * lineH), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, g);
     co2.textContent = `for ${formatCo2(src.co2)}`;
     const rows = bulbRow + 1;
+
+    // Clickable areas over the source band and the bulbs, which open the menus beneath their
+    // labels; the label is underlined while the pointer is over the area.
+    const hit = (x0, x1, y0, y1, label, text, open) => {
+      const area = svgEl("rect", {x: F(x0), y: F(y0), width: F(x1 - x0), height: F(y1 - y0), fill: "transparent", cursor: "pointer",
+        role: "button", tabindex: 0, "aria-label": label, "aria-haspopup": "menu"}, svg);
+      area.addEventListener("mouseenter", () => text.setAttribute("text-decoration", "underline"));
+      area.addEventListener("mouseleave", () => text.removeAttribute("text-decoration"));
+      area.addEventListener("click", e => { e.preventDefault(); open(); });
+      area.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+    };
     // The light's label: inside its band when the band is tall enough, else above it, on one
     // line if the last segment is wide enough for it and on two if not.
     const lightText = `Light: ${formatUnits(c.light)}`;
     const lightH = c.light * scale, segW = xs.out - xs.bulb - 6;
     ctx.font = `bold ${labelFont}px sans-serif`;
     const lightW = ctx.measureText(lightText).width;
+    let lightTop = baseY - lightH;   // the top of whatever the light's label takes
     if (lightH >= labelFont + 4 && (lightW <= segW || ctx.measureText(formatUnits(c.light)).width <= segW)) {
       const lt = svgEl("text", {x: F((xs.bulb + xs.out) / 2), y: F(baseY - lightH / 2 + labelFont * 0.35), "font-size": labelFont, "text-anchor": "middle", fill: "#5a3d00", "font-weight": "bold"}, g);
       lt.textContent = lightW <= segW ? lightText : formatUnits(c.light);
       if (lightW > segW) {
-        const l1 = svgEl("text", {x: F(xs.out), y: F(baseY - lightH - 6), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, g);
+        const l1 = svgEl("text", {x: F(xs.out), y: F(baseY - lightH - 6), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, labelG);
         l1.textContent = "Light";
+        lightTop = baseY - lightH - 6 - labelFont;
       }
     } else if (lightW <= segW) {
-      const lt = svgEl("text", {x: F(xs.out), y: F(baseY - lightH - 6), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, g);
+      const lt = svgEl("text", {x: F(xs.out), y: F(baseY - lightH - 6), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, labelG);
       lt.textContent = lightText;
+      lightTop = baseY - lightH - 6 - labelFont;
     } else {
-      const l1 = svgEl("text", {x: F(xs.out), y: F(baseY - lightH - 8 - lineH), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, g);
+      const l1 = svgEl("text", {x: F(xs.out), y: F(baseY - lightH - 8 - lineH), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, labelG);
       l1.textContent = "Light";
-      const l2 = svgEl("text", {x: F(xs.out), y: F(baseY - lightH - 6), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, g);
+      const l2 = svgEl("text", {x: F(xs.out), y: F(baseY - lightH - 6), "font-size": labelFont, "text-anchor": "end", fill: "#333", "font-weight": "bold"}, labelG);
       l2.textContent = formatUnits(c.light);
+      lightTop = baseY - lightH - 8 - lineH - labelFont;
     }
+    const bulbTop = Math.min(baseY - c.delivered * scale, lightTop) - 6;
+    hit(xs.source - 4, xs.station - 3, baseY - SOURCE * scale, baseY + 18, `Source: ${src.label}, ${Math.round(efficiency * 100)}% efficient. Choose another`, sourceStation.text,
+      () => sourceMenu(...at(xs.source, baseY + 20), at(0, baseY - SOURCE * scale - 6)[1]));
+    hit(xs.bulb + 3, plotR, topY - maxTip, baseY + 18 + rows * lineH, `Bulbs: ${formatBulbs(c.bulbs, b)}. Choose another kind`, bulbStation.text,
+      () => bulbMenu(...at(plotR, baseY + 18 + rows * lineH + 4), at(0, bulbTop - 2)[1]));
+    // What the tour's overlay needs to point at.
+    geo = {sourceBox: [xs.source - 4, baseY - SOURCE * scale - 4, xs.station - 3, baseY + 18],
+      bulbBox: [xs.bulb - 4, bulbTop, plotR + 5, baseY + 18 + rows * lineH]};
+    drawTour();
 
     // Room for the rows of station names and the carbon line beneath them.
     const h = svgH + Math.max(twoRows ? 1 : 0, rows) * lineH;
@@ -355,7 +520,7 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     const f = chain(bulb, efficiency);
     const plural = f.bulbs >= 1.05;
     const carbon = src.burns && src.id !== "nuclear" ? `from burning the ${src.label.toLowerCase()}` : `from building the ${src.station.toLowerCase()}${src.id === "nuclear" ? " and making its fuel" : ""}, spread over its life`;
-    subheading.textContent = `Of ${SOURCE} units of energy ${what}, ${formatUnits(f.light)} become light: enough for ${formatBulbs(f.bulbs, b)}, for ${formatCo2(src.co2)} ${carbon}, counting each unit as a megawatt-hour. ` +
+    subheading.textContent = `Of ${SOURCE} units of energy ${what}, ${formatUnits(f.light)} become light: enough for ${formatBulbs(f.bulbs, b)} at 2 units of light each, for ${formatCo2(src.co2)} ${carbon}, counting each unit as a megawatt-hour. ` +
       `The ${src.station.toLowerCase()} sends out ${formatUnits(f.toGrid)}, ${formatUnits(f.delivered)} reach the bulb${plural ? "s" : ""}, which turn${plural ? "" : "s"} ${formatUnits(f.heat)} of those into heat.` +
       (src.burns ? "" : " Nothing is burned here: the pale band is energy that simply passes by.");
     svg.setAttribute("aria-label", `Sankey diagram of the energy chain from ${src.label.toLowerCase()} to light. ${subheading.textContent}`);
@@ -382,33 +547,19 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
 
   // ---- state changes --------------------------------------------------------------------------
   function updateControls() {
-    updateBulbButtons(bulb);
-    updateSourceButtons(source);
-    slider.value = Math.round(efficiency * 100);
-    const s = sourceOf();
-    sliderLabel.textContent = `${s.station} efficiency: ${Math.round(efficiency * 100)}%`;
-    slider.title = `Typically ${Math.round(s.efficiency * 100)}%: ${s.range}`;
     heading.style.fontSize = `${titleFont.toFixed(1)}px`;
   }
   function setBulb(id) {
     if (id === bulb) return;
     bulb = id;
-    updateControls();
     requestRender();
     emit();
   }
-  // A new source brings its typical efficiency with it; the slider can then be moved.
-  function setSource(id) {
-    if (id === source) return;
+  // A plant from the menu: its source and its efficiency together.
+  function setSource(id, e = SOURCES.find(s => s.id === id)?.efficiency ?? efficiency) {
+    if (id === source && e === efficiency) return;
     source = id;
-    efficiency = sourceOf().efficiency;
-    updateControls();
-    requestRender();
-    emit();
-  }
-  function setEfficiency(e) {
     efficiency = clamp(e, 0.05, 0.95);
-    updateControls();
     requestRender();
     emit();
   }
@@ -427,6 +578,15 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
   updateControls();
   render();
   container.value = value();
+  // The tour starts when half the widget is on screen, once, unless motion is to be reduced.
+  if (tour && !reduceMotion && typeof IntersectionObserver === "function") {
+    const io = new IntersectionObserver(entries => {
+      if (!entries.some(e => e.isIntersecting)) return;
+      io.disconnect();
+      runTour();
+    }, {threshold: 0.5});
+    io.observe(container);
+  }
   if (typeof ResizeObserver === "function") {
     const ro = new ResizeObserver(entries => {
       const avail = entries[0]?.contentRect?.width || container.clientWidth;
@@ -439,40 +599,13 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
   return container;
 }
 
-// A segmented control: the choices as one row of joined buttons, rounded at the ends, the one
-// chosen dark with white type. Returns a function that marks the current choice.
-function segmented(parent, choices, onPick) {
-  const box = document.createElement("div");
-  box.setAttribute("role", "group");
-  box.style.cssText = "display:inline-flex;flex-wrap:wrap;border-radius:999px;";
-  const buttons = choices.map((choice, i) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = choice.label;
-    if (choice.title) b.title = choice.title;
-    b.style.cssText = "font:13px sans-serif;padding:5px 12px;cursor:pointer;white-space:nowrap;border:1px solid #333;" +
-      `margin-left:${i ? -1 : 0}px;border-radius:${i === 0 ? "999px 0 0 999px" : i === choices.length - 1 ? "0 999px 999px 0" : "0"};` +
-      "transition:background-color .15s,color .15s;";
-    b.addEventListener("click", () => onPick(choice.id));
-    box.appendChild(b);
-    return b;
-  });
-  parent.appendChild(box);
-  return current => buttons.forEach((b, i) => {
-    const active = choices[i].id === current;
-    b.style.background = active ? "#333" : "#fff";
-    b.style.color = active ? "#fff" : "#333";
-    b.style.position = active ? "relative" : "static";
-    b.setAttribute("aria-pressed", String(active));
-  });
-}
 function formatUnits(v) {
   const r = Math.round(v * 10) / 10;
   return `${Number.isInteger(r) ? r : r.toFixed(1)} unit${r === 1 ? "" : "s"}`;
 }
-// "33 t CO₂", "0.4 t CO₂".
+// "33 t of CO₂", "0.4 t of CO₂".
 function formatCo2(t) {
-  return `${t >= 10 ? Math.round(t) : t} t CO₂`;
+  return `${t >= 10 ? Math.round(t) : t} t of CO₂`;
 }
 // "6 ordinary LED bulbs", "1 incandescent bulb", "14.2 best LED bulbs".
 function formatBulbs(n, bulb) {

@@ -30,14 +30,16 @@ body {
 import {createEnergyChainWidget} from "./widget.js";
 
 // Presets: ?source=coal, gas, nuclear, biomass, geothermal, hydro, wind or solar; ?bulb=incandescent,
-// led (an ordinary one) or best-led; ?efficiency=45 (the plant's, per cent, overriding the source's typical figure).
+// led (an ordinary one) or best-led; ?efficiency=45 (the plant's, per cent, overriding the source's
+// typical figure); ?tour=0 to skip the opening tour.
 const params = new URLSearchParams(location.search);
 const source = params.get("source") ?? undefined;
 const bulb = params.get("bulb") ?? undefined;
 const eff = Number(params.get("efficiency"));
 const efficiency = eff > 1 ? eff / 100 : eff > 0 ? eff : undefined;
+const tour = !["0", "false", "no"].includes(params.get("tour") ?? "");
 ```
 
 ```js
-const energy = view(createEnergyChainWidget({source, bulb, efficiency}));
+const energy = view(createEnergyChainWidget({source, bulb, efficiency, tour}));
 ```
