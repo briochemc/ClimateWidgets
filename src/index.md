@@ -109,7 +109,7 @@ Small, self-contained interactive figures for teaching climate science. Each wid
   </a>
   <a class="card" href="./energy-chain/">
     <h2>From plant to a light bulb</h2>
-    <img class="thumb" src="./assets/thumbnails/energy-chain.png" alt="A Sankey diagram running left to right: a wide orange band of 100 units of coal energy narrows at each station as bands of loss peel off upwards, 62 at the power station in sooty dark grey for fuel burned for nothing, 2 in the wires and 34 as heat in the bulb in grey, leaving a thin yellow band of 2 units of light at the right; segmented buttons choose the source, whose uncaptured sunlight, wind or water is drawn pale instead, and switch between an incandescent bulb, an ordinary LED that lights six bulbs from the same coal and the best LED that lights fifteen, and a slider sets the plant's efficiency">
+    <img class="thumb" src="./assets/thumbnails/energy-chain.png" alt="A Sankey diagram running left to right: a wide black band of 100 units of coal energy turns blue as electricity at the power station and narrows at each station as vermillion bands of heat peel off upwards, 62 at the power station, 2 in the wires and 34 in the bulb, leaving a thin yellow band of 2 units of light at the right, with the carbon it cost, 33 tonnes, written beneath; segmented buttons choose the source, whose band is green for the renewables and nuclear and whose uncaptured sunlight, wind or water is drawn pale, and switch between an incandescent bulb, an ordinary LED that lights six bulbs from the same coal and the best LED that lights fifteen, and a slider sets the plant's efficiency">
   </a>
   <a class="card" href="./coriolis-sphere/">
     <h2>The Coriolis effect on the Earth</h2>
