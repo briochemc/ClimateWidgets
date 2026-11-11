@@ -164,8 +164,9 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
   heading.textContent = "Energy lost on the way to a light bulb";
   container.appendChild(heading);
   const subheading = document.createElement("div");
-  subheading.style.cssText = "font-size:12px;color:#666;padding:0 0 10px;line-height:1.35;";
-  container.appendChild(subheading);
+  // The summary of the numbers goes under the drawing, so the drawing comes straight after
+  // the title; it is appended once the drawing's box exists.
+  subheading.style.cssText = "font-size:12px;color:#666;padding:8px 0 0;line-height:1.35;";
 
   // No controls: the source and the bulbs are chosen on the drawing itself, from a menu that
   // pops up under each when it is clicked.
@@ -337,6 +338,7 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
   scroller.style.cssText = "max-width:100%;overflow-x:auto;";
   scroller.appendChild(svg);
   container.appendChild(scroller);
+  container.appendChild(subheading);
   function svgEl(tag, attrs = {}, parent) {
     const el = document.createElementNS(SVG_NS, tag);
     for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
