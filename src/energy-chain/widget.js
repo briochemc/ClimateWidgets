@@ -121,7 +121,7 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
   // ---- layout ---------------------------------------------------------------------------------
   const ctx = document.createElement("canvas").getContext("2d");   // for measuring labels
   const maxW = Math.max(MIN_WIDTH, Math.round(width));
-  let w, titleFont, labelFont, svgH, scale, plotL, plotR, baseY, topY;
+  let w, titleFont, labelFont, svgH, scale, plotL, plotR, baseY, topY, maxTip;
   function applyLayout(newW) {
     w = newW;
     const t = clamp((w - MIN_WIDTH) / (FIGURE_WIDTH - MIN_WIDTH), 0, 1);
@@ -132,8 +132,9 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
     plotL = 8;
     plotR = w - 8;
     // The losses leave at the top, under their labels, which take two rows of two lines so
-    // that neighbours never collide.
-    topY = 8 + 2 * (2 * (labelFont + 2) + 6);
+    // that neighbours never collide, with room for the tallest arrowhead between.
+    maxTip = 0.1 * SOURCE * scale;
+    topY = 8 + 2 * (2 * (labelFont + 2) + 6) + maxTip;
     baseY = topY + 18 + SOURCE * scale;   // the bottom edge of the main flow
     svgH = Math.round(baseY + 24);
   }
@@ -251,15 +252,18 @@ export function createEnergyChainWidget({width = FIGURE_WIDTH, bulb: initialBulb
       // Both arcs are centred on (x, cy), above the band's entry: the outer edge (radius r + t)
       // sweeps anticlockwise from below the centre to its right, the inner edge (radius r)
       // comes back clockwise. SVG's sweep flag is 0 for the former, 1 for the latter.
+      // The stem ends in an arrowhead: a point in the middle of its width, a tenth of that
+      // width above the top edge, so that the flow is seen to leave.
+      const lx = x + r + t / 2, tip = Math.max(2, 0.1 * t);
       const d = `M${F(x)},${F(y2)}A${F(r + t)},${F(r + t)},0,0,0,${F(x + r + t)},${F(cy)}` +
-        `V${F(topY)}H${F(x + r)}V${F(cy)}A${F(r)},${F(r)},0,0,1,${F(x)},${F(y1)}Z`;
+        `V${F(topY)}L${F(lx)},${F(topY - tip)}L${F(x + r)},${F(topY)}V${F(cy)}A${F(r)},${F(r)},0,0,1,${F(x)},${F(y1)}Z`;
       // A loss that is only energy passing by is drawn pale, with a dashed edge so that it still
       // reads against the plate.
       svgEl("path", {d, fill, ...(edge ? {stroke: edge, "stroke-width": 1, "stroke-dasharray": "3 2"} : {})}, g);
-      // A thin leader from the stem up to the label when the label is in the upper row.
-      const lx = x + r + t / 2;
-      const base = topY - 4 - row * (2 * lineH + 6);
-      if (row) svgEl("path", {d: `M${F(lx)},${F(topY)}V${F(base + 2)}`, stroke: "#999", "stroke-width": 1}, leaderG);
+      // The labels keep to their two rows above the tallest arrowhead there could be, so that
+      // they never move or meet; a thin leader runs up from each arrow's tip to its label.
+      const base = topY - maxTip - 4 - row * (2 * lineH + 6);
+      svgEl("path", {d: `M${F(lx)},${F(topY - tip)}V${F(base + 2)}`, stroke: "#999", "stroke-width": 1}, leaderG);
       const anchor = lx < plotL + 50 ? "start" : lx > plotR - 50 ? "end" : "middle";
       const ax = anchor === "start" ? Math.max(plotL, lx - 10) : anchor === "end" ? Math.min(plotR, lx + 10) : lx;
       const t1 = svgEl("text", {x: F(ax), y: F(base - lineH), "font-size": labelFont, "text-anchor": anchor, fill: "#333", "font-weight": "bold"}, labelG);
