@@ -93,17 +93,17 @@ export const SOURCES = [
 // The plants the source menu offers: each source at its typical efficiency, with coal at an
 // old plant's and a modern one's too, and gas in open cycle as well as combined.
 export const PLANTS = [
-  {source: "coal", label: "Coal, old plant", efficiency: 0.33},
   {source: "coal", label: "Coal", efficiency: 0.38},
+  {source: "gas", label: "Gas, combined cycle", efficiency: 0.58},
+  {source: "solar", label: "Solar", efficiency: 0.20},
+  {source: "wind", label: "Wind", efficiency: 0.45},
+  {source: "hydro", label: "Hydro", efficiency: 0.90},
+  {source: "coal", label: "Coal, old plant", efficiency: 0.33},
   {source: "coal", label: "Coal, best plant", efficiency: 0.45},
   {source: "gas", label: "Gas, open cycle", efficiency: 0.37},
-  {source: "gas", label: "Gas, combined cycle", efficiency: 0.58},
-  {source: "nuclear", label: "Nuclear", efficiency: 0.33},
   {source: "biomass", label: "Biomass", efficiency: 0.30},
   {source: "geothermal", label: "Geothermal", efficiency: 0.15},
-  {source: "hydro", label: "Hydro", efficiency: 0.90},
-  {source: "wind", label: "Wind", efficiency: 0.45},
-  {source: "solar", label: "Solar", efficiency: 0.20},
+  {source: "nuclear", label: "Nuclear", efficiency: 0.33},
 ];
 
 // The chain's numbers for a bulb and a station efficiency. Everything that reaches the house
